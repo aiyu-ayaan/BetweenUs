@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1920" />
+    <title>BetweenUs — Product Showcase</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="29.5" data-width="1080" data-height="1920">
+      <!-- Audio Soundtrack -->
+      <audio id="bg-music" src="assets/music/track.mp3" data-hf-audio data-hf-fade-in="1.0" data-hf-fade-out="2.0" volume="0.85" data-start="0" data-duration="29.5"></audio>
+
+      <!-- ACT 1: THE HOOK (0.0s – 4.0s) -->
+      <section id="act1" class="scene clip" data-start="0" data-duration="4.0">
+        <div id="act1-halo" class="act1-halo"></div>
+        <div class="act1-container">
+          <div id="act1-category" class="tagline-pill">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            Zero-Media-Server Architecture
+          </div>
+          <div id="act1-headline" class="hook-headline">
+            <div class="line">Communication</div>
+            <div class="line">Without</div>
+            <div class="line gradient">Compromise.</div>
+          </div>
+          <div id="act1-shield-box" class="shield-lockup">
+            <div class="shield-icon-wrapper">
+              <div id="act1-ring" class="shield-ring"></div>
+              <svg width="140" height="155" viewBox="0 0 100 115" fill="none">
+                <defs>
+                  <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#818cf8" /><stop offset="50%" stop-color="#6366f1" /><stop offset="100%" stop-color="#3730a3" />
+                  </linearGradient>
+                  <linearGradient id="shieldBorderGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#3fd68c" /><stop offset="100%" stop-color="#818cf8" />
+                  </linearGradient>
+                </defs>
+                <path d="M50 8 L90 24 V58 C90 85 50 108 50 108 C50 108 10 85 10 58 V24 Z" fill="url(#shieldGrad)" stroke="url(#shieldBorderGrad)" stroke-width="5" />
+                <rect x="36" y="52" width="28" height="22" rx="5" fill="#ffffff" />
+                <path d="M42 52 V44 C42 39.58 45.58 36 50 36 C54.42 36 58 39.58 58 44 V52" stroke="#ffffff" stroke-width="4" stroke-linecap="round" />
+                <circle cx="50" cy="61" r="3" fill="#111827" />
+                <line x1="50" y1="64" x2="50" y2="68" stroke="#111827" stroke-width="2.5" stroke-linecap="round" />
+              </svg>
+            </div>
+            <div id="act1-pill" class="shield-badge-pill">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="#3fd68c"><circle cx="12" cy="12" r="7" /></svg>
+              AES-256-GCM • Zero Media Server
+            </div>
+            <div id="act1-sub" class="shield-subtitle">Client-Held Keys • Direct Device-to-Device Mesh</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ACT 2: THE MODERN WORKBENCH & E2EE CHAT (4.0s – 9.0s) -->
+      <section id="act2" class="scene clip" data-start="4.0" data-duration="5.0">
+        <div id="act2-pill-top" class="tagline-pill">Floating Panel Workbench • True End-to-End Encryption</div>
+        <div id="act2-card" class="workbench-card act2-card">
+          <div class="card-header">
+            <div class="window-dots"><div class="window-dot dot-red"></div><div class="window-dot dot-yellow"></div><div class="window-dot dot-green"></div></div>
+            <div class="channel-title"><span style="color: #818cf8; font-weight: 800;">#</span><span>general</span></div>
+            <div class="badge-sealed">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+              AES-256-GCM sealed
+            </div>
+          </div>
+          <div class="chat-body">
+            <div id="act2-msg1" class="chat-message">
+              <div class="chat-avatar avatar-aiyu">AY</div>
+              <div class="message-content">
+                <div class="message-sender"><span class="sender-name">aiyu</span><span class="sender-role">Staff</span><span class="sender-time">12:42 PM</span></div>
+                <div class="message-text">Direct mesh initialized. Zero relay servers in the media path — everything stays client-sealed.</div>
+              </div>
+            </div>
+            <div id="act2-msg2" class="chat-message">
+              <div class="chat-avatar avatar-alex">AX</div>
+              <div class="message-content">
+                <div class="message-sender"><span class="sender-name">alex</span><span class="sender-time">12:43 PM</span></div>
+                <div class="message-text">Check out the direct peer creation snippet:</div>
+                <div id="act2-code" class="code-card">
+                  <div class="code-header"><span>mesh-crypto.ts</span><span style="color: #6ee7b7;">● 256-bit GCM</span></div>
+                  <pre class="code-body"><code><span class="syn-comment">// Direct P2P WebRTC Handshake</span>
+<span class="syn-kw">const</span> <span class="syn-var">peer</span> = <span class="syn-kw">await</span> <span class="syn-fn">createMeshPeer</span>({
+  <span class="syn-prop">ciphers</span>: [<span class="syn-str">'AES-256-GCM'</span>],
+  <span class="syn-prop">directWebRTC</span>: <span class="syn-bool">true</span>,
+  <span class="syn-prop">zeroMediaServer</span>: <span class="syn-bool">true</span>
+});</code></pre>
+                </div>
+                <div class="reactions-tray">
+                  <div id="act2-rx1" class="reaction-chip">🔥 5</div>
+                  <div id="act2-rx2" class="reaction-chip">🚀 3</div>
+                  <div id="act2-rx3" class="reaction-chip">🛡️ 2</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="chat-input-bar">
+            <div class="input-mock"><span>Message #general (End-to-End Encrypted)...</span></div>
+            <div class="dock-btn active" style="width: 52px; height: 52px;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ACT 3: ZERO-MEDIA-SERVER P2P VOICE & VIDEO (9.0s – 14.0s) -->
+      <section id="act3" class="scene clip" data-start="9.0" data-duration="5.0">
+        <div id="act3-pill-top" class="tagline-pill emerald">Peer-to-Peer Voice & Video • Direct Device Mesh</div>
+        <div id="act3-card" class="workbench-card act3-card">
+          <div id="act3-hud" class="telemetry-bar">
+            <div class="hud-item hud-emerald">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="#3fd68c"><circle cx="12" cy="12" r="7" /></svg>
+              <span>WebRTC Mesh • 14ms DTLS-SRTP</span>
+            </div>
+            <div class="hud-item hud-cyan"><span>(Zero Server Lag)</span></div>
+            <div class="hud-item hud-iris"><span>4 Peers Connected</span></div>
+          </div>
+          <div id="act3-grid" class="voice-grid">
+            <div class="voice-tile active-speaker">
+              <div class="speaker-avatar-wrapper">
+                <div id="act3-halo" class="speaking-halo"></div>
+                <div class="avatar-large" style="background: linear-gradient(135deg, #6366f1, #3b82f6);">AY</div>
+              </div>
+              <div class="tile-footer">
+                <div class="participant-badge"><span style="color: #6ee7b7;">●</span><span>aiyu (Host)</span></div>
+                <div style="display: flex; gap: 4px; align-items: flex-end; height: 18px;">
+                  <div style="width: 4px; height: 16px; background: #3fd68c; border-radius: 2px;"></div>
+                  <div style="width: 4px; height: 10px; background: #3fd68c; border-radius: 2px;"></div>
+                  <div style="width: 4px; height: 18px; background: #3fd68c; border-radius: 2px;"></div>
+                  <div style="width: 4px; height: 12px; background: #3fd68c; border-radius: 2px;"></div>
+                </div>
+              </div>
+            </div>
+            <div class="voice-tile">
+              <div class="avatar-large" style="background: linear-gradient(135deg, #0ea5e9, #0369a1);">AX</div>
+              <div class="tile-footer"><div class="participant-badge">alex</div>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path></svg>
+              </div>
+            </div>
+            <div id="act3-screen" class="voice-tile" style="border-color: rgba(56, 189, 248, 0.4);">
+              <div class="screen-share-preview">
+                <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #1e293b; padding-bottom: 6px; margin-bottom: 8px;">
+                  <span style="color: #38bdf8; font-weight: 700;">mesh_core.rs</span><span style="color: #94a3b8;">1080p 60fps</span>
+                </div>
+                <div style="line-height: 1.4; color: #cbd5e1;"><span style="color: #f43f5e;">pub async fn</span> stream_media() {<br/>&nbsp;&nbsp;let transport = DtlsSrtp::new();<br/>&nbsp;&nbsp;transport.bind_direct().await;<br/>}</div>
+              </div>
+              <div class="tile-footer"><div class="participant-badge" style="background: rgba(14, 165, 233, 0.25); color: #bae6fd;">🖥️ sophia's screen</div></div>
+            </div>
+            <div class="voice-tile">
+              <div class="avatar-large" style="background: linear-gradient(135deg, #8b5cf6, #6d28d9);">MC</div>
+              <div class="tile-footer"><div class="participant-badge">marcus</div><span style="font-size: 14px; font-weight: 700; color: #a5b4fc;">HD Voice</span></div>
+            </div>
+          </div>
+          <div class="voice-dock">
+            <div class="dock-btn"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path></svg></div>
+            <div class="dock-btn"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 7l-7 5 7 5V7z"></path><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg></div>
+            <div class="dock-btn active"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg></div>
+            <div class="dock-btn danger"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-6-6 19.8 19.8 0 0 1-3.12-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"></path><line x1="23" y1="1" x2="1" y2="23"></line></svg></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ACT 4: LISTEN TOGETHER & PLAY TOGETHER (14.0s – 19.5s) -->
+      <section id="act4" class="scene clip" data-start="14.0" data-duration="5.5">
+        <div id="act4-pill-top" class="tagline-pill cyan">Synchronized YouTube Listening & In-Call Board Games</div>
+        <div class="act4-container">
+          <div id="act4-card-music" class="act4-card">
+            <div class="card-header">
+              <div style="display: flex; align-items: center; gap: 10px; font-size: 22px; font-weight: 700; color: #ffffff;">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2.5"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
+                <span>Listen Together • YouTube Sync</span>
+              </div>
+              <div id="act4-ducking" class="pill-ducking">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="#38bdf8"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                <span>Audio Ducking Active</span>
+              </div>
+            </div>
+            <div class="listen-body">
+              <div class="album-row">
+                <div class="album-art"><svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="1.8"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg></div>
+                <div class="album-info">
+                  <div class="track-title">Lofi Beats 24/7</div>
+                  <div class="track-artist">Chill Synth Radio • Synced Stream</div>
+                  <div style="font-size: 16px; font-weight: 700; color: #6ee7b7; display: flex; align-items: center; gap: 6px;"><span>●</span> 4 Peers Synchronized (±2ms)</div>
+                </div>
+              </div>
+              <div class="progress-container">
+                <div class="progress-track"><div id="act4-progress" class="progress-fill"></div></div>
+                <div class="progress-labels"><span>01:42</span><span>03:30</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div id="act4-card-carrom" class="act4-card">
+            <div class="play-header">
+              <div style="display: flex; align-items: center; gap: 10px; font-size: 22px; font-weight: 700; color: #ffffff;">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>
+                <span>Play Together • Carrom Board</span>
+              </div>
+              <div id="act4-score" class="score-badge">Alex: 3 &nbsp;|&nbsp; Sophia: 2</div>
+            </div>
+            <div class="carrom-canvas">
+              <div class="carrom-board">
+                <div class="carrom-pocket pocket-tl"></div><div class="carrom-pocket pocket-tr"></div>
+                <div class="carrom-pocket pocket-bl"></div><div class="carrom-pocket pocket-br"></div>
+                <div class="carrom-center-circle"><div class="carrom-queen"></div></div>
+                <div id="act4-coin1" class="carrom-coin coin-white" style="top: 215px; left: 215px;"></div>
+                <div class="carrom-coin coin-black" style="top: 215px; left: 255px;"></div>
+                <div class="carrom-coin coin-white" style="top: 255px; left: 215px;"></div>
+                <div class="carrom-coin coin-black" style="top: 255px; left: 255px;"></div>
+                <div id="act4-trajectory" class="aim-trajectory"></div>
+                <div id="act4-striker" class="carrom-striker"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ACT 5: MOMENTS & REMOTE DESKTOP (19.5s – 25.0s) -->
+      <section id="act5" class="scene clip" data-start="19.5" data-duration="5.5">
+        <div id="act5-pill-top" class="tagline-pill">24h Ephemeral Stories • Outbound Remote Desktop</div>
+        <div class="act5-container">
+          <div id="act5-story" class="act5-card moments-card">
+            <div class="story-progress-bar">
+              <div class="story-segment"><div class="story-segment-fill" style="width: 100%;"></div></div>
+              <div class="story-segment"><div id="act5-bar2" class="story-segment-fill" style="width: 0%;"></div></div>
+              <div class="story-segment"><div class="story-segment-fill" style="width: 0%;"></div></div>
+            </div>
+            <div class="story-user-header">
+              <div class="story-user-info">
+                <div class="story-user-avatar">AY</div>
+                <div><div class="story-user-name">aiyu</div><div class="story-time">2 hours ago</div></div>
+              </div>
+              <div id="act5-sealed-pill" class="story-lock-badge">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                <span>🔒 Sealed to 6 friends</span>
+              </div>
+            </div>
+            <div class="story-content-box">
+              <div style="font-size: 64px;">🚀✨</div>
+              <div class="story-quote">"BetweenUs v0.8 is live! Zero server media storage, pure peer-to-peer."</div>
+              <div class="story-meta-pill">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                <span>Expires in 21h 38m • Ephemeral AES-256</span>
+              </div>
+            </div>
+            <div class="story-reaction-tray">
+              <div class="reactions-tray" style="margin-top: 0;">
+                <div class="reaction-chip">❤️ 18</div><div class="reaction-chip">🔥 24</div><div class="reaction-chip">🚀 15</div>
+              </div>
+            </div>
+          </div>
+
+          <div id="act5-remote" class="act5-card workbench-card" style="opacity: 0;">
+            <div class="card-header">
+              <div class="window-dots"><div class="window-dot dot-red"></div><div class="window-dot dot-yellow"></div><div class="window-dot dot-green"></div></div>
+              <div class="channel-title"><span>🖥️ dev-workstation-01</span></div>
+              <div class="badge-sealed"><span style="color: #6ee7b7;">●</span> Outbound Reverse Tunnel</div>
+            </div>
+            <div class="remote-body">
+              <div class="remote-hud">
+                <span style="color: #6ee7b7;">● 11ms Latency</span>
+                <span style="color: #38bdf8;">60 FPS Stream</span>
+                <span style="color: #a5b4fc;">Zero Inbound Open Ports</span>
+              </div>
+              <div class="remote-terminal">
+                <p><span style="color: #6ee7b7;">user@dev-box:~$</span> betweenus-agent status --e2ee</p>
+                <p style="color: #818cf8; margin-top: 10px;">[OK] WebRTC direct data channel connected</p>
+                <p style="color: #86efac;">[OK] Encryption: AES-256-GCM (Hardware accelerated)</p>
+                <p style="color: #94a3b8; margin-top: 16px;">Active services:</p>
+                <p style="color: #fcd34d;">&nbsp;&nbsp;→ /ws/remote-desktop [READY]</p>
+                <p style="color: #fcd34d;">&nbsp;&nbsp;→ /ws/audio-stream [DUCKING ON]</p>
+                <div style="margin-top: 36px; display: inline-block; padding: 14px 28px; background: #242f42; border: 1px solid #6366f1; border-radius: 12px; color: #ffffff; font-weight: 700;">
+                  ⚡ Interactive Terminal Active
+                </div>
+              </div>
+              <div id="act5-cursor" class="remote-cursor"><svg width="32" height="32" viewBox="0 0 24 24" fill="#ffffff" stroke="#111827" stroke-width="1.5"><path d="M3 3l7 18 3-7 7-3L3 3z"/></svg></div>
+              <div id="act5-click-ring" class="click-ripple" style="left: 360px; top: 380px; opacity: 0;"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ACT 6: CROSS-PLATFORM CLIMAX & POSTER FRAME (25.0s – 29.5s) -->
+      <section id="act6" class="scene clip" data-start="25.0" data-duration="4.5">
+        <div class="act6-container">
+          <div class="devices-stage" data-layout-allow-overlap data-layout-allow-occlusion>
+            <div id="act6-desktop" class="mockup-desktop" data-layout-allow-overlap data-layout-allow-occlusion>
+              <div class="card-header" style="height: 44px; padding: 0 16px;" data-layout-allow-overlap data-layout-allow-occlusion>
+                <div class="window-dots"><div class="window-dot dot-red"></div></div>
+                <span style="font-size: 14px; font-weight: 700; color: #cbd5e1;" data-layout-allow-overlap data-layout-allow-occlusion>Electron Desktop</span>
+              </div>
+              <div style="padding: 20px; font-size: 16px; color: #c7d2fe; font-weight: 700;" data-layout-allow-overlap data-layout-allow-occlusion>BetweenUs Desktop</div>
+            </div>
+
+            <div id="act6-web" class="mockup-web" data-layout-allow-overlap data-layout-allow-occlusion>
+              <div class="card-header" style="height: 44px; padding: 0 16px;" data-layout-allow-overlap data-layout-allow-occlusion>
+                <div class="window-dots"><div class="window-dot dot-green"></div></div>
+                <span style="font-size: 14px; font-weight: 700; color: #cbd5e1;" data-layout-allow-overlap data-layout-allow-occlusion>React Web App</span>
+              </div>
+              <div style="padding: 20px; font-size: 16px; color: #7dd3fc; font-weight: 700;" data-layout-allow-overlap data-layout-allow-occlusion>BetweenUs Web</div>
+            </div>
+
+            <div id="act6-phone" class="mockup-phone" data-layout-allow-overlap data-layout-allow-occlusion>
+              <div style="height: 36px; background: #0b0f19; display: flex; justify-content: space-between; align-items: center; padding: 0 20px; font-size: 13px; font-weight: 700; color: #cbd5e1;" data-layout-allow-overlap data-layout-allow-occlusion>
+                <span data-layout-allow-overlap data-layout-allow-occlusion>12:45</span>
+                <span data-layout-allow-overlap data-layout-allow-occlusion>5G 100%</span>
+              </div>
+              <div style="padding: 24px; display: flex; flex-direction: column; gap: 16px;" data-layout-allow-overlap data-layout-allow-occlusion>
+                <div style="font-size: 18px; font-weight: 800; color: #ffffff;" data-layout-allow-overlap data-layout-allow-occlusion>Native Android</div>
+                <div style="padding: 10px 14px; border-radius: 12px; background: rgba(99, 102, 241, 0.2); font-size: 13px; color: #c7d2fe; font-weight: 700;" data-layout-allow-overlap data-layout-allow-occlusion>Jetpack Compose</div>
+              </div>
+            </div>
+          </div>
+
+          <div id="act6-center" class="center-lockup">
+            <div class="iris-logo-glow">
+              <div class="logo-ambient-aura"></div>
+              <img src="assets/logo.svg" width="170" height="170" alt="BetweenUs Logo" />
+            </div>
+            <div id="act6-hero" class="hero-copy">Your Private Digital Space.</div>
+            <div id="act6-sub" class="subtitle-copy">Desktop • Web • Android — Open Source</div>
+            <div id="act6-pill" class="outro-pill">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#6ee7b7" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              <span>AES-256-GCM • Zero Media Server</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- GSAP Master Animation Controller -->
+    <script>
+      const tl = gsap.timeline({ paused: true });
+
+      // ACT 1 (0.0s – 4.0s)
+      tl.fromTo("#act1-halo", { scale: 0.7, opacity: 0.2 }, { scale: 1.2, opacity: 0.6, duration: 2.2, ease: "power2.out" }, 0.0);
+      tl.fromTo("#act1-category", { opacity: 0, y: -20 }, { opacity: 1, y: 0, duration: 0.6, ease: "power2.out" }, 0.2);
+      tl.fromTo("#act1-headline .line", { opacity: 0, y: 40, scale: 0.95 }, { opacity: 1, y: 0, scale: 1, duration: 0.7, stagger: 0.18, ease: "back.out(1.2)" }, 0.5);
+      tl.fromTo("#act1-shield-box", { opacity: 0, scale: 0.8, y: 30 }, { opacity: 1, scale: 1, y: 0, duration: 0.7, ease: "back.out(1.5)" }, 1.6);
+      tl.fromTo("#act1-ring", { scale: 0.8, opacity: 0 }, { scale: 1.15, opacity: 0.8, duration: 1.0, ease: "power2.out" }, 1.8);
+      tl.fromTo("#act1-pill", { opacity: 0, scale: 0.9 }, { opacity: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 2.3);
+      tl.fromTo("#act1-sub", { opacity: 0 }, { opacity: 1, duration: 0.5 }, 2.6);
+      tl.to("#act1", { opacity: 0, scale: 0.96, duration: 0.35, ease: "power2.in" }, 3.65);
+
+      // ACT 2 (4.0s – 9.0s)
+      tl.fromTo("#act2-pill-top", { opacity: 0, y: -20 }, { opacity: 1, y: 0, duration: 0.4 }, 4.0);
+      tl.fromTo("#act2-card", { opacity: 0, y: 50, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 0.6, ease: "power2.out" }, 4.1);
+      tl.fromTo("#act2-msg1", { opacity: 0, x: -30 }, { opacity: 1, x: 0, duration: 0.5, ease: "power2.out" }, 4.8);
+      tl.fromTo("#act2-msg2", { opacity: 0, x: -30 }, { opacity: 1, x: 0, duration: 0.5, ease: "power2.out" }, 5.5);
+      tl.fromTo("#act2-code", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out" }, 6.1);
+      // beat-grid: reaction 1 at 7.02s, reaction 2 at 7.52s, reaction 3 at 8.02s
+      tl.fromTo("#act2-rx1", { scale: 0, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.35, ease: "back.out(2.5)" }, 7.02);
+      tl.fromTo("#act2-rx2", { scale: 0, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.35, ease: "back.out(2.5)" }, 7.52);
+      tl.fromTo("#act2-rx3", { scale: 0, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.35, ease: "back.out(2.5)" }, 8.02);
+      tl.to("#act2", { opacity: 0, x: -40, duration: 0.35, ease: "power2.in" }, 8.65);
+
+      // ACT 3 (9.0s – 14.0s)
+      tl.fromTo("#act3-pill-top", { opacity: 0, y: -20 }, { opacity: 1, y: 0, duration: 0.4 }, 9.0);
+      tl.fromTo("#act3-card", { opacity: 0, scale: 0.95, y: 30 }, { opacity: 1, scale: 1, y: 0, duration: 0.5, ease: "power2.out" }, 9.1);
+      tl.fromTo("#act3-hud", { opacity: 0, y: -10 }, { opacity: 1, y: 0, duration: 0.4 }, 9.3);
+      tl.fromTo("#act3-grid", { opacity: 0 }, { opacity: 1, duration: 0.5 }, 9.5);
+      tl.fromTo("#act3-halo", { scale: 0.95, opacity: 0.4 }, { scale: 1.12, opacity: 1, duration: 0.45, repeat: 5, yoyo: true, ease: "power1.inOut" }, 10.02);
+      tl.fromTo("#act3-screen", { scale: 0.96 }, { scale: 1.0, duration: 0.5, ease: "power2.out" }, 11.52);
+      tl.to("#act3", { opacity: 0, scale: 0.96, duration: 0.35, ease: "power2.in" }, 13.65);
+
+      // ACT 4 (14.0s – 19.5s)
+      tl.fromTo("#act4-pill-top", { opacity: 0, y: -20 }, { opacity: 1, y: 0, duration: 0.4 }, 14.0);
+      tl.fromTo("#act4-card-music", { opacity: 0, y: -40 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out" }, 14.2);
+      tl.fromTo("#act4-card-carrom", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out" }, 14.4);
+      tl.fromTo("#act4-progress", { width: "35%" }, { width: "70%", duration: 4.5, ease: "none" }, 14.5);
+      tl.fromTo("#act4-trajectory", { opacity: 0 }, { opacity: 1, duration: 0.4 }, 14.8);
+      tl.to("#act4-trajectory", { opacity: 0, duration: 0.2 }, 15.4);
+      tl.fromTo("#act4-striker", { x: 0, y: 0 }, { x: 50, y: -130, duration: 0.3, ease: "power3.out" }, 15.45);
+      tl.fromTo("#act4-coin1", { x: 0, y: 0 }, { x: 80, y: -70, duration: 0.4, ease: "power2.out" }, 15.65);
+      // beat-locked: 16.02s
+      tl.fromTo("#act4-score", { scale: 1 }, { scale: 1.2, duration: 0.25, yoyo: true, repeat: 1, ease: "power2.out" }, 16.02);
+      // beat-locked: 17.02s
+      tl.fromTo("#act4-ducking", { scale: 0.95, opacity: 0.6 }, { scale: 1.1, opacity: 1, duration: 0.3, yoyo: true, repeat: 1, ease: "back.out(2)" }, 17.02);
+      tl.to("#act4", { opacity: 0, y: -40, duration: 0.35, ease: "power2.in" }, 19.15);
+
+      // ACT 5 (19.5s – 25.0s)
+      tl.fromTo("#act5-pill-top", { opacity: 0, y: -20 }, { opacity: 1, y: 0, duration: 0.4 }, 19.5);
+      tl.fromTo("#act5-story", { opacity: 0, scale: 0.95 }, { opacity: 1, scale: 1, duration: 0.4, ease: "power2.out" }, 19.6);
+      tl.fromTo("#act5-bar2", { width: "0%" }, { width: "100%", duration: 2.3, ease: "none" }, 19.8);
+      tl.fromTo("#act5-sealed-pill", { scale: 0.9, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.4 }, 20.2);
+      tl.to("#act5-story", { opacity: 0, scale: 0.92, duration: 0.3 }, 22.1);
+      tl.fromTo("#act5-remote", { opacity: 0, scale: 1.05 }, { opacity: 1, scale: 1, duration: 0.4, ease: "power2.out" }, 22.25);
+      tl.fromTo("#act5-cursor", { x: 40, y: 80 }, { x: 260, y: 240, duration: 1.0, ease: "power2.inOut" }, 22.6);
+      // beat-locked: 23.52s
+      tl.fromTo("#act5-click-ring", { opacity: 0, scale: 0.4 }, { opacity: 1, scale: 1.4, duration: 0.3, yoyo: true, repeat: 1 }, 23.52);
+      tl.to("#act5", { opacity: 0, scale: 0.96, duration: 0.35, ease: "power2.in" }, 24.65);
+
+      // ACT 6 (25.0s – 29.5s)
+      tl.fromTo("#act6-desktop", { x: -300, opacity: 0, rotateY: 20 }, { x: 0, opacity: 0.65, rotateY: 12, duration: 1.0, ease: "power2.out" }, 25.1);
+      tl.fromTo("#act6-web", { x: 300, opacity: 0, rotateY: -20 }, { x: 0, opacity: 0.65, rotateY: -12, duration: 1.0, ease: "power2.out" }, 25.1);
+      tl.fromTo("#act6-phone", { y: 300, opacity: 0 }, { y: 0, opacity: 1, duration: 1.0, ease: "power2.out" }, 25.3);
+      tl.fromTo("#act6-center", { opacity: 0, scale: 0.8 }, { opacity: 1, scale: 1, duration: 0.8, ease: "back.out(1.3)" }, 26.0);
+      tl.fromTo("#act6-hero", { opacity: 0, y: 25 }, { opacity: 1, y: 0, duration: 0.6, ease: "power2.out" }, 26.6);
+      tl.fromTo("#act6-sub", { opacity: 0, y: 15 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out" }, 27.0);
+      tl.fromTo("#act6-pill", { opacity: 0, scale: 0.9 }, { opacity: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 27.4);
+
+      window.__timelines = window.__timelines || {};
+      window.__timelines["main"] = tl;
+      tl.seek(0);
+    </script>
+  </body>
+</html>
