@@ -1,0 +1,2140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>BetweenUs Desktop Workbench</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --ground: #0b0f19;
+      --surface-950: #0b0d12;
+      --surface-900: #15181f;
+      --surface-850: #0f1117;
+      --surface-800: #101319;
+      --surface-750: #181c26;
+      --surface-700: #222734;
+      --surface-600: #1c212c;
+      --surface-500: #333a4a;
+      --accent: #6366f1;
+      --accent-hover: #4f46e5;
+      --accent-light: #818cf8;
+      --accent-glow: rgba(99, 102, 241, 0.25);
+      --edge: rgba(255, 255, 255, 0.08);
+      --edge-active: rgba(99, 102, 241, 0.4);
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-subtle: #64748b;
+      --status-online: #3fd68c;
+      --status-idle: #f5b83d;
+      --status-dnd: #ff5d5d;
+      --status-offline: #6b7280;
+      --panel-radius: 16px;
+      --shadow-panel: 0 4px 24px -2px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.4);
+    }
+
+    body {
+      width: 2560px;
+      height: 1440px;
+      overflow: hidden;
+      background-color: var(--ground);
+      background-image: 
+        radial-gradient(ellipse 1400px 900px at 50% -10%, rgba(99, 102, 241, 0.15), transparent 75%),
+        radial-gradient(circle 900px at 90% 90%, rgba(63, 214, 140, 0.05), transparent 70%);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI Variable Display', 'Segoe UI', system-ui, sans-serif;
+      color: var(--text-main);
+      -webkit-font-smoothing: antialiased;
+      display: flex;
+      flex-direction: column;
+      user-select: none;
+    }
+
+    /* Top Bar */
+    .top-bar {
+      height: 48px;
+      padding: 0 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      border-bottom: 1px solid var(--edge);
+      background: rgba(11, 15, 25, 0.85);
+      backdrop-filter: blur(12px);
+      flex-shrink: 0;
+      z-index: 10;
+    }
+
+    .window-controls {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-right: 8px;
+    }
+
+    .win-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+    }
+    .win-dot.red { background: #ff5f56; border: 1px solid #e0443e; }
+    .win-dot.yellow { background: #ffbd2e; border: 1px solid #dea123; }
+    .win-dot.green { background: #27c93f; border: 1px solid #1aab29; }
+
+    .brand-cluster {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .brand-logo-icon {
+      width: 26px;
+      height: 26px;
+      border-radius: 7px;
+      background: linear-gradient(135deg, #6366f1, #4f46e5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 12px rgba(99, 102, 241, 0.5);
+    }
+
+    .brand-name {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      color: #f1f5f9;
+    }
+
+    .top-nav-tabs {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-left: 12px;
+    }
+
+    .nav-tab {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+    .nav-tab.active {
+      background: rgba(255, 255, 255, 0.08);
+      color: #fff;
+    }
+
+    .search-switcher {
+      flex: 1;
+      max-width: 680px;
+      margin: 0 auto;
+      height: 32px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--edge);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      padding: 0 14px;
+      gap: 10px;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+
+    .search-switcher kbd {
+      margin-left: auto;
+      font-family: inherit;
+      font-size: 11px;
+      padding: 2px 6px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--edge);
+      border-radius: 4px;
+      color: var(--text-subtle);
+    }
+
+    .top-right-status {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .mesh-badge {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      background: rgba(63, 214, 140, 0.1);
+      border: 1px solid rgba(63, 214, 140, 0.25);
+      color: #3fd68c;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+
+    .mesh-pulse {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #3fd68c;
+      box-shadow: 0 0 8px #3fd68c;
+    }
+
+    /* Main Workbench */
+    .workbench {
+      flex: 1;
+      display: flex;
+      gap: 12px;
+      padding: 12px;
+      height: calc(1440px - 48px);
+      box-sizing: border-box;
+      position: relative;
+    }
+
+    /* Left Server Rail */
+    .server-rail {
+      width: 68px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      padding: 4px 0;
+      flex-shrink: 0;
+    }
+
+    .rail-item {
+      position: relative;
+      width: 52px;
+      height: 52px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 16px;
+      background: var(--surface-800);
+      border: 1px solid var(--edge);
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .rail-item.active {
+      border-radius: 14px;
+      background: linear-gradient(135deg, #6366f1, #4f46e5);
+      border-color: rgba(255, 255, 255, 0.2);
+      color: #ffffff;
+      box-shadow: 0 4px 18px rgba(99, 102, 241, 0.45);
+    }
+
+    .rail-indicator {
+      position: absolute;
+      left: -8px;
+      width: 4px;
+      height: 36px;
+      background: #818cf8;
+      border-radius: 0 4px 4px 0;
+      box-shadow: 0 0 10px #818cf8;
+    }
+
+    .rail-badge {
+      position: absolute;
+      bottom: -3px;
+      right: -3px;
+      background: #ff4d4f;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 10px;
+      border: 2px solid var(--ground);
+    }
+
+    .rail-divider {
+      width: 32px;
+      height: 1px;
+      background: var(--edge);
+      margin: 4px 0;
+    }
+
+    .rail-avatar-text {
+      font-weight: 700;
+      font-size: 17px;
+      letter-spacing: -0.02em;
+    }
+
+    /* Floating Panels */
+    .panel {
+      border-radius: var(--panel-radius);
+      border: 1px solid var(--edge);
+      box-shadow: var(--shadow-panel);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--surface-800);
+    }
+
+    /* Channel Sidebar */
+    .channel-sidebar {
+      width: 300px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .server-header {
+      height: 58px;
+      padding: 0 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--edge);
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .server-title-block {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .server-title-text {
+      font-size: 16px;
+      font-weight: 700;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .verified-icon {
+      color: #818cf8;
+    }
+
+    .server-subtitle {
+      font-size: 12px;
+      color: var(--text-subtle);
+      font-weight: 500;
+    }
+
+    .channel-scroll {
+      flex: 1;
+      padding: 14px 12px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .channel-section-title {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-subtle);
+      padding: 0 8px 6px 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .channel-list {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .channel-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+
+    .channel-row.active {
+      background: rgba(99, 102, 241, 0.16);
+      border: 1px solid rgba(99, 102, 241, 0.35);
+      color: #ffffff;
+      font-weight: 600;
+    }
+
+    .channel-row.active .channel-hash {
+      color: #818cf8;
+    }
+
+    .channel-hash {
+      font-size: 16px;
+      color: var(--text-subtle);
+      width: 18px;
+      display: flex;
+      justify-content: center;
+    }
+
+    .channel-row-badge {
+      margin-left: auto;
+      padding: 2px 7px;
+      border-radius: 12px;
+      background: var(--surface-700);
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .channel-row-badge.unread {
+      background: #ff4d4f;
+      color: #fff;
+    }
+
+    .voice-channel-active {
+      background: rgba(63, 214, 140, 0.08);
+      border: 1px solid rgba(63, 214, 140, 0.2);
+      border-radius: 10px;
+      padding: 10px 12px;
+    }
+
+    .voice-channel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: #3fd68c;
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .voice-participants-mini {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding-left: 6px;
+    }
+
+    .voice-peer-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    .voice-peer-pill .dot-speaking {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #3fd68c;
+      box-shadow: 0 0 6px #3fd68c;
+    }
+
+    /* DM Rows */
+    .dm-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 7px 10px;
+      border-radius: 8px;
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+
+    .dm-details {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .dm-name {
+      font-size: 13.5px;
+      font-weight: 500;
+      color: #e2e8f0;
+    }
+    .dm-status {
+      font-size: 11px;
+      color: var(--text-subtle);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .avatar-wrapper {
+      position: relative;
+      width: 28px;
+      height: 28px;
+      flex-shrink: 0;
+    }
+
+    .avatar-img {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 12px;
+      color: #fff;
+    }
+
+    .status-dot {
+      position: absolute;
+      bottom: -1px;
+      right: -1px;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      border: 2px solid var(--surface-800);
+    }
+    .status-dot.online { background: var(--status-online); box-shadow: 0 0 6px var(--status-online); }
+    .status-dot.idle { background: var(--status-idle); }
+    .status-dot.dnd { background: var(--status-dnd); }
+
+    /* Bottom User Panel */
+    .user-footer {
+      height: 64px;
+      padding: 0 14px;
+      background: var(--surface-850);
+      border-top: 1px solid var(--edge);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .user-profile-btn {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+    }
+
+    .user-names {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .user-display {
+      font-size: 14px;
+      font-weight: 600;
+      color: #f1f5f9;
+    }
+
+    .user-tag {
+      font-size: 12px;
+      color: #3fd68c;
+      font-weight: 500;
+    }
+
+    .user-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .icon-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+    .icon-btn:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: #fff;
+    }
+
+    /* Main Chat Panel */
+    .main-surface {
+      flex: 1;
+      background: var(--surface-900);
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    .chat-header {
+      height: 58px;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--edge);
+      background: rgba(21, 24, 31, 0.95);
+      backdrop-filter: blur(8px);
+      z-index: 5;
+    }
+
+    .channel-header-info {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .header-hash {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text-muted);
+    }
+
+    .header-title {
+      font-size: 17px;
+      font-weight: 700;
+      color: #ffffff;
+    }
+
+    .header-divider {
+      width: 1px;
+      height: 20px;
+      background: var(--edge);
+    }
+
+    .header-desc {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    .e2ee-seal-pill {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 5px 12px;
+      background: rgba(99, 102, 241, 0.12);
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      border-radius: 20px;
+      color: #a5b4fc;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+
+    .e2ee-seal-pill svg {
+      color: #818cf8;
+    }
+
+    .header-tools {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    /* Pinned Notice */
+    .security-notice-banner {
+      background: rgba(99, 102, 241, 0.06);
+      border-bottom: 1px solid rgba(99, 102, 241, 0.15);
+      padding: 9px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 13px;
+      color: #c7d2fe;
+    }
+
+    .security-notice-banner svg {
+      color: #818cf8;
+      flex-shrink: 0;
+    }
+
+    /* Welcome Header */
+    .channel-welcome {
+      padding: 28px 24px 14px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .welcome-hash-circle {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: var(--surface-750);
+      border: 1px solid var(--edge);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 30px;
+      font-weight: 700;
+      color: #818cf8;
+    }
+
+    .welcome-title {
+      font-size: 28px;
+      font-weight: 700;
+      color: #ffffff;
+      letter-spacing: -0.02em;
+    }
+
+    .welcome-subtitle {
+      font-size: 14.5px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    .date-divider {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin: 14px 0 10px 0;
+      color: var(--text-subtle);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .date-divider::before, .date-divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--edge);
+    }
+
+    /* Message Stream */
+    .message-stream {
+      flex: 1;
+      padding: 0 24px 16px 24px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+    }
+
+    .message-item {
+      display: flex;
+      gap: 16px;
+      position: relative;
+    }
+
+    .msg-avatar {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 17px;
+      font-weight: 700;
+      color: #fff;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    }
+
+    .msg-body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .msg-meta {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .msg-author {
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .role-badge {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .role-founder {
+      background: rgba(129, 140, 248, 0.18);
+      color: #818cf8;
+      border: 1px solid rgba(129, 140, 248, 0.3);
+    }
+    .role-core {
+      background: rgba(63, 214, 140, 0.18);
+      color: #3fd68c;
+      border: 1px solid rgba(63, 214, 140, 0.3);
+    }
+    .role-staff {
+      background: rgba(56, 189, 248, 0.18);
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.3);
+    }
+
+    .msg-time {
+      font-size: 12px;
+      color: var(--text-subtle);
+    }
+
+    .msg-text {
+      font-size: 15px;
+      line-height: 1.55;
+      color: #e2e8f0;
+      max-width: 1150px;
+    }
+
+    /* Code Block */
+    .code-card {
+      margin-top: 6px;
+      background: #0f1219;
+      border: 1px solid var(--edge);
+      border-radius: 10px;
+      overflow: hidden;
+      max-width: 780px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    }
+
+    .code-header {
+      padding: 8px 16px;
+      background: rgba(255, 255, 255, 0.03);
+      border-bottom: 1px solid var(--edge);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+    }
+
+    .code-content {
+      padding: 14px 20px;
+      font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+      font-size: 14px;
+      line-height: 1.65;
+      color: #abb2bf;
+    }
+
+    .kw { color: #c678dd; font-weight: 600; }
+    .fn { color: #61afef; }
+    .str { color: #98c379; }
+    .prop { color: #e5c07b; }
+    .bool { color: #d19a66; }
+    .obj { color: #e06c75; }
+
+    /* Encrypted Attachment Card */
+    .attachment-card {
+      margin-top: 6px;
+      background: #151924;
+      border: 1px solid rgba(99, 102, 241, 0.25);
+      border-radius: 12px;
+      padding: 12px 18px;
+      max-width: 620px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+    }
+
+    .attachment-icon-box {
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(79, 70, 229, 0.3));
+      border: 1px solid rgba(99, 102, 241, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #818cf8;
+      flex-shrink: 0;
+    }
+
+    .attachment-info {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .attachment-name {
+      font-size: 14px;
+      font-weight: 600;
+      color: #f1f5f9;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .attachment-meta {
+      font-size: 12px;
+      color: var(--text-subtle);
+      font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+    }
+
+    .attachment-download-btn {
+      padding: 8px 14px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--edge);
+      border-radius: 8px;
+      color: #f1f5f9;
+      font-size: 13px;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+    }
+
+    /* Reactions */
+    .reactions-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    .reaction-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--edge);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+
+    .reaction-pill.active {
+      background: rgba(99, 102, 241, 0.16);
+      border-color: rgba(99, 102, 241, 0.4);
+      color: #c7d2fe;
+    }
+
+    /* Typing indicator */
+    .typing-bar {
+      padding: 0 24px 10px 24px;
+      font-size: 12px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .typing-dots {
+      display: flex;
+      gap: 4px;
+    }
+    .typing-dot {
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: #818cf8;
+    }
+
+    /* Chat Input Bar */
+    .composer-wrapper {
+      padding: 0 24px 24px 24px;
+    }
+
+    .composer-pill {
+      background: var(--surface-750);
+      border: 1px solid var(--edge);
+      border-radius: 14px;
+      padding: 12px 18px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    }
+
+    .composer-input {
+      flex: 1;
+      font-size: 15px;
+      color: #fff;
+      outline: none;
+      border: none;
+      background: transparent;
+      font-family: inherit;
+    }
+
+    .composer-input::placeholder {
+      color: var(--text-subtle);
+    }
+
+    .composer-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .send-btn {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      background: var(--accent);
+      border: none;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 2px 10px rgba(99, 102, 241, 0.5);
+    }
+
+    /* Right Panel */
+    .right-panel {
+      width: 380px;
+      flex-shrink: 0;
+      background: var(--surface-800);
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+
+    /* Active Call Card */
+    .call-card {
+      background: rgba(15, 23, 42, 0.65);
+      border-bottom: 1px solid var(--edge);
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .call-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .call-room-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .call-live-tag {
+      background: rgba(63, 214, 140, 0.15);
+      border: 1px solid rgba(63, 214, 140, 0.3);
+      color: #3fd68c;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .call-peers-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+
+    .call-peer-tile {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--edge);
+      border-radius: 10px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      position: relative;
+    }
+
+    .speaking-ring {
+      box-shadow: 0 0 0 2px #3fd68c, 0 0 14px rgba(63, 214, 140, 0.5);
+    }
+
+    .peer-tile-avatar {
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .peer-tile-name {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    /* Docked Listen Together */
+    .listen-together-card {
+      background: #0f131c;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .lt-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .lt-tag {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #f87171;
+    }
+
+    .lt-ducking-pill {
+      background: rgba(63, 214, 140, 0.12);
+      border: 1px solid rgba(63, 214, 140, 0.25);
+      color: #3fd68c;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 7px;
+      border-radius: 10px;
+    }
+
+    .lt-track-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .lt-cover {
+      width: 44px;
+      height: 44px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #1e1b4b, #312e81);
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #818cf8;
+      flex-shrink: 0;
+    }
+
+    .lt-texts {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      overflow: hidden;
+    }
+
+    .lt-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #f8fafc;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .lt-artist {
+      font-size: 11px;
+      color: var(--text-subtle);
+    }
+
+    .lt-scrubber {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .lt-track-bar {
+      height: 4px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 2px;
+      position: relative;
+    }
+
+    .lt-track-fill {
+      position: absolute;
+      left: 0;
+      top: 0;
+      height: 100%;
+      width: 48%;
+      background: linear-gradient(90deg, #6366f1, #818cf8);
+      border-radius: 2px;
+    }
+
+    .lt-times {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      color: var(--text-subtle);
+      font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+    }
+
+    .lt-controls {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      padding-top: 2px;
+    }
+
+    .lt-btn {
+      color: var(--text-muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .lt-btn-play {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: #ffffff;
+      color: #0b0f19;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Member List */
+    .member-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .member-group-title {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-subtle);
+      margin-bottom: 8px;
+    }
+
+    .member-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 8px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    .member-avatar-box {
+      position: relative;
+      width: 32px;
+      height: 32px;
+    }
+
+    .member-avatar {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .member-info {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .member-name {
+      font-size: 14px;
+      font-weight: 600;
+      color: #f1f5f9;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .member-status-text {
+      font-size: 11px;
+      color: var(--text-subtle);
+    }
+
+    /* SVG utility */
+    svg {
+      display: inline-block;
+      vertical-align: middle;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Bar -->
+  <header class="top-bar">
+    <div class="window-controls">
+      <div class="win-dot red"></div>
+      <div class="win-dot yellow"></div>
+      <div class="win-dot green"></div>
+    </div>
+
+    <div class="brand-cluster">
+      <div class="brand-logo-icon">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 18v-6a9 9 0 0 1 18 0v6"></path>
+          <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"></path>
+        </svg>
+      </div>
+      <span class="brand-name">BetweenUs</span>
+    </div>
+
+    <div class="top-nav-tabs">
+      <div class="nav-tab active">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></svg>
+        Workbench
+      </div>
+      <div class="nav-tab">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10H12V2z"/></svg>
+        Activities
+      </div>
+      <div class="nav-tab">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        Moments
+      </div>
+    </div>
+
+    <div class="search-switcher">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+      </svg>
+      <span>BetweenUs HQ / #general</span>
+      <kbd>Ctrl K</kbd>
+    </div>
+
+    <div class="top-right-status">
+      <div class="mesh-badge">
+        <div class="mesh-pulse"></div>
+        <span>WebRTC Mesh • 14ms</span>
+      </div>
+      <div class="icon-btn" title="Notifications">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+          <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+        </svg>
+      </div>
+      <div class="icon-btn" title="Settings">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+        </svg>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Workbench Layout -->
+  <main class="workbench">
+
+    <!-- Left Rail -->
+    <nav class="server-rail">
+      <div class="rail-item active" title="BetweenUs HQ">
+        <div class="rail-indicator"></div>
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.2">
+          <path d="M3 18v-6a9 9 0 0 1 18 0v6"></path>
+          <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"></path>
+        </svg>
+      </div>
+
+      <div class="rail-item" title="Direct Messages">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+        </svg>
+      </div>
+
+      <div class="rail-divider"></div>
+
+      <!-- Server 1 (BU HQ Active) -->
+      <div class="rail-item" style="background: linear-gradient(135deg, #1e1b4b, #312e81); color: #818cf8;" title="BetweenUs HQ">
+        <span class="rail-avatar-text">BU</span>
+      </div>
+
+      <!-- Server 2 -->
+      <div class="rail-item" style="background: #1e293b; color: #38bdf8;" title="Open Source Lab">
+        <span class="rail-avatar-text">OS</span>
+        <div class="rail-badge">3</div>
+      </div>
+
+      <!-- Server 3 -->
+      <div class="rail-item" style="background: #064e3b; color: #34d399;" title="WebRTC Devs">
+        <span class="rail-avatar-text">RT</span>
+      </div>
+
+      <!-- Server 4 -->
+      <div class="rail-item" style="background: #4c1d95; color: #c084fc;" title="Cryptography Guild">
+        <span class="rail-avatar-text">CG</span>
+      </div>
+
+      <div class="rail-item" style="border-style: dashed;" title="Add Server">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+      </div>
+
+      <div class="rail-item" title="Discover Servers">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"></circle>
+          <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon>
+        </svg>
+      </div>
+    </nav>
+
+    <!-- Channels Sidebar Panel -->
+    <aside class="panel channel-sidebar">
+      <div class="server-header">
+        <div class="server-title-block">
+          <span class="server-title-text">
+            BetweenUs HQ
+            <svg class="verified-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2L3 7v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5zm-2 16l-4-4 1.41-1.41L10 15.17l6.59-6.59L18 10l-8 8z"/>
+            </svg>
+          </span>
+          <span class="server-subtitle">24 Online • E2EE Mesh</span>
+        </div>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="6 9 12 15 18 9"></polyline>
+        </svg>
+      </div>
+
+      <div class="channel-scroll">
+        <!-- Text Channels -->
+        <div>
+          <div class="channel-section-title">
+            <span>Text Channels</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+          </div>
+          <div class="channel-list">
+            <div class="channel-row active">
+              <span class="channel-hash">#</span>
+              <span>general</span>
+              <svg style="margin-left:auto; color:#818cf8;" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+              </svg>
+            </div>
+            <div class="channel-row">
+              <span class="channel-hash">#</span>
+              <span>releases</span>
+              <span class="channel-row-badge unread">1</span>
+            </div>
+            <div class="channel-row">
+              <span class="channel-hash">#</span>
+              <span>engineering</span>
+              <span class="channel-row-badge">4</span>
+            </div>
+            <div class="channel-row">
+              <span class="channel-hash">#</span>
+              <span>architecture</span>
+            </div>
+            <div class="channel-row">
+              <span class="channel-hash">#</span>
+              <span>security-audits</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Voice Channels -->
+        <div>
+          <div class="channel-section-title">
+            <span>Voice Channels</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+          </div>
+          <div class="channel-list">
+            <div class="voice-channel-active">
+              <div class="voice-channel-header">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                    <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                  </svg>
+                  <span>Lounge</span>
+                </div>
+                <span style="font-size:12px; font-weight:700;">[3/8]</span>
+              </div>
+              <div class="voice-participants-mini">
+                <div class="voice-peer-pill">
+                  <div class="dot-speaking"></div>
+                  <span>aiyu (speaking)</span>
+                </div>
+                <div class="voice-peer-pill">
+                  <div class="dot-speaking"></div>
+                  <span>alex (speaking)</span>
+                </div>
+                <div class="voice-peer-pill">
+                  <div style="width:8px; height:8px; border-radius:50%; background:#64748b;"></div>
+                  <span>sophia</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="channel-row">
+              <span class="channel-hash">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                  <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+                </svg>
+              </span>
+              <span>Stage &amp; Pair Prog</span>
+            </div>
+            <div class="channel-row">
+              <span class="channel-hash">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                  <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+                </svg>
+              </span>
+              <span>Daily Standup</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Direct Messages -->
+        <div>
+          <div class="channel-section-title">
+            <span>Direct Messages</span>
+          </div>
+          <div class="channel-list">
+            <div class="dm-row">
+              <div class="avatar-wrapper">
+                <div class="avatar-img" style="background: linear-gradient(135deg, #6366f1, #4f46e5);">A</div>
+                <div class="status-dot online"></div>
+              </div>
+              <div class="dm-details">
+                <span class="dm-name">aiyu</span>
+                <span class="dm-status">Listening to Lofi Beats</span>
+              </div>
+            </div>
+            <div class="dm-row">
+              <div class="avatar-wrapper">
+                <div class="avatar-img" style="background: linear-gradient(135deg, #10b981, #059669);">A</div>
+                <div class="status-dot online"></div>
+              </div>
+              <div class="dm-details">
+                <span class="dm-name">alex</span>
+                <span class="dm-status">In Lounge • Carrom match</span>
+              </div>
+            </div>
+            <div class="dm-row">
+              <div class="avatar-wrapper">
+                <div class="avatar-img" style="background: linear-gradient(135deg, #f59e0b, #d97706);">S</div>
+                <div class="status-dot idle"></div>
+              </div>
+              <div class="dm-details">
+                <span class="dm-name">sophia</span>
+                <span class="dm-status">Reviewing benchmarks</span>
+              </div>
+            </div>
+            <div class="dm-row">
+              <div class="avatar-wrapper">
+                <div class="avatar-img" style="background: linear-gradient(135deg, #8b5cf6, #c084fc);">M</div>
+                <div class="status-dot online"></div>
+              </div>
+              <div class="dm-details">
+                <span class="dm-name">marcus</span>
+                <span class="dm-status">Testing WebRTC mesh</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom User Panel -->
+      <footer class="user-footer">
+        <div class="user-profile-btn">
+          <div class="avatar-wrapper" style="width:34px; height:34px;">
+            <div class="avatar-img" style="background: linear-gradient(135deg, #6366f1, #818cf8); font-size:14px;">A</div>
+            <div class="status-dot online"></div>
+          </div>
+          <div class="user-names">
+            <span class="user-display">aiyu</span>
+            <span class="user-tag">Founder • Online</span>
+          </div>
+        </div>
+        <div class="user-actions">
+          <div class="icon-btn" title="Microphone Active">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+              <line x1="12" y1="19" x2="12" y2="23"></line>
+              <line x1="8" y1="23" x2="16" y2="23"></line>
+            </svg>
+          </div>
+          <div class="icon-btn" title="Headphones">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 18v-6a9 9 0 0 1 18 0v6"></path>
+              <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"></path>
+            </svg>
+          </div>
+          <div class="icon-btn" title="Settings">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+          </div>
+        </div>
+      </footer>
+    </aside>
+
+    <!-- Main Chat Surface -->
+    <section class="panel main-surface">
+      <!-- Chat Header -->
+      <header class="chat-header">
+        <div class="channel-header-info">
+          <span class="header-hash">#</span>
+          <h1 class="header-title">general</h1>
+          <div class="header-divider"></div>
+          <span class="header-desc">General discussion &amp; E2EE verification</span>
+          <div class="e2ee-seal-pill">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+            <span>AES-256-GCM sealed</span>
+          </div>
+        </div>
+        <div class="header-tools">
+          <div class="icon-btn" title="Search Channel">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+          </div>
+          <div class="icon-btn" title="Pinned Messages">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="17" x2="12" y2="22"></line>
+              <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"></path>
+            </svg>
+          </div>
+          <div class="icon-btn" title="Member List Active" style="background: rgba(255, 255, 255, 0.08); color: #fff;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+              <circle cx="9" cy="7" r="4"></circle>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+            </svg>
+          </div>
+        </div>
+      </header>
+
+      <!-- Security Notice Banner -->
+      <div class="security-notice-banner">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+        </svg>
+        <span>All conversations and attachments in this channel are encrypted end-to-end with AES-256-GCM Double Ratchet. Ephemeral keys never touch the gateway.</span>
+      </div>
+
+      <!-- Welcome Channel Start -->
+      <div class="channel-welcome">
+        <div class="welcome-hash-circle">#</div>
+        <div class="welcome-title">Welcome to #general!</div>
+        <div class="welcome-subtitle">This is the start of the #general channel in BetweenUs HQ. True peer-to-peer WebRTC mesh and zero-knowledge encryption active.</div>
+        <div class="date-divider">Today — September 18, 2026</div>
+      </div>
+
+      <!-- Messages Stream -->
+      <div class="message-stream">
+        <!-- Message 1: Sophia intro -->
+        <div class="message-item">
+          <div class="msg-avatar" style="background: linear-gradient(135deg, #0284c7, #38bdf8);">S</div>
+          <div class="msg-body">
+            <div class="msg-meta">
+              <span class="msg-author" style="color: #38bdf8;">sophia</span>
+              <span class="role-badge role-staff">Staff</span>
+              <span class="msg-time">Today at 11:32 AM</span>
+            </div>
+            <div class="msg-text">
+              Hey everyone! 👋 Just pushed the new WebRTC mesh optimization build. DTLS-SRTP negotiation handshake is down to sub-20ms worldwide.
+            </div>
+          </div>
+        </div>
+
+        <!-- Message 2: Sophia benchmark -->
+        <div class="message-item">
+          <div class="msg-avatar" style="background: linear-gradient(135deg, #0284c7, #38bdf8);">S</div>
+          <div class="msg-body">
+            <div class="msg-meta">
+              <span class="msg-author" style="color: #38bdf8;">sophia</span>
+              <span class="role-badge role-staff">Staff</span>
+              <span class="msg-time">Today at 11:38 AM</span>
+            </div>
+            <div class="msg-text">
+              Here are the multi-region audio pipeline test results. Direct peer-to-peer latency dropped to <strong>14ms</strong> on mesh with zero packet loss and automatic jitter buffer smoothing: 🎧
+            </div>
+            <div class="reactions-bar">
+              <div class="reaction-pill">⚡ 4</div>
+              <div class="reaction-pill active">🚀 6</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Message 3: Alex with Code Block & Attachment -->
+        <div class="message-item">
+          <div class="msg-avatar" style="background: linear-gradient(135deg, #059669, #34d399);">A</div>
+          <div class="msg-body">
+            <div class="msg-meta">
+              <span class="msg-author" style="color: #3fd68c;">alex</span>
+              <span class="role-badge role-core">Core Team</span>
+              <span class="msg-time">Today at 11:40 AM</span>
+            </div>
+            <div class="msg-text">
+              Incredible numbers! I've updated the peer connection initialization helper to enforce AES-256-GCM cipher negotiation across all WebRTC data channels:
+            </div>
+
+            <!-- TypeScript Code Block -->
+            <div class="code-card">
+              <div class="code-header">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#61afef" stroke-width="2">
+                    <polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline>
+                  </svg>
+                  <span>peer-connection.ts</span>
+                </div>
+                <span style="color:#64748b;">TypeScript</span>
+              </div>
+              <pre class="code-content"><code><span class="kw">const</span> <span class="obj">session</span> = <span class="kw">await</span> <span class="prop">betweenus</span>.<span class="fn">createPeerConnection</span>({
+  <span class="prop">e2ee</span>: <span class="str">'AES-256-GCM'</span>,
+  <span class="prop">mesh</span>: <span class="bool">true</span>,
+  <span class="prop">dtlsSrtp</span>: <span class="bool">true</span>
+});</code></pre>
+            </div>
+
+            <!-- Encrypted Attachment Card -->
+            <div class="attachment-card">
+              <div class="attachment-icon-box">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                  <polyline points="14 2 14 8 20 8"></polyline>
+                  <line x1="16" y1="13" x2="8" y2="13"></line>
+                  <line x1="16" y1="17" x2="8" y2="17"></line>
+                </svg>
+              </div>
+              <div class="attachment-info">
+                <div class="attachment-name">
+                  <span>betweenus-e2ee-benchmarks-v2.4.pdf</span>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3fd68c" stroke-width="2.5">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                  </svg>
+                </div>
+                <div class="attachment-meta">2.4 MB • SHA256: 8f4e2b...d91c • Verified E2EE Payload</div>
+              </div>
+              <button class="attachment-download-btn">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                  <polyline points="7 10 12 15 17 10"></polyline>
+                  <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+                <span>Download</span>
+              </button>
+            </div>
+
+            <div class="reactions-bar">
+              <div class="reaction-pill active">🔥 5</div>
+              <div class="reaction-pill active">🚀 3</div>
+              <div class="reaction-pill active">🛡️ 2</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Message 4: Aiyu -->
+        <div class="message-item">
+          <div class="msg-avatar" style="background: linear-gradient(135deg, #6366f1, #818cf8);">A</div>
+          <div class="msg-body">
+            <div class="msg-meta">
+              <span class="msg-author" style="color: #818cf8;">aiyu</span>
+              <span class="role-badge role-founder">Founder</span>
+              <span class="msg-time">Today at 11:41 AM</span>
+            </div>
+            <div class="msg-text">
+              Deploying this to desktop and web builds now. Let's hop on <strong>🔊 Lounge</strong> to test the YouTube Listen Together sync and Carrom physics refereeing! 🚀
+            </div>
+            <div class="reactions-bar">
+              <div class="reaction-pill">🎉 7</div>
+              <div class="reaction-pill">❤️ 4</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Message 5: Sophia Lounge confirm -->
+        <div class="message-item">
+          <div class="msg-avatar" style="background: linear-gradient(135deg, #0284c7, #38bdf8);">S</div>
+          <div class="msg-body">
+            <div class="msg-meta">
+              <span class="msg-author" style="color: #38bdf8;">sophia</span>
+              <span class="role-badge role-staff">Staff</span>
+              <span class="msg-time">Today at 11:42 AM</span>
+            </div>
+            <div class="msg-text">
+              Joining Lounge now! Queueing up the 24/7 Lofi Beats stream so we have synchronized audio while testing the board game. 🎶
+            </div>
+          </div>
+        </div>
+
+        <!-- Message 6: Alex Carrom confirm -->
+        <div class="message-item">
+          <div class="msg-avatar" style="background: linear-gradient(135deg, #059669, #34d399);">A</div>
+          <div class="msg-body">
+            <div class="msg-meta">
+              <span class="msg-author" style="color: #3fd68c;">alex</span>
+              <span class="role-badge role-core">Core Team</span>
+              <span class="msg-time">Today at 11:42 AM</span>
+            </div>
+            <div class="msg-text">
+              Connected! Striker physics feel butter-smooth. I'll take the white coins this round 😉
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Typing Indicator -->
+      <div class="typing-bar">
+        <div class="typing-dots">
+          <div class="typing-dot"></div>
+          <div class="typing-dot"></div>
+          <div class="typing-dot"></div>
+        </div>
+        <span><strong>sophia</strong> is typing...</span>
+      </div>
+
+      <!-- Bottom Chat Composer -->
+      <div class="composer-wrapper">
+        <div class="composer-pill">
+          <div class="icon-btn" title="Add Attachment">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
+            </svg>
+          </div>
+          <input class="composer-input" type="text" placeholder="Message #general (E2EE sealed)" value="">
+          <div class="composer-actions">
+            <div class="icon-btn" title="Emoji">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <path d="M8 14s1.5 2 4 2 4-2 4-2"></path>
+                <line x1="9" y1="9" x2="9.01" y2="9"></line>
+                <line x1="15" y1="9" x2="15.01" y2="9"></line>
+              </svg>
+            </div>
+            <div class="icon-btn" title="Voice Note">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+              </svg>
+            </div>
+            <button class="send-btn" title="Send Encrypted Message">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="22" y1="2" x2="11" y2="13"></line>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right Panel -->
+    <aside class="panel right-panel">
+      <!-- Active Call Card -->
+      <div class="call-card">
+        <div class="call-header">
+          <div class="call-room-title">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3fd68c" stroke-width="2">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+              <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+            </svg>
+            <span>🔊 Lounge</span>
+          </div>
+          <div class="call-live-tag">
+            <div class="mesh-pulse"></div>
+            <span>LIVE • 08:42</span>
+          </div>
+        </div>
+
+        <!-- 3 Peer Avatars Grid -->
+        <div class="call-peers-grid">
+          <div class="call-peer-tile">
+            <div class="peer-tile-avatar speaking-ring" style="background: linear-gradient(135deg, #6366f1, #818cf8);">A</div>
+            <div class="peer-tile-name">
+              <span>aiyu</span>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#3fd68c" stroke-width="2.5">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+              </svg>
+            </div>
+          </div>
+          <div class="call-peer-tile">
+            <div class="peer-tile-avatar speaking-ring" style="background: linear-gradient(135deg, #059669, #34d399);">A</div>
+            <div class="peer-tile-name">
+              <span>alex</span>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#3fd68c" stroke-width="2.5">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+              </svg>
+            </div>
+          </div>
+          <div class="call-peer-tile">
+            <div class="peer-tile-avatar" style="background: linear-gradient(135deg, #0284c7, #38bdf8);">S</div>
+            <div class="peer-tile-name">
+              <span>sophia</span>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ff5d5d" stroke-width="2.5">
+                <line x1="1" y1="1" x2="23" y2="23"></line>
+                <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path>
+                <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"></path>
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <!-- Docked Listen Together Card -->
+        <div class="listen-together-card">
+          <div class="lt-header">
+            <div class="lt-tag">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+              </svg>
+              <span>Listen Together</span>
+            </div>
+            <span class="lt-ducking-pill">Audio Ducking Active</span>
+          </div>
+
+          <div class="lt-track-info">
+            <div class="lt-cover">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <polygon points="10 8 16 12 10 16 10 8"></polygon>
+              </svg>
+            </div>
+            <div class="lt-texts">
+              <div class="lt-title">Lofi Beats 24/7 — Chillhop Radio</div>
+              <div class="lt-artist">Lofi Records • 3 listeners in sync</div>
+            </div>
+          </div>
+
+          <div class="lt-scrubber">
+            <div class="lt-track-bar">
+              <div class="lt-track-fill"></div>
+            </div>
+            <div class="lt-times">
+              <span>1:42</span>
+              <span>3:30</span>
+            </div>
+          </div>
+
+          <div class="lt-controls">
+            <div class="lt-btn">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5"></line>
+              </svg>
+            </div>
+            <div class="lt-btn-play">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="6" y="4" width="4" height="16"></rect>
+                <rect x="14" y="4" width="4" height="16"></rect>
+              </svg>
+            </div>
+            <div class="lt-btn">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19"></line>
+              </svg>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Members List -->
+      <div class="member-scroll">
+        <!-- Core Team -->
+        <div>
+          <div class="member-group-title">Core Team — 2</div>
+          <div class="member-row">
+            <div class="member-avatar-box">
+              <div class="member-avatar" style="background: linear-gradient(135deg, #6366f1, #818cf8);">A</div>
+              <div class="status-dot online"></div>
+            </div>
+            <div class="member-info">
+              <div class="member-name" style="color: #818cf8;">
+                aiyu
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2">
+                  <path d="M2 4l3 12h14l3-12-6 7-4-7-4 7-6-7zm3 16h14v2H5v-2z"></path>
+                </svg>
+              </div>
+              <div class="member-status-text">Founder • In Lounge</div>
+            </div>
+          </div>
+
+          <div class="member-row">
+            <div class="member-avatar-box">
+              <div class="member-avatar" style="background: linear-gradient(135deg, #059669, #34d399);">A</div>
+              <div class="status-dot online"></div>
+            </div>
+            <div class="member-info">
+              <div class="member-name" style="color: #3fd68c;">alex</div>
+              <div class="member-status-text">Core Team • In Lounge</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Engineers -->
+        <div>
+          <div class="member-group-title">Engineers — 4</div>
+          <div class="member-row">
+            <div class="member-avatar-box">
+              <div class="member-avatar" style="background: linear-gradient(135deg, #0284c7, #38bdf8);">S</div>
+              <div class="status-dot idle"></div>
+            </div>
+            <div class="member-info">
+              <div class="member-name" style="color: #38bdf8;">sophia</div>
+              <div class="member-status-text">Staff Engineer • Away</div>
+            </div>
+          </div>
+
+          <div class="member-row">
+            <div class="member-avatar-box">
+              <div class="member-avatar" style="background: linear-gradient(135deg, #8b5cf6, #c084fc);">M</div>
+              <div class="status-dot online"></div>
+            </div>
+            <div class="member-info">
+              <div class="member-name">marcus</div>
+              <div class="member-status-text">Testing WebRTC mesh</div>
+            </div>
+          </div>
+
+          <div class="member-row">
+            <div class="member-avatar-box">
+              <div class="member-avatar" style="background: linear-gradient(135deg, #ec4899, #f472b6);">E</div>
+              <div class="status-dot online"></div>
+            </div>
+            <div class="member-info">
+              <div class="member-name">elena</div>
+              <div class="member-status-text">Writing Carrom physics</div>
+            </div>
+          </div>
+
+          <div class="member-row">
+            <div class="member-avatar-box">
+              <div class="member-avatar" style="background: linear-gradient(135deg, #f97316, #fb923c);">D</div>
+              <div class="status-dot idle"></div>
+            </div>
+            <div class="member-info">
+              <div class="member-name">david</div>
+              <div class="member-status-text">Electron runtime</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Online Members -->
+        <div>
+          <div class="member-group-title">Online — 8</div>
+          <div class="member-row">
+            <div class="member-avatar-box">
+              <div class="member-avatar" style="background: #334155;">C</div>
+              <div class="status-dot online"></div>
+            </div>
+            <div class="member-info">
+              <div class="member-name">chen</div>
+              <div class="member-status-text">Playing Carrom</div>
+            </div>
+          </div>
+
+          <div class="member-row">
+            <div class="member-avatar-box">
+              <div class="member-avatar" style="background: #475569;">L</div>
+              <div class="status-dot online"></div>
+            </div>
+            <div class="member-info">
+              <div class="member-name">liam</div>
+              <div class="member-status-text">Active</div>
+            </div>
+          </div>
+
+          <div class="member-row">
+            <div class="member-avatar-box">
+              <div class="member-avatar" style="background: #3b82f6;">Z</div>
+              <div class="status-dot online"></div>
+            </div>
+            <div class="member-info">
+              <div class="member-name">zack</div>
+              <div class="member-status-text">Active</div>
+            </div>
+          </div>
+
+          <div class="member-row">
+            <div class="member-avatar-box">
+              <div class="member-avatar" style="background: #0ea5e9;">S</div>
+              <div class="status-dot online"></div>
+            </div>
+            <div class="member-info">
+              <div class="member-name">sarah</div>
+              <div class="member-status-text">Reviewing PR #42</div>
+            </div>
+          </div>
+
+          <div class="member-row">
+            <div class="member-avatar-box">
+              <div class="member-avatar" style="background: #14b8a6;">M</div>
+              <div class="status-dot online"></div>
+            </div>
+            <div class="member-info">
+              <div class="member-name">maya</div>
+              <div class="member-status-text">Active</div>
+            </div>
+          </div>
+
+          <div class="member-row">
+            <div class="member-avatar-box">
+              <div class="member-avatar" style="background: #f59e0b;">V</div>
+              <div class="status-dot online"></div>
+            </div>
+            <div class="member-info">
+              <div class="member-name">vikram</div>
+              <div class="member-status-text">Active</div>
+            </div>
+          </div>
+
+          <div class="member-row">
+            <div class="member-avatar-box">
+              <div class="member-avatar" style="background: #84cc16;">T</div>
+              <div class="status-dot online"></div>
+            </div>
+            <div class="member-info">
+              <div class="member-name">tariq</div>
+              <div class="member-status-text">Active</div>
+            </div>
+          </div>
+
+          <div class="member-row">
+            <div class="member-avatar-box">
+              <div class="member-avatar" style="background: #a855f7;">N</div>
+              <div class="status-dot online"></div>
+            </div>
+            <div class="member-info">
+              <div class="member-name">noah</div>
+              <div class="member-status-text">Active</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+  </main>
+
+</body>
+</html>
