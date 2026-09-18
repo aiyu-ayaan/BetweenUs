@@ -216,6 +216,7 @@ shape WhatsApp uses, for the same reason.
 | Channel on screen on *another* device | Server | Only the server sees every device — see below |
 | Quiet hours | Client | Minutes on *this* device's clock; the server never learns a timezone |
 | Mentions-only | Client | The mention is inside the ciphertext |
+| Was it *my* role that was mentioned | Client | Same reason, plus the roster: only a client knows which roles this account holds |
 
 Rule of thumb: if answering it needs the plaintext, it's a client decision
 and the push still goes out. If it needs to know about a device that isn't
@@ -237,6 +238,23 @@ this one, only the server can answer it.
   `@you`; deciding server-side would mean waking the phone for every
   message and letting the client decide anyway, which throws away the
   whole saving.
+
+## What counts as a mention
+
+`@username`, `@display name`, `@everyone`, `@here`, and **the name of a custom
+role this account holds** — `mentionsMe` on desktop and web, `PushGate.mentions`
+on Android, with the same boundary rule on both so `@adam` never wakes Ada.
+
+A role is matched by its **name**, not its id: the body is the text somebody
+typed, and an id in it would be unreadable on a client that had not yet fetched
+the server's roles. Only the roles *this account holds in that server* are
+passed to the matcher — the whole list would wake every member for one member's
+mention — resolved by `roleNamesFor` (desktop) and `Workspace.roleNamesIn`
+(Android) against the member roster the client already has.
+
+On Android the roles are cached with the member lists, because the moment they
+are needed is a process woken by a push with no network yet. A client whose
+roster has not arrived matches on nothing rather than guessing.
 
 "Focused" is `document.hasFocus() && !document.hidden` plus the active
 channel id on desktop/web, and `AppForeground.visible` plus

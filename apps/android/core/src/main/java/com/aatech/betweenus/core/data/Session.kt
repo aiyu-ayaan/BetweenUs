@@ -16,6 +16,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -80,6 +81,15 @@ sealed interface AuthPhase {
  * exists.
  */
 object Session {
+    /**
+     * The shortest time the splash stays up, however fast the restore answers.
+     *
+     * A genuine cost - a fast start is deliberately made slower - so it is one
+     * beat, not the several seconds other clients spend here. Read by
+     * `BootTips`, which keeps its tip delay above it so a tip can never flash.
+     */
+    const val MIN_SPLASH_MS = 1_500L
+
     private const val REFRESH_KEY = "refreshToken"
     private const val EMAIL_KEY = "lastEmail"
 
@@ -211,6 +221,9 @@ object Session {
     private var restoring: Job? = null
 
     private suspend fun runRestore() {
+        // When the splash went up, so the floor below measures the screen
+        // rather than the request. See [MIN_SPLASH_MS].
+        val shownAt = System.currentTimeMillis()
         var attempt = 0
         while (true) {
             if (refreshToken == null) {
@@ -219,7 +232,7 @@ object Session {
             }
             if (_state.value !is AuthPhase.SignedIn) _state.value = AuthPhase.Restoring()
 
-            val problem = attemptRestore() ?: return
+            val problem = attemptRestore(shownAt) ?: return
 
             // Still restoring, still holding the token, now saying why.
             _state.value = AuthPhase.Restoring(problem)
@@ -233,7 +246,7 @@ object Session {
      * or genuinely signed out - and the reason to show when it is worth trying
      * again.
      */
-    private suspend fun attemptRestore(): String? {
+    private suspend fun attemptRestore(shownAt: Long): String? {
         val token = refreshAccessToken()
         if (token == null) {
             // A refusal has already cleared the token and moved the state on;
@@ -243,6 +256,7 @@ object Session {
         }
         return try {
             val user = BetweenUsApi.me()
+            holdSplash(shownAt)
             _state.value = AuthPhase.SignedIn(user)
             begin(user, secret = null)
             null
@@ -259,6 +273,25 @@ object Session {
                 messageOf(error)
             }
         }
+    }
+
+    /**
+     * Keeps the splash up long enough to be read as a splash.
+     *
+     * A stored token usually answers in a couple of hundred milliseconds, and
+     * the screen was gone before the eye could resolve it - a dark flash on the
+     * way to the conversation list, which reads as a stutter rather than as a
+     * start. The desktop holds the same floor for the same reason
+     * (`MIN_BOOT_MS` in `features/shell/LoadingScreen.tsx`); the two are
+     * asserted separately because neither can read the other's constant.
+     *
+     * Only ever waited on *after* the work is done, so it delays the first
+     * screen and no request. A failing restore never reaches it: somebody
+     * watching an error does not need it held back.
+     */
+    private suspend fun holdSplash(shownAt: Long) {
+        val left = MIN_SPLASH_MS - (System.currentTimeMillis() - shownAt)
+        if (left > 0) delay(left)
     }
 
     /**

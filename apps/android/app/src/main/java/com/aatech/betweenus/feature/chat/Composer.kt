@@ -219,6 +219,13 @@ fun Composer(
     val channelMembers = remember(serverId, serverMembers) {
         serverId?.let { serverMembers[it] }.orEmpty()
     }
+    // This server's roles, for the `@` menu. Collected rather than read once so
+    // they appear as soon as they arrive on a cold start; `MentionSuggestPopup`
+    // suppresses them in a conversation, which has none.
+    val serverRoles by Workspace.roles.collectAsState()
+    val channelRoles = remember(serverId, serverRoles) {
+        serverId?.let { serverRoles[it] }.orEmpty()
+    }
     val isDirect = remember(channelId) { Workspace.directChannel(channelId) != null }
     val dmParticipant = remember(channelId) { Workspace.directChannel(channelId)?.participant }
     val effectiveMembers = remember(channelMembers, dmParticipant, isDirect) {
@@ -347,6 +354,7 @@ fun Composer(
                 members = effectiveMembers,
                 isDirect = isDirect,
                 onPick = { username -> insertMention(username, q) },
+                roles = channelRoles,
             )
         }
 

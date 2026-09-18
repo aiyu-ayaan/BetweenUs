@@ -16,6 +16,7 @@ import type {
   MessageCustomEmoji,
   MessageMoment,
   MessageReply,
+  PublicUser,
   ServerMember,
 } from '@betweenus/shared-types';
 import { pruneExpired, useChatStore, type DecryptedMessage } from '../../stores/chat';
@@ -43,7 +44,7 @@ import { MessageMenu } from './MessageMenu';
 import { OneTimeToggle, SendPreview, isPreviewable, isImage } from './SendPreview';
 import { EmojiSuggest } from './EmojiSuggest';
 import { MentionSuggest } from './MentionSuggest';
-import { mentionsMe } from '../../services/mentions';
+import { mentionsMe, roleNamesFor, type MentionTarget } from '../../services/mentions';
 import {
   emojiFor,
   isOnlyEmoji,
@@ -643,6 +644,12 @@ function MessageList({
    */
   const anchor = useRef<number | null>(null);
   const me = useAuthStore((state) => state.user);
+  /**
+   * Me, plus the roles I hold in the server this channel belongs to - the
+   * thing `mentionsMe` is asked about, built once for the whole list rather
+   * than per message, since it is the same answer for every row.
+   */
+  const mentionMe = useMentionTarget(me);
   // Cozy or compact. Read here rather than threaded down as a prop: the list is
   // the only thing that spaces messages, so it is the only thing that asks.
   const spacing = spacingFor(useThemeStore((state) => state.settings.density));
@@ -978,7 +985,7 @@ function MessageList({
           // the screen or their bubble colour.
           const hook = message.webhook ?? null;
           const isSelf = hook === null && message.author.id === me?.id;
-          const isMentioned = me ? mentionsMe(message.content, me) : false;
+          const isMentioned = mentionMe ? mentionsMe(message.content, mentionMe) : false;
           // The avatar is for someone else's face in a channel - never your
           // own (the side of the screen already says that), and never in a
           // direct message, where there are only ever two people in it.
@@ -1650,6 +1657,31 @@ export function messageBubbleClasses({
   return 'bg-surface-800';
 }
 
+/**
+ * This account as a mention target: its names, plus the custom roles it holds
+ * in the server currently open.
+ *
+ * A hook rather than a prop because both sides of the feature need the same
+ * answer - the list, to tint a bubble that addressed one of my roles, and the
+ * composer, to know which roles it may offer - and because the roster it joins
+ * against changes under both of them as members and roles arrive.
+ *
+ * A direct message has no server and therefore no roles; the join simply finds
+ * nothing, so it needs no branch of its own here.
+ */
+function useMentionTarget(me: PublicUser | null): MentionTarget | null {
+  const members = useChatStore((state) => state.members);
+  const roles = useChatStore((state) => state.roles);
+  return useMemo(() => {
+    if (!me) return null;
+    return {
+      username: me.username,
+      displayName: me.displayName,
+      roles: roleNamesFor(members, roles, me.id),
+    };
+  }, [me, members, roles]);
+}
+
 const URL_REGEX = /(https?:\/\/[^\s<>"']+)/gi;
 export const MENTION_REGEX = /(@[a-zA-Z0-9_.-]+)/g;
 
@@ -2172,6 +2204,9 @@ function MessageComposer({
   const [emojiQuery, setEmojiQuery] = useState<{ term: string; start: number } | null>(null);
   const [mentionQuery, setMentionQuery] = useState<{ term: string; start: number } | null>(null);
   const members = useChatStore((state) => state.members);
+  // Offered in the `@` menu beside the members. A direct message has none, and
+  // `MentionSuggest` suppresses them there rather than this having to.
+  const roles = useChatStore((state) => state.roles);
 
   const dmMembers: ServerMember[] = useMemo(() => {
     if (channel.type !== 'DM') return members;
@@ -2750,6 +2785,7 @@ function MessageComposer({
         <MentionSuggest
           term={mentionQuery.term}
           members={dmMembers}
+          roles={roles}
           isDirect={channel.type === 'DM'}
           onClose={() => setMentionQuery(null)}
           onPick={(username) => {

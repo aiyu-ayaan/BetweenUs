@@ -4,8 +4,9 @@
  * The same shape as the listening panel, and for the same reasons: a board is
  * a thing people look at with their whole attention for a minute at a time, so
  * it takes the stage rather than living in a popover, and it is drawn in
- * exactly one place - `VoiceChannelView` - because `VoiceControls` is rendered
- * twice and anything it drew from shared state would be drawn twice.
+ * exactly one place - `VoiceChannelView` - because `VoiceControls` is still
+ * rendered twice inside it (the docked bar and the fullscreen one) and
+ * anything it drew from shared state would be drawn twice.
  *
  * Two states, not two tabs. With nothing on the table this is the library;
  * with a game on it, it is the board and the chairs. There is no "back to the

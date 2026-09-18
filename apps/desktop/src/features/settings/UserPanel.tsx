@@ -3,12 +3,10 @@ import type { ActiveStatus } from '@betweenus/shared-types';
 import { useAuthStore } from '../../stores/auth';
 import { usePresenceStore } from '../../stores/presence';
 import { useVoiceStore } from '../../stores/voice';
-import { useChatStore } from '../../stores/chat';
 import { Avatar } from '../../components/Avatar';
 import { AppDownloadIcon, HeadphonesIcon, MicIcon, MicOffIcon, SettingsIcon } from '../../components/icons';
 import { isDesktopRuntime } from '../../services/platform';
 import { DOWNLOAD_URL, downloadLabel } from '../../services/downloads';
-import { roleBadgeLabel } from '../members/MemberList';
 
 const STATUS_CHOICES: Array<{ value: ActiveStatus; label: string; hint?: string }> = [
   { value: 'online', label: 'Online' },
@@ -42,11 +40,6 @@ export function UserPanel({ onOpenSettings }: { onOpenSettings: () => void }): J
   const setStatus = usePresenceStore((state) => state.setStatus);
   const micEnabled = useVoiceStore((state) => state.micEnabled);
   const toggleMic = useVoiceStore((state) => state.toggleMic);
-  // Your role in whichever server is open, if any - the same built-in labels
-  // the message list badges staff with. Nothing here when the sidebar has no
-  // server (home view, or a fresh sign-in with no server selected yet).
-  const myRole = useChatStore((state) => state.members.find((member) => member.userId === user?.id)?.role);
-  const roleLabel = myRole ? roleBadgeLabel(myRole) : null;
 
   const [open, setOpen] = useState(false);
   const [deafened, setDeafened] = useState(false);
@@ -146,13 +139,23 @@ export function UserPanel({ onOpenSettings }: { onOpenSettings: () => void }): J
           </span>
           {/* No second dot here - the avatar above already cuts one into its
               own corner for this exact status, and a row that draws the same
-              fact twice reads as two people's presence rather than one. */}
+              fact twice reads as two people's presence rather than one.
+              And no role either: this column is roughly ninety pixels once the
+              avatar and the buttons have taken theirs, so "Founder • Online"
+              truncated to "Foun…", which says neither. The role is already on
+              every message this account sends and beside its name in the
+              member list; what this row is for is who you are and what you are
+              set to. */}
           <span className="block truncate text-xs text-slate-400">
-            {roleLabel ? `${roleLabel} • ${STATUS_WORD[selfStatus]}` : STATUS_WORD[selfStatus]}
+            {STATUS_WORD[selfStatus]}
           </span>
         </span>
       </button>
 
+      {/* Always here, in a call or out of one. `VoicePanel` above carries no
+          controls at all, so this row is the only microphone on the sidebar -
+          the rest of the call's controls are in `VoiceChannelView`, one click
+          away through the channel name in that panel. */}
       <button
         type="button"
         onClick={() => void toggleMic()}

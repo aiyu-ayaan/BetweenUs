@@ -329,7 +329,10 @@ class PushService : FirebaseMessagingService() {
         // such a channel stays silent - guessing loudly is the worse mistake.
         if (data["mentionsOnly"] == "1") {
             val text = body?.text ?: return
-            if (!PushGate.mentions(text, self)) return
+            // The roles this account holds here come out of the workspace the
+            // refresh above just filled - from its cache when the network is
+            // not there, which is the whole reason they are cached at all.
+            if (!PushGate.mentions(text, self, Workspace.roleNamesIn(channelId, self.id))) return
         }
 
         val text = describe(body)

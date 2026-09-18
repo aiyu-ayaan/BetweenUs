@@ -12,6 +12,7 @@ import type {
   MessageMoment,
   MessageReply,
   ServerMember,
+  ServerCustomRole,
   ServerWithRole,
   UserSummary,
   UpdateServerMemberRequest,
@@ -65,6 +66,16 @@ interface ChatState {
   /** Open conversations, kept apart from a server's channels. */
   directs: Channel[];
   members: ServerMember[];
+  /**
+   * The open server's custom roles, for the `@` menu and for deciding whether
+   * a message addressed a role this account holds.
+   *
+   * Listing them needs only membership (`ServersService.roles` asks for
+   * nothing else), so this is not an administrator's view of the server
+   * leaking into an ordinary member's window - every member can already see
+   * the roles on every profile card.
+   */
+  roles: ServerCustomRole[];
   messages: DecryptedMessage[];
   activeServerId: string | null;
   activeChannelId: string | null;
@@ -265,6 +276,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   channels: [],
   directs: [],
   members: [],
+  roles: [],
   messages: [],
   activeServerId: null,
   activeChannelId: null,
@@ -405,6 +417,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       activeServerId: serverId,
       channels: [],
       members: [],
+      roles: [],
       messages: [],
       loadingServer: true,
     });
@@ -424,11 +437,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     let channels: Channel[];
     let members: ServerMember[];
+    let roles: ServerCustomRole[];
     try {
-      [channels, members] = await Promise.all([
+      [channels, members, roles] = await Promise.all([
         api.channels(serverId),
         // Members carry the display names presence attaches status to.
         api.members(serverId).catch(() => []),
+        // And the roles turn a member's `roleIds` into names, which is what
+        // the `@` menu offers and what decides whether a message addressed a
+        // role this account holds. Fetched here rather than when the composer
+        // is first focused, because the *reading* side needs it too - a
+        // message that mentions your role has to be tinted the moment it is
+        // drawn, and a channel opened cold draws before anybody types.
+        api.serverRoles(serverId).catch(() => []),
       ]);
     } finally {
       // In a `finally` because a channel list that failed to arrive must still
@@ -438,7 +459,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // fetch in flight and owns the flag now.
       if (get().activeServerId === serverId) set({ loadingServer: false });
     }
-    set({ channels, members });
+    set({ channels, members, roles });
     void cache.putChannels(serverId, channels).catch(() => undefined);
     // Keep the rail's map current for the server that is actually open -
     // the background fetch in `loadServers` may still be in flight, or this
@@ -890,6 +911,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       activeChannelId: null,
       channels: [],
       members: [],
+      roles: [],
       messages: [],
     });
     chatSocket.syncSubscriptions(subscribable([], get().directs));
@@ -942,6 +964,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       channels: [],
       directs: [],
       members: [],
+      roles: [],
       messages: [],
       activeServerId: null,
       activeChannelId: null,

@@ -186,6 +186,15 @@ fun MessageRow(
     /** The author's role in this server, null in a direct message. Same
      * pass-in-rather-than-look-up reasoning as [authorStatus]. */
     authorRole: ServerRole? = null,
+    /**
+     * The names of the custom roles *this account* holds in this server, so a
+     * message addressed to one of them is marked as addressed to you.
+     *
+     * Passed in for the same reason [authorStatus] is: the conversation
+     * resolves it once against the roster it already holds, where a lookup per
+     * row would be a subscription per row.
+     */
+    myRoles: List<String> = emptyList(),
     /** Swiping the row rightwards answers it, the way every phone chat does. */
     onReply: () -> Unit = {},
     onOpenSeenBy: () -> Unit = {},
@@ -211,8 +220,8 @@ fun MessageRow(
     // something you said, so it gets neither your side of the screen nor your
     // bubble colour.
     val isSelf = hook == null && message.author.id == self.id
-    val isMentioned = !isSelf && !message.deleted && remember(readable.text, self) {
-        PushGate.mentions(readable.text, self)
+    val isMentioned = !isSelf && !message.deleted && remember(readable.text, self, myRoles) {
+        PushGate.mentions(readable.text, self, myRoles)
     }
 
     /**

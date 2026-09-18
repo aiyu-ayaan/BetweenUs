@@ -142,6 +142,16 @@ fun ChatScreen(
     // reason `authorStatus` is passed in rather than looked up in `MessageRow`.
     val roster by Workspace.members.collectAsState()
     val serverRoster = channel?.serverId?.let { roster[it] }.orEmpty()
+    // The names of the custom roles *this* account holds here - what decides
+    // whether a message was addressed to you by role. The join itself is
+    // `Workspace.roleNamesIn`, because the push path asks the same question and
+    // the rule may exist only once; the two collected maps are keys rather than
+    // sources, so the bubble tints the moment either of them arrives on a cold
+    // start instead of only after the conversation is reopened.
+    val serverRoles by Workspace.roles.collectAsState()
+    val myRoles = remember(roster, serverRoles, channelId, self.id) {
+        Workspace.roleNamesIn(channelId, self.id)
+    }
 
     var acting by remember { mutableStateOf<ReadableMessage?>(null) }
     var editing by remember { mutableStateOf<ReadableMessage?>(null) }
@@ -686,6 +696,7 @@ fun ChatScreen(
                         authorStatus = statuses[readable.message.author.id]
                             ?: PresenceStatus.OFFLINE,
                         authorRole = serverRoster.firstOrNull { it.userId == readable.message.author.id }?.role,
+                        myRoles = myRoles,
                         onReply = { replyingTo = readable.quote() },
                         onOpenSeenBy = { seenFor = readable },
                         onOpenQuoted = { quotedId ->

@@ -1,7 +1,7 @@
 /** Run with `tsx src/features/chat/MentionSuggest.check.ts`. */
 import assert from 'node:assert/strict';
 import { filterMentionOptions, MentionSuggest } from './MentionSuggest';
-import type { ServerMember } from '@betweenus/shared-types';
+import type { ServerCustomRole, ServerMember } from '@betweenus/shared-types';
 
 assert.equal(typeof MentionSuggest, 'function', 'MentionSuggest should be a function component');
 
@@ -122,5 +122,60 @@ assert.equal(capped[0]?.username, 'everyone');
 assert.equal(capped[1]?.username, 'here');
 assert.equal(capped[2]?.username, 'user_00');
 assert.equal(capped[9]?.username, 'user_07');
+
+// 7. Roles sit between the broadcasts and the members, and only in a server.
+const mockRoles: ServerCustomRole[] = [
+  {
+    id: 'r1',
+    serverId: 's1',
+    name: 'designers',
+    colour: '#ff8800',
+    rank: 2,
+    permissions: [],
+    memberCount: 3,
+  },
+  {
+    id: 'r2',
+    serverId: 's1',
+    name: 'Core Team',
+    colour: null,
+    rank: 1,
+    permissions: [],
+    memberCount: 1,
+  },
+];
+
+const withRoles = filterMentionOptions('', mockMembers, false, mockRoles);
+assert.deepEqual(
+  withRoles.map((option) => option.kind),
+  ['broadcast', 'broadcast', 'role', 'role', 'member', 'member'],
+  'Roles are offered after the broadcasts and before the members',
+);
+assert.equal(withRoles[2]?.username, 'Core Team', 'Roles are sorted by name, not by rank');
+assert.equal(withRoles[2]?.subtitle, 'Role · 1 member', 'One member is singular');
+assert.equal(withRoles[3]?.subtitle, 'Role · 3 members');
+assert.equal(withRoles[3]?.colour, '#ff8800', 'The role carries its own colour to the row');
+
+// A role is matched on its name, case-insensitively, like every other option.
+const roleTerm = filterMentionOptions('DESIGN', mockMembers, false, mockRoles);
+assert.equal(roleTerm.length, 1);
+assert.equal(roleTerm[0]?.kind, 'role');
+assert.equal(roleTerm[0]?.username, 'designers');
+
+// A role name with a space is offered whole - it is what gets written into the
+// composer, and `mentionsMe` matches it exactly as written.
+const spaced = filterMentionOptions('core', mockMembers, false, mockRoles);
+assert.equal(spaced[0]?.username, 'Core Team');
+
+// A direct message has no roles, the same way it has no broadcasts.
+const inDirect = filterMentionOptions('', mockMembers, true, mockRoles);
+assert.deepEqual(
+  inDirect.map((option) => option.kind),
+  ['member', 'member'],
+  'A conversation offers neither a broadcast nor a role',
+);
+
+// Omitting the argument entirely is the old behaviour, unchanged.
+assert.deepEqual(filterMentionOptions('', mockMembers, false), initial);
 
 console.log('MentionSuggest.check.ts ok');

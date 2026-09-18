@@ -7,22 +7,11 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+// `by` on a State delegate resolves through this extension; it is used without
+// being named, so an import sweep will drop it unless it is said out loud.
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
 import androidx.core.content.IntentCompat
 import androidx.lifecycle.lifecycleScope
 import com.aatech.betweenus.core.data.AuthPhase
@@ -35,17 +24,16 @@ import com.aatech.betweenus.core.store.PendingPlace
 import com.aatech.betweenus.core.store.PendingShare
 import com.aatech.betweenus.core.store.Workspace
 import com.aatech.betweenus.feature.auth.LoginScreen
+import com.aatech.betweenus.feature.shell.LoadingScreen
 import com.aatech.betweenus.feature.shell.Shell
 import com.aatech.betweenus.feature.voice.CallPip
 import com.aatech.betweenus.feature.voice.VoiceEngine
-import com.aatech.betweenus.ui.components.BetweenUsLogoTile
 import com.aatech.betweenus.feature.members.FullProfileHost
 import com.aatech.betweenus.feature.status.MyMomentsHost
 import com.aatech.betweenus.feature.status.StatusComposerHost
 import com.aatech.betweenus.feature.status.StatusStoryHost
 import com.aatech.betweenus.ui.components.AvatarChoiceHost
 import com.aatech.betweenus.ui.components.ProfileDialogHost
-import com.aatech.betweenus.ui.theme.Ground
 import com.aatech.betweenus.ui.theme.BetweenUsTheme
 import kotlinx.coroutines.launch
 
@@ -255,51 +243,14 @@ private fun BetweenUsRoot() {
         // reached is not a session that ended, so the token is kept and the
         // restore keeps trying - and this is where it says so, with the two
         // things somebody might want: try now, or sign in instead.
-        is AuthPhase.Restoring -> RestoringScreen(current.problem)
+        is AuthPhase.Restoring -> LoadingScreen(
+            problem = current.problem,
+            onRetry = { Session.retryRestore() },
+            onSignIn = { Session.abandonRestore() },
+        )
 
         is AuthPhase.SignedOut -> LoginScreen(signedOutReason = current.reason)
         is AuthPhase.SignedIn -> Shell(current.user)
     }
 }
 
-/**
- * The splash, and what it turns into when a restore cannot finish.
- *
- * A refresh token is worth keeping through a server being down: it is valid for
- * a month and the outage is usually a minute. So the mark stays up and the
- * restore keeps trying behind it, and after the first failure this says which
- * address it cannot reach - the one fact that separates a stopped service from
- * a wrong address from a phone with no signal.
- */
-@Composable
-private fun RestoringScreen(problem: String?) {
-    Box(
-        modifier = Modifier.fillMaxSize().background(Ground),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            BetweenUsLogoTile(size = 56)
-            if (problem != null) {
-                Text(
-                    text = problem,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(horizontal = 32.dp),
-                )
-                Text(
-                    text = "Still trying…",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = { Session.retryRestore() }) { Text("Try now") }
-                    TextButton(onClick = { Session.abandonRestore() }) { Text("Sign in instead") }
-                }
-            }
-        }
-    }
-}
