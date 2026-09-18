@@ -1,4 +1,4 @@
-import {
+import React, {
   Fragment,
   useEffect,
   useLayoutEffect,
@@ -43,6 +43,7 @@ import { MessageMenu } from './MessageMenu';
 import { OneTimeToggle, SendPreview, isPreviewable, isImage } from './SendPreview';
 import { EmojiSuggest } from './EmojiSuggest';
 import { MentionSuggest } from './MentionSuggest';
+import { mentionsMe } from '../../services/mentions';
 import {
   emojiFor,
   isOnlyEmoji,
@@ -977,6 +978,7 @@ function MessageList({
           // the screen or their bubble colour.
           const hook = message.webhook ?? null;
           const isSelf = hook === null && message.author.id === me?.id;
+          const isMentioned = me ? mentionsMe(message.content, me) : false;
           // The avatar is for someone else's face in a channel - never your
           // own (the side of the screen already says that), and never in a
           // direct message, where there are only ever two people in it.
@@ -1072,7 +1074,7 @@ function MessageList({
                       highlighted === message.id
                         ? 'ring-2 ring-accent/70'
                         : ''
-                    } ${deleted ? 'bg-surface-800/60' : isSelf ? 'bg-accent/25' : 'bg-surface-800'}`}
+                    } ${messageBubbleClasses({ isSelf, isMentioned, deleted })}`}
                   >
                     {/* Who is speaking, once per run and never for you - the
                         side of the screen your bubble is on already said
@@ -1633,9 +1635,25 @@ function MomentQuote({ moment, mine }: { moment: MessageMoment; mine: boolean })
   );
 }
 
-const URL_REGEX = /(https?:\/\/[^\s<>"']+)/gi;
+export function messageBubbleClasses({
+  isSelf,
+  isMentioned,
+  deleted,
+}: {
+  isSelf: boolean;
+  isMentioned: boolean;
+  deleted: boolean;
+}): string {
+  if (deleted) return 'bg-surface-800/60';
+  if (isSelf) return 'bg-accent/25';
+  if (isMentioned) return 'bg-accent/15 border-s-2 border-accent';
+  return 'bg-surface-800';
+}
 
-function renderTextWithLinks(text: string): JSX.Element {
+const URL_REGEX = /(https?:\/\/[^\s<>"']+)/gi;
+export const MENTION_REGEX = /(@[a-zA-Z0-9_.-]+)/g;
+
+export function renderTextWithLinks(text: string): JSX.Element {
   const parts = text.split(URL_REGEX);
   return (
     <>
@@ -1654,7 +1672,24 @@ function renderTextWithLinks(text: string): JSX.Element {
             </a>
           );
         }
-        return <Fragment key={i}>{part}</Fragment>;
+        const subparts = part.split(MENTION_REGEX);
+        return (
+          <Fragment key={i}>
+            {subparts.map((subpart, j) => {
+              if (subpart.startsWith('@') && subpart.length > 1) {
+                return (
+                  <span
+                    key={j}
+                    className="inline-flex items-center font-semibold text-accent bg-accent/20 px-1.5 py-0.5 rounded text-[0.9em] mx-0.5 hover:bg-accent/30 transition-colors cursor-pointer select-text"
+                  >
+                    {subpart}
+                  </span>
+                );
+              }
+              return <Fragment key={j}>{subpart}</Fragment>;
+            })}
+          </Fragment>
+        );
       })}
     </>
   );
