@@ -57,6 +57,8 @@ sealed interface MentionOption {
     }
 }
 
+private val ServerMember.id: String get() = userId
+
 private fun rankMember(option: MentionOption.Member, needle: String): Int {
     if (needle.isEmpty()) return 0
     val u = option.username.lowercase()
@@ -127,7 +129,15 @@ fun MentionSuggestPopup(
                 .fillMaxWidth()
                 .padding(vertical = 4.dp),
         ) {
-            items(filtered, key = { it.username }) { option ->
+            items(
+                items = filtered,
+                key = { option ->
+                    when (option) {
+                        is MentionOption.Broadcast -> "b:${option.username}"
+                        is MentionOption.Member -> "m:${option.member.id.ifBlank { option.member.userId }}"
+                    }
+                },
+            ) { option ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()

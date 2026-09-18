@@ -54,6 +54,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -77,6 +78,8 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.aatech.betweenus.core.data.MessageReply
 import com.aatech.betweenus.core.data.EmojiNames
 import com.aatech.betweenus.core.data.Markup
+import com.aatech.betweenus.core.data.ServerMember
+import com.aatech.betweenus.core.data.ServerRole
 import com.aatech.betweenus.core.store.Presence
 import com.aatech.betweenus.core.store.Workspace
 import com.aatech.betweenus.core.store.ReadableMessage
@@ -211,12 +214,52 @@ fun Composer(
         field = TextFieldValue(body, TextRange(body.length))
     }
 
+    val serverId = remember(channelId) { Workspace.channel(channelId)?.serverId }
+    val serverMembers by Workspace.members.collectAsState()
+    val channelMembers = remember(serverId, serverMembers) {
+        serverId?.let { serverMembers[it] }.orEmpty()
+    }
+    val isDirect = remember(channelId) { Workspace.directChannel(channelId) != null }
+    val dmParticipant = remember(channelId) { Workspace.directChannel(channelId)?.participant }
+    val effectiveMembers = remember(channelMembers, dmParticipant, isDirect) {
+        if (isDirect && channelMembers.isEmpty() && dmParticipant != null) {
+            listOf(
+                ServerMember(
+                    userId = dmParticipant.id,
+                    username = dmParticipant.username,
+                    displayName = dmParticipant.label,
+                    avatarUrl = dmParticipant.avatarUrl,
+                    role = ServerRole.MEMBER,
+                    permissions = emptyList(),
+                    grantedPermissions = emptyList(),
+                    deniedPermissions = emptyList(),
+                    roleIds = emptyList(),
+                    about = dmParticipant.about,
+                    coverUrl = dmParticipant.coverUrl,
+                )
+            )
+        } else {
+            channelMembers
+        }
+    }
+
     val customEmoji = remember(channelId) {
         Workspace.emojiFor(Workspace.channel(channelId)?.serverId)
     }
     val query = remember(field) { EmojiNames.queryAt(field.text, field.selection.start) }
     val suggestions = remember(query, customEmoji) {
         query?.let { emojiSuggestions(it.term, customEmoji) }.orEmpty()
+    }
+
+    val mentionQuery = remember(field) { MentionQueryParser.queryAt(field.text, field.selection.start) }
+
+    fun insertMention(username: String, query: MentionQuery) {
+        val caret = field.selection.start
+        val from = query.start
+        val before = field.text.substring(0, from)
+        val after = field.text.substring(caret)
+        val insertion = "@$username "
+        field = TextFieldValue(before + insertion + after, TextRange(from + insertion.length))
     }
 
     /** Put a chosen emoji where the caret is, and leave the caret after it. */
@@ -298,6 +341,15 @@ fun Composer(
             .fillMaxWidth()
             .background(scheme.surfaceContainerLow),
     ) {
+        mentionQuery?.let { q ->
+            MentionSuggestPopup(
+                query = q,
+                members = effectiveMembers,
+                isDirect = isDirect,
+                onPick = { username -> insertMention(username, q) },
+            )
+        }
+
         EmojiSuggestBar(suggestions) { suggestion -> insert(suggestion.insert, query) }
 
         // A picture on the clipboard, and the one gesture that can send it.
