@@ -59,8 +59,8 @@ import { ShortcutSheet } from './components/ShortcutSheet';
 import { BackupNotice } from './components/BackupNotice';
 import { opensShortcutSheet } from './services/shortcuts';
 import { QuickSwitcher } from './features/shell/QuickSwitcher';
+import { LoadingScreen } from './features/shell/LoadingScreen';
 import { useVoiceStore } from './stores/voice';
-import { BetweenUsLogoIcon } from './components/icons';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { closedPanelProps, useFocusTrap } from './services/focus-trap';
 
@@ -376,16 +376,7 @@ function Session(): JSX.Element {
     resetPresence,
   ]);
 
-  if (booting) {
-    return (
-      <div className="flex h-full h-[100dvh] flex-col items-center justify-center gap-4 bg-ground" aria-busy="true">
-        <div className="flex h-14 w-14 animate-pulse items-center justify-center rounded-2xl border border-edge bg-accent/15 p-3">
-          <BetweenUsLogoIcon className="h-full w-full text-accent" />
-        </div>
-        <p className="animate-pulse text-sm font-medium tracking-[0.2em] text-slate-500">BETWEENUS</p>
-      </div>
-    );
-  }
+  if (booting) return <LoadingScreen />;
 
   if (status !== 'authenticated') return <LoginScreen />;
 
