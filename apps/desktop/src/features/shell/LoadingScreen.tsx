@@ -22,8 +22,30 @@ import { BetweenUsLogoIcon } from '../../components/icons';
  * it globally without this component asking - the mark simply sits still.
  */
 
-/** How long a wait has to last before it is worth saying something into. */
-export const TIP_DELAY_MS = 1200;
+/**
+ * The shortest time this screen stays up, however fast the restore answers.
+ *
+ * A restored session usually answers in well under a second, and the screen it
+ * put up was gone before the eye could resolve it - a dark flash between a
+ * window opening and a workbench appearing, which reads as a glitch rather than
+ * as a start. A floor is the whole of the fix: the mark gets long enough to be
+ * seen as a mark.
+ *
+ * It is a genuine cost - a fast start is deliberately made slower - so it is
+ * kept to one beat rather than the several seconds other clients spend here.
+ */
+export const MIN_BOOT_MS = 1500;
+
+/**
+ * How long a wait has to last before it is worth saying something into.
+ *
+ * Strictly greater than [[MIN_BOOT_MS]], and the check enforces it: a tip that
+ * appears at 1200ms on a screen that leaves at 1500ms is on stage for a third
+ * of a second, which is exactly the unreadable flash this delay exists to
+ * prevent. So an ordinary start shows the mark and no words at all, and the
+ * tip is reserved for a start that is actually dragging.
+ */
+export const TIP_DELAY_MS = 2300;
 
 /** How long each tip stays up before the next one takes over. */
 export const TIP_ROTATE_MS = 4500;

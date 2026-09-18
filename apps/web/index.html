@@ -48,7 +48,74 @@
     <title>BetweenUs</title>
   </head>
   <body class="h-full">
-    <div id="root" class="h-full"></div>
+    <!--
+      The first paint, before a single byte of the bundle has been parsed.
+
+      `LoadingScreen` cannot cover this gap: it is React, and React is the thing
+      being waited for. So the same mark is drawn here in plain markup with no
+      script behind it, and `createRoot().render()` replaces it with the real
+      component on mount - which is why this lives inside `#root` rather than
+      beside it, and why nothing has to remove it.
+
+      Hand-inlined on purpose. A stylesheet would be a second request in front
+      of the paint this exists to bring forward, and the two colour values are
+      the dark theme's `--color-ground` and `--color-accent` from `index.css`,
+      which is the one duplication here worth having: a splash that reads the
+      theme cannot draw until the theme has loaded.
+    -->
+    <div id="root" class="h-full">
+      <style>
+        #boot {
+          position: fixed;
+          inset: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: rgb(6 7 10);
+        }
+        #boot .ring {
+          width: 5rem;
+          height: 5rem;
+          border-radius: 1.4rem;
+          border: 2px solid transparent;
+          border-top-color: rgb(124 92 255 / 0.7);
+          border-right-color: rgb(124 92 255 / 0.25);
+          animation: boot-spin 1.15s linear infinite;
+        }
+        #boot img {
+          position: absolute;
+          width: 2.5rem;
+          height: 2.5rem;
+          animation: boot-breathe 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes boot-spin {
+          to {
+            transform: rotate(360deg);
+          }
+        }
+        @keyframes boot-breathe {
+          0%,
+          100% {
+            transform: scale(1);
+            opacity: 1;
+          }
+          50% {
+            transform: scale(0.94);
+            opacity: 0.72;
+          }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          #boot .ring,
+          #boot img {
+            animation: none;
+          }
+        }
+      </style>
+      <div id="boot">
+        <div class="ring"></div>
+        <img src="/icon.svg" alt="" />
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

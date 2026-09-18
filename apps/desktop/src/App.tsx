@@ -59,7 +59,7 @@ import { ShortcutSheet } from './components/ShortcutSheet';
 import { BackupNotice } from './components/BackupNotice';
 import { opensShortcutSheet } from './services/shortcuts';
 import { QuickSwitcher } from './features/shell/QuickSwitcher';
-import { LoadingScreen } from './features/shell/LoadingScreen';
+import { LoadingScreen, MIN_BOOT_MS } from './features/shell/LoadingScreen';
 import { useVoiceStore } from './stores/voice';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { closedPanelProps, useFocusTrap } from './services/focus-trap';
@@ -102,6 +102,10 @@ function Session(): JSX.Element {
   }, []);
 
   useEffect(() => {
+    // Measured before the work starts, not after: the floor is "this screen was
+    // on display for a readable moment", which is a fact about the window and
+    // not about how long the request took.
+    const shownAt = Date.now();
     void (async () => {
       try {
         await restore();
@@ -112,6 +116,12 @@ function Session(): JSX.Element {
           if (credentials) await login(credentials.email, credentials.password);
         }
       } finally {
+        // A restored session answers in a couple of hundred milliseconds, which
+        // took the boot screen away before it could be read as anything but a
+        // flicker. Nothing waits on this but the paint: the restore is already
+        // done, so this delays the workbench appearing and no request at all.
+        const left = MIN_BOOT_MS - (Date.now() - shownAt);
+        if (left > 0) await new Promise((resolve) => window.setTimeout(resolve, left));
         setBooting(false);
       }
     })();

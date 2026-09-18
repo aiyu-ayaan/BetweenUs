@@ -9,13 +9,25 @@
  * the mark up the screen.
  */
 import assert from 'node:assert/strict';
-import { LoadingScreen, TIPS, TIP_DELAY_MS, TIP_ROTATE_MS } from './LoadingScreen';
+import { LoadingScreen, MIN_BOOT_MS, TIPS, TIP_DELAY_MS, TIP_ROTATE_MS } from './LoadingScreen';
 
 assert.equal(typeof LoadingScreen, 'function');
 
-// The tip waits for the wait to become one. A restore is usually a single
-// round trip; anything that flashes up inside that is noise.
-assert.ok(TIP_DELAY_MS >= 800, 'a tip must not flash up during an ordinary fast start');
+// The screen is held up long enough to be seen at all. Without a floor a
+// restored session took it away inside a couple of hundred milliseconds, which
+// reads as a glitch between the window opening and the workbench appearing.
+assert.ok(MIN_BOOT_MS >= 900, 'below this the mark is a flash rather than a mark');
+// And not so long that it becomes the product. This is a deliberate slowdown of
+// a fast start; it is allowed one beat, not several seconds.
+assert.ok(MIN_BOOT_MS <= 2000, 'a boot screen held this long is a delay, not a splash');
+
+// The tip waits for the wait to become one, which means outlasting the floor.
+// A tip that appears at 1200ms on a screen that leaves at 1500ms is on stage
+// for a third of a second - the unreadable flash the delay exists to prevent.
+assert.ok(
+  TIP_DELAY_MS > MIN_BOOT_MS,
+  'a tip that arrives before the screen is allowed to leave can only flash',
+);
 
 // And once it is up it stays long enough to be read. Roughly 200ms per word at
 // a lazy reading pace, against the longest line on the list.
