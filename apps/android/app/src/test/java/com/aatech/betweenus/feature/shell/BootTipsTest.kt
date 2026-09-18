@@ -1,5 +1,6 @@
 package com.aatech.betweenus.feature.shell
 
+import com.aatech.betweenus.core.data.Session
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -18,7 +19,15 @@ class BootTipsTest {
 
     @Test
     fun `a tip does not flash up during an ordinary fast start`() {
-        assertTrue(BootTips.TIP_DELAY_MS >= 800)
+        // It has to outlast the floor the splash itself is held for, or it is
+        // on screen for the few hundred milliseconds between the two.
+        assertTrue(BootTips.TIP_DELAY_MS > Session.MIN_SPLASH_MS)
+    }
+
+    @Test
+    fun `the splash is held long enough to be seen, and no longer`() {
+        assertTrue("below this the mark is a flash", Session.MIN_SPLASH_MS >= 900)
+        assertTrue("held this long it is a delay, not a splash", Session.MIN_SPLASH_MS <= 2000)
     }
 
     @Test

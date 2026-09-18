@@ -38,6 +38,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.aatech.betweenus.core.data.Session
 import com.aatech.betweenus.ui.components.BetweenUsLogoTile
 import kotlinx.coroutines.delay
 
@@ -64,8 +65,16 @@ import kotlinx.coroutines.delay
  * does not want to be told about keyboard shortcuts.
  */
 object BootTips {
-    /** How long a wait has to last before it is worth saying something into. */
-    const val TIP_DELAY_MS = 1200L
+    /**
+     * How long a wait has to last before it is worth saying something into.
+     *
+     * Strictly greater than `Session.MIN_SPLASH_MS`, and `BootTipsTest` holds
+     * it there: a tip that appears before the splash is allowed to leave is on
+     * screen for a few hundred milliseconds, which is the unreadable flash this
+     * delay exists to prevent. So an ordinary start shows the mark and no words
+     * at all, and the tip is kept for a start that is genuinely dragging.
+     */
+    const val TIP_DELAY_MS = 2300L
 
     /** How long each tip stays up before the next one takes over. */
     const val TIP_ROTATE_MS = 4500L
