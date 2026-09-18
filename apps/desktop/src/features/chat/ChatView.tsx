@@ -2,6 +2,7 @@ import {
   Fragment,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type FormEvent,
@@ -15,6 +16,7 @@ import type {
   MessageCustomEmoji,
   MessageMoment,
   MessageReply,
+  ServerMember,
 } from '@betweenus/shared-types';
 import { pruneExpired, useChatStore, type DecryptedMessage } from '../../stores/chat';
 import { statusById, useStatusStore } from '../../stores/status';
@@ -40,6 +42,7 @@ import { ForwardDialog } from './ForwardDialog';
 import { MessageMenu } from './MessageMenu';
 import { OneTimeToggle, SendPreview, isPreviewable, isImage } from './SendPreview';
 import { EmojiSuggest } from './EmojiSuggest';
+import { MentionSuggest } from './MentionSuggest';
 import {
   emojiFor,
   isOnlyEmoji,
@@ -59,6 +62,7 @@ import {
   type Run as MarkupRun,
 } from '../../services/markup';
 import { emojiQueryAt } from './emoji-names';
+import { mentionQueryAt } from './mention-query';
 import { arrivalLine } from './arrival';
 import { clockTime, dayLabel, fullDateLabel, sameDay } from './day';
 import { isStaff, roleBadgeLabel } from '../members/MemberList';
@@ -2131,6 +2135,30 @@ function MessageComposer({
    * property of the element and not of the value.
    */
   const [emojiQuery, setEmojiQuery] = useState<{ term: string; start: number } | null>(null);
+  const [mentionQuery, setMentionQuery] = useState<{ term: string; start: number } | null>(null);
+  const members = useChatStore((state) => state.members);
+
+  const dmMembers: ServerMember[] = useMemo(() => {
+    if (channel.type !== 'DM') return members;
+    return [
+      {
+        id: channel.id,
+        userId: channel.id,
+        username: channel.name,
+        displayName: channel.name,
+        avatarUrl: null,
+        role: 'MEMBER',
+        permissions: [],
+        grantedPermissions: [],
+        deniedPermissions: [],
+        roleIds: [],
+        colour: null,
+        about: '',
+        coverUrl: null,
+        joinedAt: '',
+      },
+    ];
+  }, [channel.type, channel.id, channel.name, members]);
   /**
    * This server's own emoji, for the `:` menu. Read through a subscription
    * rather than a store because the list belongs to the server rather than to
@@ -2587,6 +2615,7 @@ function MessageComposer({
               onChange={(event) => {
                 setContent(event.target.value);
                 setEmojiQuery(emojiQueryAt(event.target.value, event.target.selectionStart ?? 0));
+                setMentionQuery(mentionQueryAt(event.target.value, event.target.selectionStart ?? 0));
                 if (event.target.value.length > 0) notifyTyping(channel.id);
               }}
               onSelect={(event) => {
@@ -2595,8 +2624,12 @@ function MessageComposer({
                 // offer it.
                 const box = event.currentTarget;
                 setEmojiQuery(emojiQueryAt(box.value, box.selectionStart ?? 0));
+                setMentionQuery(mentionQueryAt(box.value, box.selectionStart ?? 0));
               }}
-              onBlur={() => setEmojiQuery(null)}
+              onBlur={() => {
+                setEmojiQuery(null);
+                setMentionQuery(null);
+              }}
               onKeyDown={onKeyDown}
               onPaste={(event) => {
                 // A screenshot on the clipboard is a file, and pasting it is
@@ -2670,6 +2703,28 @@ function MessageComposer({
             const caret = emojiQuery.start + emoji.length;
             setContent(next);
             setEmojiQuery(null);
+            window.setTimeout(() => {
+              box.current?.focus();
+              box.current?.setSelectionRange(caret, caret);
+            }, 0);
+          }}
+        />
+      )}
+
+      {mentionQuery && (
+        <MentionSuggest
+          term={mentionQuery.term}
+          members={dmMembers}
+          isDirect={channel.type === 'DM'}
+          onClose={() => setMentionQuery(null)}
+          onPick={(username) => {
+            // Replace @term with @username plus trailing space
+            const end = mentionQuery.start + mentionQuery.term.length + 1;
+            const insertion = `@${username} `;
+            const next = `${content.slice(0, mentionQuery.start)}${insertion}${content.slice(end)}`;
+            const caret = mentionQuery.start + insertion.length;
+            setContent(next);
+            setMentionQuery(null);
             window.setTimeout(() => {
               box.current?.focus();
               box.current?.setSelectionRange(caret, caret);

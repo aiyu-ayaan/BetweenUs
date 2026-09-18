@@ -198,12 +198,14 @@ export function MentionSuggest({
                     <UsersIcon className="h-4 w-4" />
                   </div>
                 ) : match.member ? (
-                  <PersonAvatar
-                    userId={match.member.userId || match.member.id}
-                    name={match.member.displayName || match.member.username}
-                    avatarUrl={match.member.avatarUrl}
-                    size="sm"
-                  />
+                  <div className="pointer-events-none shrink-0">
+                    <PersonAvatar
+                      userId={match.member.userId || match.member.id}
+                      name={match.member.displayName || match.member.username}
+                      avatarUrl={match.member.avatarUrl}
+                      size="sm"
+                    />
+                  </div>
                 ) : (
                   <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-surface-700 text-xs font-semibold text-slate-300">
                     {match.name.slice(0, 1).toUpperCase()}
