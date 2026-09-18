@@ -497,8 +497,13 @@ export const THEMES: Record<ThemeId, ThemeDefinition> = {
       '--color-surface-700': '211 203 183',
       '--color-surface-600': '181 137 0',
       '--color-surface-500': '131 148 150',
-      '--color-accent': '38 139 210',
-      '--color-accent-hover': '42 161 152',
+      // Darkened from the brand swatch (#268bd2) against surface-950: the
+      // original 38/139/210 reads at 3.4:1 on this theme's cream panels,
+      // under the 4.5:1 normal-text floor for the same reasons as
+      // rose-pine-dawn's accent, above. 32/117/176 keeps the same hue at
+      // 4.6:1.
+      '--color-accent': '32 117 176',
+      '--color-accent-hover': '24 98 152',
       '--color-edge': 'rgba(88, 110, 117, 0.15)',
       '--color-slate-50': '0 43 54',
       '--color-slate-100': '7 54 66',
@@ -722,8 +727,14 @@ export const THEMES: Record<ThemeId, ThemeDefinition> = {
       '--color-surface-700': '223 210 196',
       '--color-surface-600': '206 190 173',
       '--color-surface-500': '152 147 165',
-      '--color-accent': '204 124 120',
-      '--color-accent-hover': '180 99 122',
+      // Darkened from the brand swatch (#d7827e) against surface-950: the
+      // original 204/124/120 reads at 3.0:1 on this theme's near-white
+      // panels, under the 4.5:1 normal-text floor - washed out everywhere
+      // this variable is text rather than a button fill (usernames, role
+      // pills, active-tab labels, unread badges). 159/97/94 keeps the same
+      // hue at 4.65:1.
+      '--color-accent': '159 97 94',
+      '--color-accent-hover': '140 80 78',
       '--color-edge': 'rgba(87, 82, 121, 0.1)',
       '--color-slate-50': '40 37 59',
       '--color-slate-100': '87 82 121',
