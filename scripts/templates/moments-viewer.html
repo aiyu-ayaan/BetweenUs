@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>BetweenUs - Moments Viewer: E2EE 24h Story</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --ground: #07090e;
+      --surface-950: #0a0d16;
+      --surface-900: #111726;
+      --surface-800: #1c2438;
+      --accent: #6366f1;
+      --accent-light: #818cf8;
+      --accent-glow: rgba(99, 102, 241, 0.4);
+      --edge: rgba(255, 255, 255, 0.12);
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-subtle: #64748b;
+      --status-online: #3fd68c;
+    }
+
+    body {
+      width: 1080px;
+      height: 1920px;
+      overflow: hidden;
+      background: var(--ground);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      color: var(--text-main);
+      -webkit-font-smoothing: antialiased;
+      display: flex;
+      flex-direction: column;
+      user-select: none;
+      position: relative;
+    }
+
+    /* Fullscreen Story Container */
+    .story-viewport {
+      width: 1080px;
+      height: 1920px;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      overflow: hidden;
+    }
+
+    /* Spectacular Visual Scene Background */
+    .scene-canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    /* Top & Bottom Cinematic Vignette Gradients */
+    .vignette-overlay {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(
+        180deg,
+        rgba(7, 9, 14, 0.92) 0%,
+        rgba(7, 9, 14, 0.45) 15%,
+        rgba(7, 9, 14, 0.05) 45%,
+        rgba(7, 9, 14, 0.25) 65%,
+        rgba(7, 9, 14, 0.95) 92%,
+        rgba(7, 9, 14, 1.0) 100%
+      );
+      z-index: 2;
+      pointer-events: none;
+    }
+
+    /* Top Controls Layer */
+    .top-header-layer {
+      position: relative;
+      z-index: 10;
+      padding: 40px 36px 20px 36px;
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+    }
+
+    /* Segmented Progress Bar (3 segments) */
+    .progress-segments {
+      display: flex;
+      gap: 10px;
+      width: 100%;
+      height: 5px;
+    }
+
+    .segment {
+      flex: 1;
+      background: rgba(255, 255, 255, 0.22);
+      border-radius: 4px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .segment.completed .fill {
+      width: 100%;
+      height: 100%;
+      background: #ffffff;
+      border-radius: 4px;
+    }
+
+    .segment.active .fill {
+      width: 64%;
+      height: 100%;
+      background: linear-gradient(90deg, #ffffff, #a5b4fc);
+      box-shadow: 0 0 10px #ffffff;
+      border-radius: 4px;
+    }
+
+    .segment.upcoming .fill {
+      width: 0%;
+      height: 100%;
+    }
+
+    /* Header Creator & Status Row */
+    .header-content-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .creator-meta-block {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+    }
+
+    /* Sophia's Avatar with Story Ring */
+    .avatar-story-wrapper {
+      position: relative;
+      width: 68px;
+      height: 68px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .story-ring-svg {
+      position: absolute;
+      inset: -4px;
+      width: 76px;
+      height: 76px;
+      transform: rotate(-90deg);
+    }
+
+    .avatar-inner {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #db2777, #f43f5e, #be123c);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      font-weight: 800;
+      color: #ffffff;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6);
+    }
+
+    .creator-text-info {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .creator-name-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .creator-username {
+      font-size: 22px;
+      font-weight: 800;
+      color: #ffffff;
+      letter-spacing: -0.01em;
+    }
+
+    .creator-role-tag {
+      font-size: 13px;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 8px;
+      background: rgba(99, 102, 241, 0.25);
+      border: 1px solid rgba(99, 102, 241, 0.45);
+      color: #c7d2fe;
+    }
+
+    .time-remaining-info {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .time-bullet {
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: var(--text-subtle);
+    }
+
+    .time-countdown {
+      color: #fbbf24;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    /* Top Right Story Actions */
+    .top-action-buttons {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .icon-action-btn {
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      background: rgba(0, 0, 0, 0.45);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #ffffff;
+      cursor: pointer;
+    }
+
+    /* E2EE Sealed Banner */
+    .encryption-seal-pill {
+      align-self: flex-start;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 18px;
+      background: rgba(15, 23, 42, 0.78);
+      backdrop-filter: blur(14px);
+      border: 1px solid rgba(99, 102, 241, 0.4);
+      border-radius: 24px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    }
+
+    .seal-lock-icon {
+      color: #818cf8;
+      display: flex;
+      align-items: center;
+    }
+
+    .seal-text {
+      font-size: 14px;
+      font-weight: 700;
+      color: #e0e7ff;
+    }
+
+    .seal-tech-chip {
+      font-size: 11px;
+      font-weight: 600;
+      color: #3fd68c;
+      font-family: 'JetBrains Mono', monospace;
+      background: rgba(63, 214, 140, 0.12);
+      border: 1px solid rgba(63, 214, 140, 0.25);
+      padding: 2px 8px;
+      border-radius: 8px;
+    }
+
+    /* Story Center Stage: Caption and Mesh Telemetry Pill */
+    .story-center-stage {
+      position: relative;
+      z-index: 10;
+      padding: 0 40px;
+      margin-bottom: 30px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .caption-card {
+      background: rgba(15, 23, 42, 0.82);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 24px;
+      padding: 24px 28px;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .caption-quote {
+      font-size: 21px;
+      line-height: 1.5;
+      font-weight: 600;
+      color: #ffffff;
+      letter-spacing: -0.01em;
+    }
+
+    .telemetry-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      padding-top: 14px;
+    }
+
+    .geo-tag {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 13px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .mesh-rtt-badge {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 5px 12px;
+      background: rgba(63, 214, 140, 0.15);
+      border: 1px solid rgba(63, 214, 140, 0.35);
+      border-radius: 14px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #3fd68c;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .rtt-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #3fd68c;
+      box-shadow: 0 0 8px #3fd68c;
+    }
+
+    /* Bottom Interactive Layer */
+    .bottom-interactive-layer {
+      position: relative;
+      z-index: 10;
+      padding: 0 36px 48px 36px;
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+    }
+
+    /* Viewers Tray */
+    .viewers-tray {
+      background: rgba(15, 20, 32, 0.85);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 20px;
+      padding: 14px 22px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+    }
+
+    .viewers-left-group {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .viewers-stack {
+      display: flex;
+      align-items: center;
+    }
+
+    .viewer-circle {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: 2px solid #0f1420;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 800;
+      color: #ffffff;
+      margin-left: -8px;
+    }
+    .viewer-circle:first-child {
+      margin-left: 0;
+    }
+
+    .viewers-info-col {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .viewers-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: #ffffff;
+    }
+
+    .viewers-names {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .zero-server-note {
+      font-size: 11px;
+      color: #3fd68c;
+      font-weight: 600;
+      font-family: 'JetBrains Mono', monospace;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    /* Floating Quick Reactions */
+    .quick-reactions-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 10px;
+    }
+
+    .reaction-pill {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      cursor: pointer;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+      transition: transform 0.15s, background 0.15s;
+    }
+
+    /* Bottom Reply Bar */
+    .reply-composer-bar {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .reply-input-box {
+      flex: 1;
+      height: 62px;
+      background: rgba(255, 255, 255, 0.07);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 34px;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      box-shadow: 0 6px 22px rgba(0, 0, 0, 0.4);
+    }
+
+    .reply-lock-icon {
+      color: #a5b4fc;
+    }
+
+    .reply-placeholder {
+      font-size: 17px;
+      color: #94a3b8;
+      font-weight: 500;
+    }
+
+    .reply-btn-send {
+      width: 62px;
+      height: 62px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #6366f1, #4f46e5);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #ffffff;
+      box-shadow: 0 6px 20px rgba(99, 102, 241, 0.5);
+      cursor: pointer;
+    }
+
+    /* SVG utility */
+    svg {
+      display: inline-block;
+      vertical-align: middle;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="story-viewport">
+
+    <!-- Scenic Vector Background: Rooftop Sunset & BetweenUs Mesh Nodes -->
+    <svg class="scene-canvas" viewBox="0 0 1080 1920" preserveAspectRatio="none">
+      <defs>
+        <!-- Sky Gradient -->
+        <linearGradient id="skyGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#0a0a1a" />
+          <stop offset="25%" stop-color="#181236" />
+          <stop offset="45%" stop-color="#3b154d" />
+          <stop offset="65%" stop-color="#831843" />
+          <stop offset="82%" stop-color="#ea580c" />
+          <stop offset="95%" stop-color="#fbbf24" />
+          <stop offset="100%" stop-color="#fef08a" />
+        </linearGradient>
+
+        <!-- Sun Radial Glow -->
+        <radialGradient id="sunGlow" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#fffbeb" stop-opacity="1" />
+          <stop offset="30%" stop-color="#fde047" stop-opacity="0.9" />
+          <stop offset="70%" stop-color="#ea580c" stop-opacity="0.4" />
+          <stop offset="100%" stop-color="#831843" stop-opacity="0" />
+        </radialGradient>
+
+        <!-- City Building Gradient -->
+        <linearGradient id="cityGradFar" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#2d123d" stop-opacity="0.9" />
+          <stop offset="100%" stop-color="#140924" stop-opacity="1" />
+        </linearGradient>
+        <linearGradient id="cityGradNear" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#180d28" stop-opacity="0.95" />
+          <stop offset="100%" stop-color="#090510" stop-opacity="1" />
+        </linearGradient>
+
+        <!-- Deck Wood Gradient -->
+        <linearGradient id="deckWood" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#2b1a13" />
+          <stop offset="50%" stop-color="#1c100a" />
+          <stop offset="100%" stop-color="#0a0503" />
+        </linearGradient>
+
+        <!-- Mesh Glow Filter -->
+        <filter id="cyanGlow" x="-20%" y="-20%" width="140%" height="140%">
+          <feGaussianBlur stdDeviation="6" result="blur" />
+          <feComposite in="SourceGraphic" in2="blur" operator="over" />
+        </filter>
+        <filter id="emeraldGlow" x="-20%" y="-20%" width="140%" height="140%">
+          <feGaussianBlur stdDeviation="8" result="blur" />
+          <feComposite in="SourceGraphic" in2="blur" operator="over" />
+        </filter>
+      </defs>
+
+      <!-- Sky Rect -->
+      <rect x="0" y="0" width="1080" height="1920" fill="url(#skyGrad)" />
+
+      <!-- Glowing Setting Sun -->
+      <circle cx="540" cy="1180" r="320" fill="url(#sunGlow)" />
+      <circle cx="540" cy="1180" r="90" fill="#fff" />
+
+      <!-- Distant Stars / Twilight Lights in upper atmosphere -->
+      <circle cx="180" cy="220" r="2" fill="#fff" opacity="0.6" />
+      <circle cx="340" cy="140" r="1.5" fill="#fff" opacity="0.8" />
+      <circle cx="720" cy="180" r="2.5" fill="#fff" opacity="0.7" />
+      <circle cx="890" cy="260" r="1.5" fill="#fff" opacity="0.5" />
+      <circle cx="510" cy="90" r="2" fill="#fff" opacity="0.9" />
+
+      <!-- City Skyline - Background Layer -->
+      <path d="M 0 1280 L 40 1280 L 40 1220 L 90 1220 L 90 1260 L 150 1260 L 150 1190 L 210 1190 L 210 1280 L 260 1280 L 260 1140 L 310 1140 L 310 1270 L 370 1270 L 370 1100 L 420 1100 L 420 1280 L 480 1280 L 480 1060 L 530 1060 L 530 1280 L 600 1280 L 600 1120 L 660 1120 L 660 1270 L 730 1270 L 730 1170 L 790 1170 L 790 1280 L 860 1280 L 860 1110 L 920 1110 L 920 1270 L 980 1270 L 980 1210 L 1080 1210 L 1080 1920 L 0 1920 Z" fill="url(#cityGradFar)" />
+
+      <!-- City Windows Glinting (Yellow & Amber tiny rects) -->
+      <g fill="#fde047" opacity="0.75">
+        <rect x="270" y="1160" width="4" height="6" />
+        <rect x="285" y="1160" width="4" height="6" />
+        <rect x="270" y="1180" width="4" height="6" />
+        <rect x="285" y="1180" width="4" height="6" />
+        <rect x="380" y="1120" width="5" height="7" />
+        <rect x="395" y="1120" width="5" height="7" />
+        <rect x="380" y="1140" width="5" height="7" />
+        <rect x="495" y="1080" width="6" height="8" />
+        <rect x="510" y="1080" width="6" height="8" />
+        <rect x="495" y="1105" width="6" height="8" />
+        <rect x="875" y="1130" width="5" height="6" />
+        <rect x="895" y="1130" width="5" height="6" />
+      </g>
+
+      <!-- City Skyline - Foreground Layer (Crisp silhouette towers with antennas) -->
+      <path d="M 0 1350 L 70 1350 L 70 1230 L 140 1230 L 140 1350 L 220 1350 L 220 1170 L 230 1170 L 230 1110 L 235 1110 L 235 1170 L 290 1170 L 290 1360 L 360 1360 L 360 1260 L 440 1260 L 440 1360 L 520 1360 L 520 1210 L 570 1210 L 570 1150 L 575 1150 L 575 1210 L 620 1210 L 620 1360 L 710 1360 L 710 1240 L 780 1240 L 780 1350 L 850 1350 L 850 1190 L 920 1190 L 920 1360 L 1000 1360 L 1000 1270 L 1080 1270 L 1080 1920 L 0 1920 Z" fill="url(#cityGradNear)" />
+
+      <!-- Rooftop Deck Foreground Structure (Perspective wooden plank floor) -->
+      <polygon points="0,1460 1080,1460 1080,1920 0,1920" fill="url(#deckWood)" />
+      <!-- Glass Balustrade Edge with Ambient Sunset Rim Light -->
+      <line x1="0" y1="1460" x2="1080" y2="1460" stroke="#fb923c" stroke-width="4" opacity="0.8" />
+      <line x1="0" y1="1466" x2="1080" y2="1466" stroke="rgba(255,255,255,0.4)" stroke-width="2" />
+
+      <!-- Deck Planks Lines -->
+      <line x1="0" y1="1560" x2="1080" y2="1560" stroke="#1f140e" stroke-width="3" />
+      <line x1="0" y1="1680" x2="1080" y2="1680" stroke="#1f140e" stroke-width="3" />
+      <line x1="0" y1="1810" x2="1080" y2="1810" stroke="#1f140e" stroke-width="3" />
+
+      <!-- Workstation on Rooftop Table -->
+      <!-- Center Table Surface -->
+      <polygon points="160,1540 920,1540 990,1720 90,1720" fill="#151b28" stroke="#334155" stroke-width="2" />
+
+      <!-- 4 Connected Devices testing P2P Mesh -->
+      <!-- Device 1: MacBook Pro (Center-Left) -->
+      <g transform="translate(240, 1470)">
+        <rect x="0" y="0" width="180" height="110" rx="6" fill="#0f172a" stroke="#64748b" stroke-width="3" />
+        <rect x="8" y="8" width="164" height="94" rx="3" fill="#020617" />
+        <!-- Screen content: BetweenUs UI mesh graph -->
+        <circle cx="90" cy="55" r="28" fill="none" stroke="#6366f1" stroke-width="1.5" stroke-dasharray="3,3" />
+        <circle cx="90" cy="55" r="7" fill="#6366f1" />
+        <text x="90" y="86" text-anchor="middle" fill="#3fd68c" font-family="'JetBrains Mono', monospace" font-size="9" font-weight="bold">NODE 01: P2P MESH</text>
+        <!-- Base / Keyboard -->
+        <polygon points="-25,110 205,110 225,124 -45,124" fill="#334155" stroke="#475569" stroke-width="1.5" />
+      </g>
+
+      <!-- Device 2: Smartphone (Pixel 8 / iPhone) on stand (Center-Right) -->
+      <g transform="translate(680, 1500)">
+        <rect x="0" y="0" width="65" height="125" rx="14" fill="#090d16" stroke="#475569" stroke-width="3" />
+        <rect x="4" y="6" width="57" height="113" rx="10" fill="#020617" />
+        <!-- Screen: Voice waveform & P2P active -->
+        <circle cx="32" cy="45" r="16" fill="rgba(63,214,140,0.2)" stroke="#3fd68c" stroke-width="1.5" />
+        <text x="32" y="80" text-anchor="middle" fill="#fff" font-family="'Inter', sans-serif" font-size="8" font-weight="bold">BetweenUs</text>
+        <text x="32" y="94" text-anchor="middle" fill="#3fd68c" font-family="'JetBrains Mono', monospace" font-size="7">11ms MESH</text>
+      </g>
+
+      <!-- Device 3: Tablet (Far-Left) -->
+      <g transform="translate(130, 1580)">
+        <rect x="0" y="0" width="120" height="85" rx="8" fill="#090d16" stroke="#475569" stroke-width="2" />
+        <rect x="5" y="5" width="110" height="75" rx="5" fill="#030712" />
+        <!-- Audio Spectrogram -->
+        <line x1="20" y1="60" x2="20" y2="35" stroke="#ec4899" stroke-width="3" stroke-linecap="round" />
+        <line x1="32" y1="60" x2="32" y2="25" stroke="#818cf8" stroke-width="3" stroke-linecap="round" />
+        <line x1="44" y1="60" x2="44" y2="40" stroke="#3fd68c" stroke-width="3" stroke-linecap="round" />
+        <line x1="56" y1="60" x2="56" y2="20" stroke="#3fd68c" stroke-width="3" stroke-linecap="round" />
+        <line x1="68" y1="60" x2="68" y2="30" stroke="#818cf8" stroke-width="3" stroke-linecap="round" />
+        <line x1="80" y1="60" x2="80" y2="45" stroke="#ec4899" stroke-width="3" stroke-linecap="round" />
+        <line x1="92" y1="60" x2="92" y2="28" stroke="#3fd68c" stroke-width="3" stroke-linecap="round" />
+        <text x="60" y="72" text-anchor="middle" fill="#94a3b8" font-family="'JetBrains Mono', monospace" font-size="7">OPUS 128K</text>
+      </g>
+
+      <!-- Device 4: Linux Dev ThinkPad (Far-Right) -->
+      <g transform="translate(790, 1560)">
+        <rect x="0" y="0" width="140" height="90" rx="4" fill="#0f172a" stroke="#475569" stroke-width="2" />
+        <rect x="6" y="6" width="128" height="78" rx="2" fill="#020617" />
+        <text x="14" y="24" fill="#3fd68c" font-family="'JetBrains Mono', monospace" font-size="7">✓ DTLS-SRTP 4 peers</text>
+        <text x="14" y="38" fill="#38bdf8" font-family="'JetBrains Mono', monospace" font-size="7">✓ 0% loss • 60fps</text>
+        <text x="14" y="52" fill="#facc15" font-family="'JetBrains Mono', monospace" font-size="7">✓ AES-256 ratcheted</text>
+      </g>
+
+      <!-- Glowing P2P WebRTC Mesh Beams between all 4 devices -->
+      <g filter="url(#emeraldGlow)">
+        <!-- MacBook to Phone -->
+        <line x1="420" y1="1525" x2="680" y2="1555" stroke="#3fd68c" stroke-width="3" stroke-dasharray="8,6" opacity="0.9" />
+        <!-- Phone to Linux Laptop -->
+        <line x1="745" y1="1575" x2="790" y2="1605" stroke="#3fd68c" stroke-width="2.5" stroke-dasharray="6,4" opacity="0.85" />
+        <!-- MacBook to Tablet -->
+        <line x1="280" y1="1580" x2="250" y2="1610" stroke="#3fd68c" stroke-width="2.5" stroke-dasharray="6,4" opacity="0.85" />
+        <!-- Cross link: Tablet to Phone -->
+        <line x1="250" y1="1620" x2="680" y2="1565" stroke="#6366f1" stroke-width="2" stroke-dasharray="8,6" opacity="0.75" />
+      </g>
+
+      <!-- Glowing Node Dots -->
+      <circle cx="330" cy="1525" r="7" fill="#3fd68c" filter="url(#emeraldGlow)" />
+      <circle cx="712" cy="1555" r="7" fill="#3fd68c" filter="url(#emeraldGlow)" />
+      <circle cx="190" cy="1620" r="6" fill="#3fd68c" filter="url(#emeraldGlow)" />
+      <circle cx="860" cy="1605" r="6" fill="#3fd68c" filter="url(#emeraldGlow)" />
+    </svg>
+
+    <!-- Vignette Shadow Overlay for maximum UI readability -->
+    <div class="vignette-overlay"></div>
+
+    <!-- Top Header Layer -->
+    <div class="top-header-layer">
+
+      <!-- Segmented Progress Bar (3 segments) -->
+      <div class="progress-segments">
+        <div class="segment completed">
+          <div class="fill"></div>
+        </div>
+        <div class="segment active">
+          <div class="fill"></div>
+        </div>
+        <div class="segment upcoming">
+          <div class="fill"></div>
+        </div>
+      </div>
+
+      <!-- Creator Header Row -->
+      <div class="header-content-row">
+        <div class="creator-meta-block">
+          <div class="avatar-story-wrapper">
+            <!-- Animated SVG Ring -->
+            <svg class="story-ring-svg" viewBox="0 0 76 76">
+              <circle cx="38" cy="38" r="34" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="3" />
+              <circle cx="38" cy="38" r="34" fill="none" stroke="#f43f5e" stroke-width="3.5" stroke-dasharray="55 12 85 15" stroke-linecap="round" />
+            </svg>
+            <div class="avatar-inner">SO</div>
+          </div>
+
+          <div class="creator-text-info">
+            <div class="creator-name-row">
+              <span class="creator-username">sophia</span>
+              <span class="creator-role-tag">Staff Engineer</span>
+            </div>
+            <div class="time-remaining-info">
+              <span>4h ago</span>
+              <span class="time-bullet"></span>
+              <span>24h Ephemeral</span>
+              <span class="time-bullet"></span>
+              <span class="time-countdown">20h left</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="top-action-buttons">
+          <div class="icon-action-btn" title="Pause / Play">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"></rect><rect x="14" y="4" width="4" height="16" rx="1"></rect></svg>
+          </div>
+          <div class="icon-action-btn" title="Sound Muted">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
+          </div>
+          <div class="icon-action-btn" title="Close Story">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </div>
+        </div>
+      </div>
+
+      <!-- E2EE Sealed Banner -->
+      <div class="encryption-seal-pill">
+        <div class="seal-lock-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+        </div>
+        <span class="seal-text">🔒 Sealed to 6 friends at post time (Zero Server Keys)</span>
+        <span class="seal-tech-chip">AES-256-GCM</span>
+      </div>
+
+    </div>
+
+    <!-- Center Stage: Caption and Mesh Telemetry Pill -->
+    <div class="story-center-stage">
+      <div class="caption-card">
+        <div class="caption-quote">
+          "Sunset over the rooftop lab 🌆 Testing BetweenUs P2P mesh across 4 devices in the wild. Direct latency is insane!"
+        </div>
+
+        <div class="telemetry-row">
+          <div class="geo-tag">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+            <span>San Francisco, Mission District</span>
+          </div>
+
+          <div class="mesh-rtt-badge">
+            <div class="rtt-dot"></div>
+            <span>11ms Direct P2P RTT</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom Interactive Layer -->
+    <div class="bottom-interactive-layer">
+
+      <!-- Viewers Tray -->
+      <div class="viewers-tray">
+        <div class="viewers-left-group">
+          <div class="viewers-stack">
+            <div class="viewer-circle" style="background: #10b981;">AY</div>
+            <div class="viewer-circle" style="background: #6366f1;">AL</div>
+            <div class="viewer-circle" style="background: #f59e0b;">MA</div>
+            <div class="viewer-circle" style="background: #ec4899;">EL</div>
+            <div class="viewer-circle" style="background: #06b6d4;">DA</div>
+            <div class="viewer-circle" style="background: #8b5cf6;">CH</div>
+          </div>
+
+          <div class="viewers-info-col">
+            <span class="viewers-title">Seen by 6 friends</span>
+            <span class="viewers-names">aiyu, alex, marcus, elena, david, chen</span>
+          </div>
+        </div>
+
+        <div class="zero-server-note">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+          <span>Decrypted On-Device</span>
+        </div>
+      </div>
+
+      <!-- Quick Floating Reactions -->
+      <div class="quick-reactions-row">
+        <div class="reaction-pill" title="Love">❤️</div>
+        <div class="reaction-pill" title="Fire">🔥</div>
+        <div class="reaction-pill" title="Rocket">🚀</div>
+        <div class="reaction-pill" title="Applaud">👏</div>
+        <div class="reaction-pill" title="Sparkles">✨</div>
+      </div>
+
+      <!-- Reply Composer Bar -->
+      <div class="reply-composer-bar">
+        <div class="reply-input-box">
+          <div class="reply-lock-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+          </div>
+          <span class="reply-placeholder">Send an encrypted reply to sophia...</span>
+        </div>
+
+        <div class="reply-btn-send" title="Send Reply">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="22" y1="2" x2="11" y2="13"></line>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+          </svg>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+</body>
+</html>

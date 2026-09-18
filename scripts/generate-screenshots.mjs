@@ -140,8 +140,52 @@ const TARGETS = {
       height: 2400,
     });
   },
-  features: () => {
-    console.log('[screenshot] Target features scheduled for Task 3.');
+  voice: () => {
+    const htmlPath = path.join(TEMPLATES_DIR, 'voice-listen-play.html');
+    const outputPath = path.join(PICTURES_DIR, 'voice-listen-play.png');
+    if (!fs.existsSync(htmlPath)) {
+      throw new Error(`Template not found at ${htmlPath}`);
+    }
+    return renderScreenshot({
+      htmlPath,
+      outputPath,
+      width: 2560,
+      height: 1440,
+    });
+  },
+  moments: () => {
+    const htmlPath = path.join(TEMPLATES_DIR, 'moments-viewer.html');
+    const outputPath = path.join(PICTURES_DIR, 'moments-viewer.png');
+    if (!fs.existsSync(htmlPath)) {
+      throw new Error(`Template not found at ${htmlPath}`);
+    }
+    return renderScreenshot({
+      htmlPath,
+      outputPath,
+      width: 1080,
+      height: 1920,
+    });
+  },
+  remote: () => {
+    const htmlPath = path.join(TEMPLATES_DIR, 'remote-desktop.html');
+    const outputPath = path.join(PICTURES_DIR, 'remote-desktop.png');
+    if (!fs.existsSync(htmlPath)) {
+      throw new Error(`Template not found at ${htmlPath}`);
+    }
+    return renderScreenshot({
+      htmlPath,
+      outputPath,
+      width: 2560,
+      height: 1440,
+    });
+  },
+  features: async () => {
+    console.log('[screenshot] Rendering all feature deep-dive screenshots...');
+    const results = [];
+    results.push(await TARGETS.voice());
+    results.push(await TARGETS.moments());
+    results.push(await TARGETS.remote());
+    return results;
   },
 };
 
@@ -162,9 +206,11 @@ async function main() {
   console.log(`[screenshot] Starting screenshot generation for target: "${target}"`);
 
   if (target === 'all') {
-    for (const key of Object.keys(TARGETS)) {
-      await TARGETS[key]();
-    }
+    await TARGETS.home();
+    await TARGETS.android();
+    await TARGETS.voice();
+    await TARGETS.moments();
+    await TARGETS.remote();
   } else if (TARGETS[target]) {
     await TARGETS[target]();
   } else {
