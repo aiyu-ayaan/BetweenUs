@@ -3,10 +3,12 @@ import type { ActiveStatus } from '@betweenus/shared-types';
 import { useAuthStore } from '../../stores/auth';
 import { usePresenceStore } from '../../stores/presence';
 import { useVoiceStore } from '../../stores/voice';
+import { useChatStore } from '../../stores/chat';
 import { Avatar } from '../../components/Avatar';
 import { AppDownloadIcon, HeadphonesIcon, MicIcon, MicOffIcon, SettingsIcon } from '../../components/icons';
 import { isDesktopRuntime } from '../../services/platform';
 import { DOWNLOAD_URL, downloadLabel } from '../../services/downloads';
+import { roleBadgeLabel } from '../members/MemberList';
 
 const STATUS_CHOICES: Array<{ value: ActiveStatus; label: string; hint?: string }> = [
   { value: 'online', label: 'Online' },
@@ -22,6 +24,13 @@ const DOT: Record<ActiveStatus, string> = {
   invisible: 'bg-status-offline',
 };
 
+const STATUS_WORD: Record<ActiveStatus, string> = {
+  online: 'Online',
+  idle: 'Idle',
+  dnd: 'Do Not Disturb',
+  invisible: 'Invisible',
+};
+
 /**
  * The strip along the bottom of every sidebar: who you are, what you are set
  * to, and the way into settings. Clicking the avatar opens the status picker,
@@ -33,6 +42,11 @@ export function UserPanel({ onOpenSettings }: { onOpenSettings: () => void }): J
   const setStatus = usePresenceStore((state) => state.setStatus);
   const micEnabled = useVoiceStore((state) => state.micEnabled);
   const toggleMic = useVoiceStore((state) => state.toggleMic);
+  // Your role in whichever server is open, if any - the same built-in labels
+  // the message list badges staff with. Nothing here when the sidebar has no
+  // server (home view, or a fresh sign-in with no server selected yet).
+  const myRole = useChatStore((state) => state.members.find((member) => member.userId === user?.id)?.role);
+  const roleLabel = myRole ? roleBadgeLabel(myRole) : null;
 
   const [open, setOpen] = useState(false);
   const [deafened, setDeafened] = useState(false);
@@ -130,9 +144,11 @@ export function UserPanel({ onOpenSettings }: { onOpenSettings: () => void }): J
           <span className="block truncate text-sm font-semibold text-slate-100">
             {user?.displayName ?? 'aiyu'}
           </span>
-          <span className="flex items-center gap-1 truncate text-xs text-slate-400">
-            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400" />
-            Founder • Online
+          {/* No second dot here - the avatar above already cuts one into its
+              own corner for this exact status, and a row that draws the same
+              fact twice reads as two people's presence rather than one. */}
+          <span className="block truncate text-xs text-slate-400">
+            {roleLabel ? `${roleLabel} • ${STATUS_WORD[selfStatus]}` : STATUS_WORD[selfStatus]}
           </span>
         </span>
       </button>

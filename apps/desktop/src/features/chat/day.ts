@@ -53,6 +53,16 @@ export function dayLabel(iso: string, now: Date = new Date(serverNow())): string
 }
 
 /**
+ * The full calendar date for the day `iso` falls in - "September 18, 2026" -
+ * regardless of how recent it is. `dayLabel` alone says "Today", which reads
+ * fine in the conversation but is the wrong word on a divider meant to also
+ * anchor the page to a real date once it is scrolled back to weeks later.
+ */
+export function fullDateLabel(iso: string): string {
+  return new Date(iso).toLocaleDateString([], { dateStyle: 'long' });
+}
+
+/**
  * The clock time on a bubble, in whatever the reader's system says that is.
  *
  * `numeric` rather than `2-digit` on the hour is the whole point: a locale on a

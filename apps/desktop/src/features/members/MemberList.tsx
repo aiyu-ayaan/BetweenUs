@@ -206,8 +206,19 @@ function Group({
   );
 }
 
-function isStaff(role: ServerRole): boolean {
+export function isStaff(role: ServerRole): boolean {
   return role === 'OWNER' || role === 'ADMIN' || role === 'MODERATOR';
+}
+
+const ROLE_LABEL: Partial<Record<ServerRole, string>> = {
+  OWNER: 'Founder',
+  ADMIN: 'Admin',
+  MODERATOR: 'Mod',
+};
+
+/** "Founder" / "Admin" / "Mod" for the built-in staff roles; null otherwise. */
+export function roleBadgeLabel(role: ServerRole): string | null {
+  return ROLE_LABEL[role] ?? null;
 }
 
 /**

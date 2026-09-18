@@ -60,7 +60,8 @@ import {
 } from '../../services/markup';
 import { emojiQueryAt } from './emoji-names';
 import { arrivalLine } from './arrival';
-import { clockTime, dayLabel, sameDay } from './day';
+import { clockTime, dayLabel, fullDateLabel, sameDay } from './day';
+import { isStaff, roleBadgeLabel } from '../members/MemberList';
 import { nextFollow } from './follow';
 import { anchorReceipts, seenBy } from './receipts';
 import { SeenByDialog, SeenByRow } from './SeenBy';
@@ -755,7 +756,7 @@ function MessageList({
         next.delete(newest);
         return next;
       });
-    }, 350);
+    }, 500);
     return () => window.clearTimeout(timer);
   }, [newest]);
 
@@ -994,9 +995,7 @@ function MessageList({
                 id={`message-${message.id}`}
                 className={`flex items-start ${spacing.gutter} ${spacing.inset} ${
                   grouped ? spacing.grouped : spacing.separate
-                } ${isSelf ? 'justify-end' : 'justify-start'} ${
-                  justArrived.has(message.id) ? 'animate-message-in' : ''
-                }`}
+                } ${isSelf ? 'justify-end' : 'justify-start'}`}
               >
                 {showAvatar &&
                   (grouped ? (
@@ -1024,7 +1023,16 @@ function MessageList({
                     )
                   ))}
 
-                <div className={`flex min-w-0 max-w-[78%] flex-col ${isSelf ? 'items-end' : 'items-start'}`}>
+                <div
+                  className={`flex min-w-0 max-w-[78%] flex-col ${isSelf ? 'items-end' : 'items-start'} ${
+                    justArrived.has(message.id) ? 'animate-message-in' : ''
+                  }`}
+                  style={
+                    justArrived.has(message.id)
+                      ? { transformOrigin: isSelf ? 'bottom right' : 'bottom left' }
+                      : undefined
+                  }
+                >
                   <div
                     onContextMenu={(event) => {
                       // A tombstone has nothing left to act on.
@@ -1066,11 +1074,22 @@ function MessageList({
                         side of the screen your bubble is on already said
                         that. */}
                     {!isSelf && !grouped && !hook && (
-                      <AuthorHover author={message.author}>
-                        <p className="mb-0.5 truncate text-sm font-semibold text-accent">
-                          {message.author.displayName}
-                        </p>
-                      </AuthorHover>
+                      <p className="mb-0.5 flex min-w-0 items-center gap-1.5">
+                        <span className="min-w-0 truncate">
+                          <AuthorHover author={message.author}>
+                            <span className="text-sm font-semibold text-accent">
+                              {message.author.displayName}
+                            </span>
+                          </AuthorHover>
+                        </span>
+                        <RoleBadge authorId={message.author.id} />
+                        <time
+                          dateTime={message.createdAt}
+                          className="shrink-0 text-[11px] font-normal text-slate-500"
+                        >
+                          {clockTime(message.createdAt)}
+                        </time>
+                      </p>
                     )}
 
                     {/* A robot's name, and the one thing anybody reading this
@@ -1297,16 +1316,40 @@ function MessageList({
  */
 function DayDivider({ iso }: { iso: string }): JSX.Element {
   return (
-    <li className="my-3 flex items-center gap-2 px-2">
-      <span aria-hidden="true" className="h-px flex-1 bg-surface-700/60" />
+    <li className="my-3 flex items-center justify-center px-2">
       <time
         dateTime={iso}
-        className="rounded-full bg-surface-800/80 px-2.5 py-0.5 text-[11px] font-medium text-slate-400"
+        className="rounded-full bg-surface-800/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400"
       >
-        {dayLabel(iso)}
+        {dayLabel(iso)} — {fullDateLabel(iso)}
       </time>
-      <span aria-hidden="true" className="h-px flex-1 bg-surface-700/60" />
     </li>
+  );
+}
+
+/**
+ * The pill beside a staff author's name in the message list - "Founder",
+ * "Admin", "Mod". Only ever the built-in role: a message header has no room
+ * to also resolve which of a server's custom roles ranks highest, and the
+ * built-in three are exactly the ones worth a reader knowing at a glance.
+ */
+function RoleBadge({ authorId }: { authorId: string }): JSX.Element | null {
+  const member = useChatStore((state) => state.members.find((row) => row.userId === authorId));
+  if (!member || !isStaff(member.role)) return null;
+  const label = roleBadgeLabel(member.role);
+  if (!label) return null;
+
+  return (
+    <span
+      className="shrink-0 rounded px-1.5 py-px text-[10px] font-bold uppercase tracking-wide"
+      style={
+        member.colour
+          ? { color: member.colour, backgroundColor: `${member.colour}26` }
+          : { color: 'rgb(var(--color-accent))', backgroundColor: 'rgb(var(--color-accent) / 0.15)' }
+      }
+    >
+      {label}
+    </span>
   );
 }
 

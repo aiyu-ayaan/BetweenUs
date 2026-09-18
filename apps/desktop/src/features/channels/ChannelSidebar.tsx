@@ -7,6 +7,7 @@ import { useVoiceStore } from '../../stores/voice';
 import { VoicePanel } from '../voice/VoicePanel';
 import { UserPanel } from '../settings/UserPanel';
 import { CreateChannelDialog } from './CreateChannelDialog';
+import { Avatar } from '../../components/Avatar';
 import {
   CheckIcon,
   ChevronDownIcon,
@@ -247,10 +248,12 @@ function VoiceChannelRow({ channel }: { channel: Channel }): JSX.Element {
   const join = useVoiceStore((state) => state.join);
   const status = useVoiceStore((state) => state.status);
   const connectedTo = useVoiceStore((state) => state.channelId);
+  const tiles = useVoiceStore((state) => state.tiles);
 
   const here = connectedTo === channel.id && status === 'connected';
   const connectingHere = connectedTo === channel.id && status === 'connecting';
   const viewing = activeChannelId === channel.id;
+  const occupied = occupants.length > 0;
 
   const open = (): void => {
     void selectChannel(channel.id);
@@ -258,15 +261,20 @@ function VoiceChannelRow({ channel }: { channel: Channel }): JSX.Element {
   };
 
   return (
-    <div className="group">
+    // A card, tinted green, only while somebody is actually here - an empty
+    // channel stays a plain row. The tint is what makes "something is
+    // happening in here" readable at a glance down a list of six channels.
+    <div className={occupied ? 'rounded-lg border border-emerald-500/15 bg-emerald-500/[0.08] p-1' : ''}>
       <button
         type="button"
         onClick={open}
         aria-current={viewing ? 'page' : undefined}
-        className={`flex w-full cursor-pointer items-center justify-between rounded-lg px-2.5 py-1.5 text-start text-[13px] font-medium transition-colors duration-150 ${
+        className={`spring-press flex w-full cursor-pointer items-center justify-between rounded-md px-2.5 py-1.5 text-start text-[13px] font-medium ${
           here || connectingHere || viewing
             ? 'bg-accent/20 text-white shadow-sm'
-            : 'text-slate-400 hover:bg-white/[0.05] hover:text-slate-200'
+            : occupied
+              ? 'text-slate-200 hover:bg-white/[0.05]'
+              : 'text-slate-400 hover:bg-white/[0.05] hover:text-slate-200'
         }`}
       >
         <span className="flex items-center gap-2 min-w-0">
@@ -278,24 +286,34 @@ function VoiceChannelRow({ channel }: { channel: Channel }): JSX.Element {
         {connectingHere && (
           <span className="animate-pulse text-xs text-status-online">connecting…</span>
         )}
-        {occupants.length > 0 && (
-          <span className="font-mono text-xs text-slate-400">
-            [{occupants.length}]
-          </span>
+        {occupied && (
+          <span className="font-mono text-xs text-emerald-400">[{occupants.length}]</span>
         )}
       </button>
 
-      {occupants.length > 0 && (
-        <ul className="space-y-0.5 ps-7 pt-0.5 pb-1">
+      {occupied && (
+        <ul className="space-y-0.5 ps-6 pt-1 pb-0.5">
           {occupants.map((userId) => {
             const member = members.find((item) => item.userId === userId);
+            // Real speaking energy only exists for a call this machine has
+            // joined - presence carries who is *in* a channel, not who is
+            // making sound in one it never connected to.
+            const speaking = here && tiles.some((tile) => tile.userId === userId && tile.speaking);
             return (
-              <li
-                key={userId}
-                className="flex items-center gap-2 py-0.5 text-xs text-slate-300"
-              >
-                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400" />
-                <span className="truncate">{member?.displayName ?? 'Someone'}</span>
+              <li key={userId} className="flex items-center gap-2 py-0.5 text-xs text-slate-300">
+                <Avatar
+                  name={member?.displayName ?? 'Someone'}
+                  avatarUrl={member?.avatarUrl}
+                  size="xs"
+                  ringColour="border-surface-900"
+                  viewable={false}
+                />
+                <span className={`truncate ${speaking ? 'font-medium text-slate-100' : ''}`}>
+                  {member?.displayName ?? 'Someone'}
+                </span>
+                {speaking && (
+                  <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 animate-pulse-subtle rounded-full bg-emerald-400" />
+                )}
               </li>
             );
           })}

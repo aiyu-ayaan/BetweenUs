@@ -28,17 +28,22 @@ export function ServerIcon({
       <img
         src={absoluteUrl(server.iconUrl)}
         alt=""
-        className={`${SIZES[size]} ${size === 'rail' ? 'rounded-none' : 'rounded-full'} object-cover ${className ?? ''}`}
+        // Always circular, in the rail included - the rail's own button
+        // morphs its background to a squircle on hover/active, but the
+        // picture inside stays the same round shape every avatar in the app
+        // uses. `rounded-none` here used to rely on the button clipping it,
+        // which it never did: nothing on `RailButton` sets `overflow-hidden`,
+        // so the picture drew as an uncropped square regardless of the
+        // button shape behind it.
+        className={`${SIZES[size]} rounded-full object-cover ${className ?? ''}`}
       />
     );
   }
 
   return (
     <span
-      className={`flex ${SIZES[size]} items-center justify-center font-semibold ${
-        size === 'rail'
-          ? 'bg-transparent text-inherit'
-          : 'rounded-full bg-surface-700 text-slate-100'
+      className={`flex ${SIZES[size]} items-center justify-center rounded-full font-semibold ${
+        size === 'rail' ? 'bg-transparent text-inherit' : 'bg-surface-700 text-slate-100'
       } ${className ?? ''}`}
     >
       {initials(server?.name ?? '?')}

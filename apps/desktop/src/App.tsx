@@ -40,6 +40,7 @@ import { ChatView } from './features/chat/ChatView';
 import { PinnedPanel } from './features/chat/PinnedPanel';
 import { SearchPanel } from './features/chat/SearchPanel';
 import { UserSettings } from './features/settings/UserSettings';
+import { ActivitiesScreen } from './features/settings/ActivitiesScreen';
 import { VoiceChannelView } from './features/voice/VoiceChannelView';
 import { CallAudio } from './features/voice/CallAudio';
 import { ShareControlConsent } from './features/voice/ShareControlConsent';
@@ -47,7 +48,7 @@ import { IncomingCall } from './features/voice/IncomingCall';
 import { ProfileView } from './components/ProfileView';
 import { AvatarChoice } from './components/AvatarChoice';
 import { ProfileScreen } from './components/ProfileScreen';
-import { TopBar } from './features/shell/TopBar';
+import { TopBar, type TopTab } from './features/shell/TopBar';
 import { MobileDrawer } from './features/shell/MobileDrawer';
 import { useIsMobile } from './services/responsive';
 import { VersionNotice } from './components/VersionNotice';
@@ -426,6 +427,13 @@ function Workbench(): JSX.Element {
   const [settings, setSettings] = useState<'none' | 'user' | 'server'>('none');
   const [homeScreen, setHomeScreen] = useState<'friends' | 'status' | 'remote' | null>('friends');
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  /**
+   * Where the top bar has pointed the main panel - independent of which
+   * server or conversation is selected, so switching to Moments and back to
+   * Workbench returns to exactly the server/channel that was open, rather
+   * than resetting navigation the way changing `view` would.
+   */
+  const [topTab, setTopTab] = useState<TopTab>('workbench');
   const [switcher, setSwitcher] = useState(false);
   const [shortcutSheet, setShortcutSheet] = useState(false);
   const [showDrawer, setShowDrawer] = useState(false);
@@ -512,6 +520,9 @@ function Workbench(): JSX.Element {
         onOpenSwitcher={() => setSwitcher(true)}
         sidebarOpen={sidebarOpen}
         onToggleSidebar={() => setSidebarOpen((open) => !open)}
+        onOpenSettings={() => setSettings('user')}
+        topTab={topTab}
+        onChangeTopTab={setTopTab}
       />
       <ConnectionNotice />
       {/* Almost never drawn: it fires only for an account whose key exists on
@@ -558,7 +569,16 @@ function Workbench(): JSX.Element {
           )}
         </div>
 
-        {view === 'home' && homeScreen === 'remote' ? (
+        {/* The top bar's tabs point the main panel somewhere independent of
+            server/channel selection - Activities and Moments both pre-empt
+            the ordinary view/homeScreen switch below and restore it exactly
+            as it was on the way back to Workbench, because neither tab
+            touches `view` or `homeScreen` at all. */}
+        {topTab === 'activities' ? (
+          <ActivitiesScreen onOpenMenu={() => setShowDrawer(true)} />
+        ) : topTab === 'moments' ? (
+          <StatusScreen onOpenMenu={() => setShowDrawer(true)} />
+        ) : view === 'home' && homeScreen === 'remote' ? (
           <RemoteView onOpenMenu={() => setShowDrawer(true)} />
         ) : view === 'home' && homeScreen === 'status' ? (
           <StatusScreen onOpenMenu={() => setShowDrawer(true)} />

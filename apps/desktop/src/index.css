@@ -646,15 +646,21 @@
   }
 
   /**
-   * A message bubble arriving, the way iMessage's does: it rises off the
-   * composer with a slight overshoot rather than just fading in. Applied only
-   * to a bubble that was just sent or just received - see `ChatView`'s
-   * `justArrived` set - never to a page of history scrolling into view, which
+   * A message bubble arriving, the way iMessage's does: it rises with a
+   * slight overshoot rather than just fading in. Applied only to the bubble
+   * stack (never the row's avatar, and never the `<li>` that holds both) and
+   * only to a bubble just sent or just received - see `ChatView`'s
+   * `justArrived` set - never to a page of history scrolling into view. It
    * plays once per bubble because it fires on mount, not on re-render.
+   *
+   * The caller sets `transform-origin` inline (bottom-right for an outgoing
+   * bubble, bottom-left for an incoming one) rather than fixing it here:
+   * scoping the animation to the bubble stack alone fixed the jitter, but a
+   * centred origin still nudges a narrow bubble sideways against its own
+   * gutter, which the corner it actually grows from does not.
    */
   .animate-message-in {
-    animation: message-in 320ms cubic-bezier(0.34, 1.56, 0.64, 1);
-    transform-origin: bottom;
+    animation: message-in 460ms cubic-bezier(0.34, 1.56, 0.64, 1);
   }
 
   /**

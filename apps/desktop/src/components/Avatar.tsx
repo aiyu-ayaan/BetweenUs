@@ -8,12 +8,14 @@ import { askAvatarChoice } from './AvatarChoice';
 import { StatusRing } from './StatusRing';
 
 const SIZES = {
+  xs: 'h-5 w-5 text-[9px]',
   sm: 'h-8 w-8 text-xs',
   md: 'h-10 w-10 text-sm',
   lg: 'h-20 w-20 text-2xl',
 } as const;
 
 const DOT_SIZES = {
+  xs: 'h-2 w-2 border-2',
   sm: 'h-3 w-3 border-[3px]',
   md: 'h-3.5 w-3.5 border-[3px]',
   lg: 'h-6 w-6 border-4',

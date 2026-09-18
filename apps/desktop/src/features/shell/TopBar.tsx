@@ -1,19 +1,34 @@
-import { useChatStore } from '../../stores/chat';
-import { useVoiceStore } from '../../stores/voice';
 import {
+  ActivityIcon,
+  AppsIcon,
+  ClockIcon,
   LayoutSidebarIcon,
   BetweenUsLogoIcon,
   SearchIcon,
   SettingsIcon,
 } from '../../components/icons';
+import { useVoiceStore } from '../../stores/voice';
 
 const isMac = typeof window !== 'undefined' && window.betweenus?.platform === 'darwin';
+
+/** The three places the top bar can point the workspace at. */
+export type TopTab = 'workbench' | 'activities' | 'moments';
+
+const TABS: Array<{ id: TopTab; label: string; icon: (props: { className?: string }) => JSX.Element }> = [
+  { id: 'workbench', label: 'Workbench', icon: AppsIcon },
+  { id: 'activities', label: 'Activities', icon: ClockIcon },
+  // Same mark `HomeSidebar` already draws beside "Moments" - one icon, one
+  // meaning, wherever the app offers the tray.
+  { id: 'moments', label: 'Moments', icon: ActivityIcon },
+];
 
 export interface TopBarProps {
   onOpenSwitcher: () => void;
   sidebarOpen: boolean;
   onToggleSidebar: () => void;
   onOpenSettings?: () => void;
+  topTab: TopTab;
+  onChangeTopTab: (tab: TopTab) => void;
 }
 
 export function TopBar({
@@ -21,22 +36,10 @@ export function TopBar({
   sidebarOpen,
   onToggleSidebar,
   onOpenSettings,
+  topTab,
+  onChangeTopTab,
 }: TopBarProps): JSX.Element {
-  const view = useChatStore((state) => state.view);
-  const servers = useChatStore((state) => state.servers);
-  const activeServerId = useChatStore((state) => state.activeServerId);
-  const channel = useChatStore((state) => state.activeChannel());
   const voiceStatus = useVoiceStore((state) => state.status);
-
-  const server = servers.find((item) => item.id === activeServerId);
-  const here =
-    view === 'server' && server
-      ? channel
-        ? `${server.name} / #${channel.name}`
-        : server.name
-      : channel
-        ? `#${channel.name}`
-        : 'Search or jump to...';
 
   return (
     <header className="drag-region hidden md:flex h-11 shrink-0 items-center justify-between border-b border-edge/60 bg-surface-950 px-3 backdrop-blur-md">
@@ -57,23 +60,44 @@ export function TopBar({
         />
       </div>
 
-      {/* Middle: Omnibar search */}
-      <div className="flex min-w-0 flex-1 justify-center px-4">
+      {/* Middle: where the workspace is pointed - the everyday chat/voice
+          workbench, this account's call & remote-session activity, or the
+          Moments tray. All three are real screens (`App.tsx` switches the
+          main panel on this), not a breadcrumb of where you already are. */}
+      <nav aria-label="Workspace" className="no-drag flex min-w-0 flex-1 justify-center px-4">
+        <div className="flex items-center gap-0.5 rounded-lg border border-edge bg-white/[0.03] p-0.5">
+          {TABS.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => onChangeTopTab(id)}
+              aria-current={topTab === id ? 'page' : undefined}
+              className={`spring-press flex h-6 cursor-pointer items-center gap-1.5 rounded-md px-2.5 text-[12.5px] font-medium ${
+                topTab === id
+                  ? 'bg-accent/20 text-white shadow-sm'
+                  : 'text-slate-400 hover:bg-white/[0.06] hover:text-slate-200'
+              }`}
+            >
+              <Icon className="h-3.5 w-3.5 shrink-0" />
+              {label}
+            </button>
+          ))}
+        </div>
+      </nav>
+
+      {/* Right: search, live voice status (only if connected), settings &
+          Windows window controls safe zone */}
+      <div className="flex items-center gap-1.5 shrink-0">
         <button
           type="button"
           onClick={onOpenSwitcher}
-          className="no-drag group flex h-7 w-full max-w-md cursor-pointer items-center gap-2 rounded-lg border border-edge bg-white/[0.03] px-2.5 text-[13px] text-slate-400 transition-colors duration-150 hover:border-white/10 hover:bg-white/[0.06] hover:text-slate-200"
+          title="Search or jump to... (Ctrl K)"
+          aria-label="Search or jump to a channel"
+          className="no-drag flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg text-slate-400 transition-colors duration-150 hover:bg-white/[0.06] hover:text-slate-200 active:scale-[0.97]"
         >
-          <SearchIcon className="h-3.5 w-3.5 shrink-0 text-slate-400 group-hover:text-slate-200" aria-hidden="true" />
-          <span className="min-w-0 truncate">{here}</span>
-          <kbd className="ms-auto hidden shrink-0 rounded border border-edge px-1.5 py-px font-sans text-[11px] text-slate-500 sm:block">
-            Ctrl K
-          </kbd>
+          <SearchIcon className="h-4 w-4" />
         </button>
-      </div>
 
-      {/* Right: Live Voice Status (only if connected) & Windows window controls safe zone */}
-      <div className="flex items-center gap-2 shrink-0">
         {voiceStatus === 'connected' && (
           <div className="flex items-center gap-1.5 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-400 select-none shadow-sm">
             <span className="relative flex h-2 w-2">
