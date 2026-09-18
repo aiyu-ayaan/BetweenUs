@@ -4,21 +4,34 @@
  * Like `EmojiSuggest.tsx`, this renders above the composer rather than at the caret,
  * avoiding caret measurement bugs while remaining right next to where the user is typing.
  *
- * In server channels, `@everyone` and `@here` broadcasts are offered at the top.
- * In direct channels (DM), broadcasts are suppressed.
+ * In server channels, `@everyone` and `@here` broadcasts are offered at the top,
+ * then the server's custom roles, then its members. In direct channels (DM),
+ * broadcasts and roles are both suppressed - a conversation has neither.
  */
 import { useEffect, useRef, useState } from 'react';
-import type { ServerMember } from '@betweenus/shared-types';
+import type { ServerCustomRole, ServerMember } from '@betweenus/shared-types';
 import { PersonAvatar } from '../../components/Avatar';
 import { UsersIcon } from '../../components/icons';
 
 export interface MentionOption {
-  kind: 'broadcast' | 'member';
+  kind: 'broadcast' | 'role' | 'member';
   id: string;
   name: string;
   subtitle: string;
+  /**
+   * What is written into the composer after the `@`.
+   *
+   * For a role this is its name, spaces and all - the wire format is the text
+   * somebody typed, and `mentionsMe` matches a role name exactly as it matches
+   * a display name. It is deliberately not an id: an id in the body would be
+   * unreadable on any client that had not yet fetched the roles, and a message
+   * whose meaning depends on a second fetch is one that reads as gibberish
+   * offline.
+   */
   username: string;
   member?: ServerMember;
+  /** The role's own colour, for the dot beside its name. Null uses the default. */
+  colour?: string | null;
 }
 
 const BROADCASTS: MentionOption[] = [
@@ -61,15 +74,19 @@ function rankMember(option: MentionOption, needle: string): number {
 /**
  * Filters and ranks mention options according to the query term.
  *
- * Broadcast options (`@everyone`, `@here`) are included only in non-direct channels.
- * Member options are matched against username and display name, ranked by exact match,
- * prefix match, then substring match, and sorted alphabetically within the same tier.
- * Results are capped at 10 items.
+ * Broadcast options (`@everyone`, `@here`) and roles are included only in
+ * non-direct channels - a conversation has neither. Member options are matched
+ * against username and display name, ranked by exact match, prefix match, then
+ * substring match, and sorted alphabetically within the same tier. Roles sit
+ * between the two: above members because a role is the rarer, more deliberate
+ * choice and typing four letters should not bury it under everybody whose name
+ * contains them. Results are capped at 10 items.
  */
 export function filterMentionOptions(
   term: string,
   members: readonly ServerMember[],
   isDirect: boolean,
+  roles: readonly ServerCustomRole[] = [],
 ): MentionOption[] {
   const needle = term.trim().toLowerCase().replace(/^@+/, '');
 
@@ -80,6 +97,27 @@ export function filterMentionOptions(
           b.username.toLowerCase().includes(needle) ||
           b.name.toLowerCase().includes(needle),
       );
+
+  const roleOptions: MentionOption[] = isDirect
+    ? []
+    : roles.map((role) => ({
+        kind: 'role' as const,
+        id: role.id,
+        name: role.name,
+        subtitle:
+          role.memberCount === 1 ? 'Role · 1 member' : `Role · ${role.memberCount} members`,
+        username: role.name,
+        colour: role.colour,
+      }));
+
+  const matchingRoles = roleOptions
+    .filter((role) => role.name.toLowerCase().includes(needle))
+    .sort((a, b) => {
+      const aRank = rankMember(a, needle);
+      const bRank = rankMember(b, needle);
+      if (aRank !== bRank) return aRank - bRank;
+      return a.name.localeCompare(b.name);
+    });
 
   const memberOptions: MentionOption[] = members.map((m) => ({
     kind: 'member',
@@ -107,18 +145,20 @@ export function filterMentionOptions(
       return a.username.localeCompare(b.username);
     });
 
-  return [...matchingBroadcasts, ...matchingMembers].slice(0, 10);
+  return [...matchingBroadcasts, ...matchingRoles, ...matchingMembers].slice(0, 10);
 }
 
 export function MentionSuggest({
   term,
   members,
+  roles = [],
   isDirect,
   onPick,
   onClose,
 }: {
   term: string;
   members: readonly ServerMember[];
+  roles?: readonly ServerCustomRole[];
   isDirect: boolean;
   onPick: (username: string) => void;
   onClose: () => void;
@@ -128,10 +168,10 @@ export function MentionSuggest({
   const activeRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
-    const found = filterMentionOptions(term, members, isDirect);
+    const found = filterMentionOptions(term, members, isDirect, roles);
     setMatches(found);
     setActive(0);
-  }, [term, members, isDirect]);
+  }, [term, members, isDirect, roles]);
 
   useEffect(() => {
     activeRef.current?.scrollIntoView?.({ block: 'nearest' });
@@ -174,7 +214,7 @@ export function MentionSuggest({
       className="absolute bottom-full inset-x-3.5 z-30 mb-2 max-h-72 overflow-y-auto rounded-xl border border-edge bg-surface-900 py-1 shadow-pop"
     >
       <p className="px-3 pb-1 text-[11px] uppercase tracking-wide text-slate-500">
-        {displayTerm ? `Members matching @${displayTerm}` : 'Members'}
+        {displayTerm ? `Matching @${displayTerm}` : 'Members and roles'}
       </p>
       <ul>
         {matches.map((match, index) => {
@@ -197,6 +237,16 @@ export function MentionSuggest({
                   <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-accent/20 text-accent">
                     <UsersIcon className="h-4 w-4" />
                   </div>
+                ) : match.kind === 'role' ? (
+                  // The role's own colour, so the menu reads the same way the
+                  // member list does. `currentColor` rather than a fill, so a
+                  // role with no colour of its own inherits the accent.
+                  <div
+                    className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-accent/20 text-accent"
+                    style={match.colour ? { color: match.colour } : undefined}
+                  >
+                    <UsersIcon className="h-4 w-4" />
+                  </div>
                 ) : match.member ? (
                   <div className="pointer-events-none shrink-0">
                     <PersonAvatar
@@ -212,8 +262,11 @@ export function MentionSuggest({
                   </div>
                 )}
                 <div className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium text-slate-200">
-                    {match.name}
+                  <span
+                    className="block truncate text-sm font-medium text-slate-200"
+                    style={match.kind === 'role' && match.colour ? { color: match.colour } : undefined}
+                  >
+                    {match.kind === 'role' ? `@${match.name}` : match.name}
                   </span>
                   <span className="block truncate text-xs text-slate-400">
                     {match.subtitle}

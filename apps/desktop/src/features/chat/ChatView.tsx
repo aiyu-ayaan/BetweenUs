@@ -2204,6 +2204,9 @@ function MessageComposer({
   const [emojiQuery, setEmojiQuery] = useState<{ term: string; start: number } | null>(null);
   const [mentionQuery, setMentionQuery] = useState<{ term: string; start: number } | null>(null);
   const members = useChatStore((state) => state.members);
+  // Offered in the `@` menu beside the members. A direct message has none, and
+  // `MentionSuggest` suppresses them there rather than this having to.
+  const roles = useChatStore((state) => state.roles);
 
   const dmMembers: ServerMember[] = useMemo(() => {
     if (channel.type !== 'DM') return members;
@@ -2782,6 +2785,7 @@ function MessageComposer({
         <MentionSuggest
           term={mentionQuery.term}
           members={dmMembers}
+          roles={roles}
           isDirect={channel.type === 'DM'}
           onClose={() => setMentionQuery(null)}
           onPick={(username) => {
