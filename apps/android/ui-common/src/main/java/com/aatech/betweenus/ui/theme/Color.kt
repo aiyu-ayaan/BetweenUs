@@ -519,8 +519,13 @@ val ANDROID_THEMES: Map<String, AndroidThemeDefinition> = mapOf(
             surface700 = Color(0xFFD3CBB7),
             surface600 = Color(0xFFB58900),
             surface500 = Color(0xFF839496),
-            accent = Color(0xFF268BD2),
-            accentHover = Color(0xFF2AA198),
+            // Darkened from the brand swatch (#268bd2), matching the desktop
+            // client's theme.ts: the original reads at 3.4:1 against this
+            // theme's cream panels, under the 4.5:1 normal-text floor for
+            // everywhere this is text rather than a button fill (usernames,
+            // role pills, unread badges). 2075B0 clears 4.6:1.
+            accent = Color(0xFF2075B0),
+            accentHover = Color(0xFF186298),
             edge = Color(0x28586E75),
             slate50 = Color(0xFF002B36),
             slate100 = Color(0xFF073642),
@@ -709,8 +714,13 @@ val ANDROID_THEMES: Map<String, AndroidThemeDefinition> = mapOf(
             surface700 = Color(0xFFDFD2C4),
             surface600 = Color(0xFFCEBEAD),
             surface500 = Color(0xFF9893A5),
-            accent = Color(0xFFD7827E),
-            accentHover = Color(0xFFB4637A),
+            // Darkened from the brand swatch (#d7827e), matching the desktop
+            // client's theme.ts: the original reads at 2.7:1 against this
+            // theme's near-white panels, under the 4.5:1 normal-text floor
+            // for everywhere this is text rather than a button fill
+            // (usernames, role pills, unread badges). 9F615E clears 4.65:1.
+            accent = Color(0xFF9F615E),
+            accentHover = Color(0xFF8C504E),
             edge = Color(0x1C575279),
             slate50 = Color(0xFF28253B),
             slate100 = Color(0xFF575279),
