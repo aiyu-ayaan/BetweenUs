@@ -57,6 +57,30 @@ export function mentionsMe(text: string | null | undefined, me: MentionTarget): 
   return names.some((name) => hasMention(haystack, name));
 }
 
+/**
+ * The names of the roles `userId` holds in a server, for [[MentionTarget]].
+ *
+ * A pure join of two lists the client already has - the member rows and the
+ * server's roles - kept here rather than in the store so the one rule about
+ * *whose* roles count has a single home, and so the reading side (a bubble
+ * that tints) and the writing side (the `@` menu) cannot drift apart.
+ *
+ * A member row that has not arrived yet answers with nothing, which is the
+ * right answer rather than a guess: a message tinted on a stale roster is a
+ * mention somebody never received.
+ */
+export function roleNamesFor(
+  members: readonly { userId: string; roleIds: readonly string[] }[],
+  roles: readonly { id: string; name: string }[],
+  userId: string | null | undefined,
+): string[] {
+  if (!userId) return [];
+  const mine = members.find((member) => member.userId === userId);
+  if (!mine) return [];
+  const held = new Set(mine.roleIds);
+  return roles.filter((role) => held.has(role.id)).map((role) => role.name);
+}
+
 function hasMention(haystack: string, name: string): boolean {
   const needle = `@${name}`;
   let from = 0;

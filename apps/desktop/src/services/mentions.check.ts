@@ -7,7 +7,7 @@
  * working rather than a rule being wrong.
  */
 import assert from 'node:assert/strict';
-import { mentionsMe } from './mentions';
+import { mentionsMe, roleNamesFor } from './mentions';
 
 const me = { username: 'ann', displayName: 'Ann Wexford' };
 
@@ -61,5 +61,32 @@ assert.equal(mentionsMe('', me), false);
 // display name is not a name that matches everything.
 assert.equal(mentionsMe('@ann hello', { username: 'ann' }), true);
 assert.equal(mentionsMe('@ hello', { username: 'ann', displayName: '' }), false);
+
+// `roleNamesFor` is the join that decides whose roles count. Only the roles on
+// this account's own member row, and only ones the server still has.
+const roster = [
+  { userId: 'u1', roleIds: ['r1', 'r3'] },
+  { userId: 'u2', roleIds: ['r2'] },
+];
+const serverRoles = [
+  { id: 'r1', name: 'designers' },
+  { id: 'r2', name: 'ops' },
+  { id: 'r3', name: 'Core Team' },
+];
+assert.deepEqual(roleNamesFor(roster, serverRoles, 'u1'), ['designers', 'Core Team']);
+assert.deepEqual(roleNamesFor(roster, serverRoles, 'u2'), ['ops']);
+// Somebody not on the roster yet, and nobody at all: nothing, not everything.
+assert.deepEqual(roleNamesFor(roster, serverRoles, 'u3'), []);
+assert.deepEqual(roleNamesFor(roster, serverRoles, null), []);
+// A role id the server no longer has is dropped rather than carried as a blank.
+assert.deepEqual(roleNamesFor([{ userId: 'u1', roleIds: ['gone'] }], serverRoles, 'u1'), []);
+// And it composes with the rule above it - this is the whole path, joined.
+assert.equal(
+  mentionsMe('@Core Team standup', {
+    username: 'ann',
+    roles: roleNamesFor(roster, serverRoles, 'u1'),
+  }),
+  true,
+);
 
 console.log('mentions check ok');
