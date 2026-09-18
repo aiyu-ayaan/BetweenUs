@@ -1,5 +1,61 @@
 # Changelog
 
+## [1.0.5](https://github.com/aiyu-ayaan/BetweenUs/compare/v1.0.4...v1.0.5) (2026-09-18)
+
+### Features
+
+* The same animated boot screen, in this platform's idiom
+* An animated boot screen, with a tip that waits its turn
+* Offer custom roles in the @ menu
+* Wake and tint for a role you hold
+* Tint a message that addresses a role you hold
+* Let a custom role be a mention target
+* Add mention highlighting and addressed alert in MessageRow
+* Wire MentionSuggestPopup into chat Composer
+* Add WhatsApp-style MentionSuggestPopup and filter unit tests
+* Add MentionQueryParser with unit tests
+* Highlight @mentions in chat items and tint mentioned bubbles
+* Integrate MentionSuggest in MessageComposer
+* Add MentionSuggest popover component
+* Add mentionQueryAt with check tests
+* Let any member add someone to a direct message
+* Add an append-only audit log for moderation actions
+* Add a description column, editable and shown on the invite card
+* Group the server rail into collapsible folders
+* Android connection-panel parity, and a share-degraded warning
+* Let a screen share capture below native resolution
+
+### Bug fixes
+
+* Role mentions, a quieter sidebar, and a boot screen you can see
+* Hold the splash long enough to be seen
+* Make the boot screen long enough to actually see
+* Stop the account footer crushing its own name column
+* Defer voice store subscription in ring store and update devdocs
+* Step frame rate down under cpu pressure, cap Android's relay bitrate
+
+### Other changes
+
+* Merge: role mentions, the sidebar controls, and an animated boot screen
+* Bump devdocs for the splash floor and sidebar controls
+* The sidebar voice panel carries no controls
+* Bump devdocs for the boot screen
+* Drop the Voice Connected badge from the title bar
+* Bump devdocs to the role-mentions notes
+* Say what counts as a mention, now that a role does
+* Update subproject commit reference in development
+* Add implementation plan for @mentions on desktop and android
+* Add design spec for @mentions on desktop and android
+* Point the docs suite at the merged backlog and record the parity findings
+
+### Artifacts
+
+| Platform | This release |
+| --- | --- |
+| Server images | Built here |
+| Desktop | Built here |
+| Android | Built here |
+
 ## [1.0.4](https://github.com/aiyu-ayaan/BetweenUs/compare/v1.0.3...v1.0.4) (2026-09-18)
 
 ### Features
