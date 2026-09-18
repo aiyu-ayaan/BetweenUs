@@ -267,12 +267,23 @@ fun ChatScreen(
     var seenNewestId by remember(channelId) { mutableStateOf<String?>(null) }
     var justArrivedId by remember(channelId) { mutableStateOf<String?>(null) }
     val newestId = messages.lastOrNull { !it.message.isArrival }?.id
-    LaunchedEffect(newestId) {
-        val id = newestId ?: return@LaunchedEffect
+    // Set synchronously during composition rather than from a `LaunchedEffect`
+    // keyed on `newestId`: that side effect runs a frame after `messages`
+    // changes, so the new bubble's `MessageRow` was already first composed
+    // with `justArrived == false` by the time `justArrivedId` caught up - its
+    // `Animatable` had already latched onto its resting value of `1f`, and the
+    // pop this state exists to trigger arrived too late to have anywhere left
+    // to animate from.
+    remember(newestId) {
         val seen = seenNewestId
-        seenNewestId = id
-        if (seen == null || seen == id) return@LaunchedEffect
-        justArrivedId = id
+        seenNewestId = newestId
+        if (newestId != null && seen != null && seen != newestId) {
+            justArrivedId = newestId
+        }
+        newestId
+    }
+    LaunchedEffect(justArrivedId) {
+        val id = justArrivedId ?: return@LaunchedEffect
         delay(500)
         if (justArrivedId == id) justArrivedId = null
     }
