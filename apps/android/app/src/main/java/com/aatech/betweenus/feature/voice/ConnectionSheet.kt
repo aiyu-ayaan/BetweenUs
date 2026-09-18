@@ -141,6 +141,39 @@ private fun PeerRow(link: LinkStats) {
                 Stat("Video", it, Modifier.weight(1f))
             }
         }
+        // What congestion control believes this link can carry - the
+        // difference between "my connection is slow" and "WebRTC decided my
+        // connection is slow". Null until ICE has settled on a pair.
+        link.availableOutgoingKbps?.let {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Stat("Link est.", CallStats.rate(it), Modifier.weight(1f))
+            }
+        }
+        // A relayed link is held to RELAY_MAX_BITRATE on purpose and pays for
+        // every byte twice - there was no way to tell it was happening.
+        CallStats.pathLabel(link.transport)?.let {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Stat(
+                    "Path",
+                    it,
+                    Modifier.weight(1f),
+                    tone = if (link.transport == "relay") CallStats.Tone.WARN else CallStats.Tone.PLAIN,
+                )
+            }
+        }
+        CallStats.sendResolution(link)?.let {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Stat("Out", it, Modifier.weight(1f))
+            }
+        }
+        // Only when something is actually holding the picture down - the
+        // whole answer to "why did my share go soft": the link, this phone's
+        // encoder, or neither.
+        CallStats.limitReason(link.sendLimitedBy)?.let {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Stat("Held by", it, Modifier.weight(1f), tone = CallStats.Tone.WARN)
+            }
+        }
     }
 }
 

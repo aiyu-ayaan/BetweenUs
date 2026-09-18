@@ -57,6 +57,7 @@ const sample = (patch: Partial<LinkSample>): LinkSample => ({
   sendWidth: null,
   sendHeight: null,
   sendLimitedBy: null,
+  shareReduced: false,
   connected: true,
   transport: null,
   ...patch,
@@ -156,6 +157,20 @@ const slow = { ...second, roundTripMs: 420 };
 assert.match(healthWarning([slow]) ?? '', /420 ms/);
 // Loss is the louder complaint when both are true: it is what breaks speech.
 assert.match(healthWarning([{ ...lossy, roundTripMs: 420 }]) ?? '', /%/);
+
+// A share degraded on its own axis, checked last: a healthy conversation with
+// a struggling share still gets a warning, and the two reasons say opposite
+// fixes rather than one generic "quality" sentence.
+const cpuBound = { ...second, shareReduced: true, sendLimitedBy: 'cpu' as const };
+assert.match(healthWarning([cpuBound]) ?? '', /encode/);
+const bandwidthBound = { ...second, shareReduced: true, sendLimitedBy: 'bandwidth' as const };
+assert.match(healthWarning([bandwidthBound]) ?? '', /upload/);
+// `shareReduced` alone, with no `sendLimitedBy` yet on this exact reading, is
+// still read as a bandwidth-shaped share: the ladder does not move without
+// cause, and cpu is the one case worth naming specifically.
+assert.match(healthWarning([{ ...second, shareReduced: true }]) ?? '', /upload/);
+// A conversation problem still wins the one warning slot over a share problem.
+assert.match(healthWarning([{ ...lossy, shareReduced: true, sendLimitedBy: 'cpu' }]) ?? '', /%/);
 
 // --- The call clock --------------------------------------------------------
 

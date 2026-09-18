@@ -27,6 +27,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlin.math.roundToInt
 import kotlin.math.sqrt
 import org.json.JSONObject
 import org.webrtc.AudioTrack
@@ -2433,6 +2434,8 @@ class VoiceEngine(private val context: Context) {
                 var selectedPairId: String? = null
                 var limitedBy: String? = null
                 var sendFps: Double? = null
+                var sendWidth: Int? = null
+                var sendHeight: Int? = null
                 val candidateTypes = HashMap<String, String>()
 
                 for (stats in report.statsMap.values) {
@@ -2473,6 +2476,14 @@ class VoiceEngine(private val context: Context) {
                                 (members["framesPerSecond"] as? Number)?.toDouble()?.let {
                                     sendFps = maxOf(sendFps ?: 0.0, it)
                                 }
+                                // The biggest picture leaving this phone, the
+                                // send-side answer to `picture` above.
+                                val width = (members["frameWidth"] as? Number)?.toInt() ?: 0
+                                val height = (members["frameHeight"] as? Number)?.toInt() ?: 0
+                                if (width.toLong() * height > (sendWidth ?: 0).toLong() * (sendHeight ?: 0)) {
+                                    sendWidth = width.takeIf { it > 0 }
+                                    sendHeight = height.takeIf { it > 0 }
+                                }
                             }
                         }
 
@@ -2502,6 +2513,8 @@ class VoiceEngine(private val context: Context) {
 
                 val pair = CallStats.selectedPair(pairs, selectedPairId)
                 val roundTrip = (pair?.get("currentRoundTripTime") as? Number)?.toDouble()
+                val availableOutgoing = (pair?.get("availableOutgoingBitrate") as? Number)
+                    ?.toDouble()?.let { (it / 1000).roundToInt() }
                 val transport = pair?.let { selected ->
                     CallUsage.transportOf(
                         candidateTypes[selected["localCandidateId"] as? String ?: ""],
@@ -2521,6 +2534,7 @@ class VoiceEngine(private val context: Context) {
                     packetsLost = packetsLost,
                     packetsReceived = packetsReceived,
                     roundTripSeconds = roundTrip,
+                    availableOutgoingKbps = availableOutgoing,
                     // Asked rather than inferred from the counters, because a
                     // link that is up and quiet and a link that never came up
                     // produce the same still counters, and only one of them is
@@ -2529,6 +2543,14 @@ class VoiceEngine(private val context: Context) {
                     frameWidth = picture.first,
                     frameHeight = picture.second,
                     framesPerSecond = picture.third,
+                    sendWidth = sendWidth,
+                    sendHeight = sendHeight,
+                    sendLimitedBy = limitedBy,
+                    // Read straight from the ladder rather than from a fresh
+                    // `qualityLimitationReason`: the ladder only moves after
+                    // two sustained starved readings, so this is already the
+                    // debounced answer - see `CallStats.LinkSample.shareReduced`.
+                    shareReduced = shareLadder.scale != 1.0 || shareLadder.frameRate != ShareQuality.SCREEN_FRAME_RATE,
                     transport = transport,
                 )
                 val link = CallStats.toStats(peer.peerId, peer.username, sample, lastSample)

@@ -1361,6 +1361,12 @@ class PeerLink {
       sendWidth: null,
       sendHeight: null,
       sendLimitedBy: null,
+      // Read straight from the ladder rather than from a fresh `getStats`
+      // reason: the ladder only moves after `isStarved`/`isCpuStarved` see two
+      // sustained readings, so this is already the debounced answer to
+      // "is the share actually worse right now", not a reading that flickers
+      // with every transient `bandwidth`/`cpu` tick.
+      shareReduced: this.shareLadder.scale !== 1 || this.shareLadder.frameRate !== 60,
       // Asked here rather than inferred from the counters below, because a
       // link that is up and quiet and a link that never came up produce the
       // same still counters, and only one of them is a microphone fault.

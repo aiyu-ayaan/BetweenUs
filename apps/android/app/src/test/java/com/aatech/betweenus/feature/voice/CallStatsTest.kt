@@ -172,6 +172,35 @@ class CallStatsTest {
     }
 
     @Test
+    fun `a degraded share is checked last and names its own reason`() {
+        val cpuBound = second.copy(shareReduced = true, sendLimitedBy = "cpu")
+        assertTrue(CallStats.healthWarning(listOf(cpuBound))!!.contains("encode"))
+
+        val bandwidthBound = second.copy(shareReduced = true, sendLimitedBy = "bandwidth")
+        assertTrue(CallStats.healthWarning(listOf(bandwidthBound))!!.contains("upload"))
+
+        // A conversation problem still wins the one warning slot over a share
+        // problem.
+        val both = second.copy(lossPercent = 12.0, shareReduced = true, sendLimitedBy = "cpu")
+        assertTrue(CallStats.healthWarning(listOf(both))!!.contains("%"))
+    }
+
+    @Test
+    fun `the send-side helpers say the same things the desktop panel does`() {
+        assertEquals("the link", CallStats.limitReason("bandwidth"))
+        assertEquals("this phone", CallStats.limitReason("cpu"))
+        assertEquals("the encoder", CallStats.limitReason("other"))
+        assertNull(CallStats.limitReason(null))
+
+        assertEquals("via relay", CallStats.pathLabel("relay"))
+        assertEquals("direct", CallStats.pathLabel("direct"))
+        assertNull("ICE has not settled on a pair yet", CallStats.pathLabel(null))
+
+        assertEquals("960×540", CallStats.sendResolution(second.copy(sendWidth = 960, sendHeight = 540)))
+        assertNull(CallStats.sendResolution(second.copy(sendWidth = null, sendHeight = 540)))
+    }
+
+    @Test
     fun `rates change unit where a number stops being readable`() {
         assertEquals("—", CallStats.rate(null))
         assertEquals("999 kbps", CallStats.rate(999))

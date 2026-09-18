@@ -458,6 +458,23 @@ written and discarded at the panel boundary, so there was no way to tell from
 inside the app that a call was on TURN — while being held to `RELAY_MAX_BITRATE`
 on purpose and paying for every byte twice.
 
+**Both clients show the same eight readings, since phase 50.** Android's
+connection sheet ported only four of the desktop's eight when it was written —
+`Down`, `Up`, `Loss`, `Round trip` — leaving `Link est.`, `Path`, `Held by` and
+`Out` desktop-only, not because the underlying `getStats` entries were
+unavailable but because `LinkSample`/`LinkStats` never carried them across.
+`shareReduced` is new on both: the debounced answer to "is the share actually
+worse right now", read from `ShareLadder`'s own position (off the top on
+either axis) rather than from a raw `sendLimitedBy` reading, which is
+transient in exactly the way `isStarved`/`isCpuStarved` already exist to
+filter. `healthWarning`'s third branch — checked last, after loss and round
+trip — turns that into a sentence naming which axis is to blame, and reaches
+the person sharing for free: both clients already pipe `healthWarning` into an
+always-visible indicator (the desktop's control-bar `Connection` button,
+Android's dock icon and `CallMoreSheet` subtitle), so no new banner was needed
+to make a struggling share visible to the one person who can do something
+about it.
+
 **A ceiling on pixels, spent before anything is encoded.** Every other number
 here is a ceiling on bits. `maxHeight` in `QualityOverride` is a ceiling on the
 capture itself, and it is the only one that acts before the encoder or the link

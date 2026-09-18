@@ -34,10 +34,31 @@ data class LinkSample(
     val packetsReceived: Long = 0,
     /** Round trip on the selected candidate pair, in seconds, when known. */
     val roundTripSeconds: Double? = null,
+    /**
+     * What congestion control believes this link can carry, in kbps.
+     *
+     * `availableOutgoingBitrate` on the selected pair - the same reading the
+     * frame-rate ladder acts on. The desktop's `LinkSample.availableOutgoingKbps`.
+     */
+    val availableOutgoingKbps: Int? = null,
     /** The screen or camera as it arrives, when one does. */
     val frameWidth: Int? = null,
     val frameHeight: Int? = null,
     val framesPerSecond: Double? = null,
+    /** The same, for the biggest picture leaving this phone. */
+    val sendWidth: Int? = null,
+    val sendHeight: Int? = null,
+    /** Why the picture leaving this phone is smaller or slower than asked for. */
+    val sendLimitedBy: String? = null,
+    /**
+     * Whether [ShareQuality.Ladder] has actually moved off the top on this
+     * link - resolution, frame rate, or both. The desktop's
+     * `LinkSample.shareReduced`: read from the ladder's own position rather
+     * than re-derived from [sendLimitedBy], because the ladder only moves
+     * after two sustained readings and a raw reason flickers on shares that
+     * are completely fine.
+     */
+    val shareReduced: Boolean = false,
     /**
      * Whether this link has a path at all: ICE settled and DTLS came up.
      *
@@ -64,9 +85,22 @@ data class LinkStats(
     /** Percentage of their packets that never arrived, over the whole call. */
     val lossPercent: Double? = null,
     val roundTripMs: Int? = null,
+    /** See [LinkSample.availableOutgoingKbps]. */
+    val availableOutgoingKbps: Int? = null,
+    /**
+     * Direct or through a relay - see [LinkSample.transport]. A relayed link
+     * is held to [ShareQuality.RELAY_MAX_BITRATE] on purpose.
+     */
+    val transport: String? = null,
     val frameWidth: Int? = null,
     val frameHeight: Int? = null,
     val framesPerSecond: Int? = null,
+    /** What is leaving this phone, and what is holding it down. */
+    val sendWidth: Int? = null,
+    val sendHeight: Int? = null,
+    val sendLimitedBy: String? = null,
+    /** See [LinkSample.shareReduced]. */
+    val shareReduced: Boolean = false,
     /** False when we are sending them no audio at all - see [notBeingHeard]. */
     val sendingAudio: Boolean = true,
     /** False while this link has no path at all - see [notBeingHeard]. */
@@ -159,6 +193,18 @@ object CallStats {
             return "Round trip of $worst ms - expect to talk over each other"
         }
 
+        // Checked last: this is about a share's own quality, not about
+        // hearing each other, so a conversation problem always takes the one
+        // warning slot first.
+        val reduced = stats.filter { it.shareReduced }
+        if (reduced.isNotEmpty()) {
+            return if (reduced.any { it.sendLimitedBy == "cpu" }) {
+                "Your share is dropping frames - this phone can't encode it fast enough"
+            } else {
+                "Your share shrank - your upload can't keep up with it"
+            }
+        }
+
         return null
     }
 
@@ -190,9 +236,15 @@ object CallStats {
             },
             lossPercent = lossPercent(now.packetsLost, now.packetsReceived),
             roundTripMs = now.roundTripSeconds?.let { (it * 1000).roundToInt() },
+            availableOutgoingKbps = now.availableOutgoingKbps,
+            transport = now.transport,
             frameWidth = now.frameWidth,
             frameHeight = now.frameHeight,
             framesPerSecond = now.framesPerSecond?.roundToInt(),
+            sendWidth = now.sendWidth,
+            sendHeight = now.sendHeight,
+            sendLimitedBy = now.sendLimitedBy,
+            shareReduced = now.shareReduced,
             // Any movement at all counts. Opus sends a few hundred bytes a
             // second even through silence, so a sender that is attached and
             // working is never still.
@@ -229,6 +281,29 @@ object CallStats {
         if (width <= 0 || height <= 0) return null
         val rate = link.framesPerSecond?.takeIf { it > 0 }?.let { " @ $it" } ?: ""
         return "$width×$height$rate"
+    }
+
+    /** The same, for the biggest picture leaving this phone. No rate: `sendLimitedBy` says why. */
+    fun sendResolution(link: LinkStats): String? {
+        val width = link.sendWidth ?: return null
+        val height = link.sendHeight ?: return null
+        if (width <= 0 || height <= 0) return null
+        return "$width×$height"
+    }
+
+    /** `qualityLimitationReason`, said the way somebody in a call would say it. */
+    fun limitReason(reason: String?): String? = when (reason) {
+        "bandwidth" -> "the link"
+        "cpu" -> "this phone"
+        "other" -> "the encoder"
+        else -> null
+    }
+
+    /** "via relay" or "direct" - null while ICE has not settled on a pair yet. */
+    fun pathLabel(transport: String?): String? = when (transport) {
+        "relay" -> "via relay"
+        "direct" -> "direct"
+        else -> null
     }
 
     /** Where a number stops being fine and starts being the reason for the panel. */

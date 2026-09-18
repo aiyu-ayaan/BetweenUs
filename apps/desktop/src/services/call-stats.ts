@@ -60,6 +60,19 @@ export interface LinkSample {
   sendHeight: number | null;
   sendLimitedBy: QualityLimit | null;
   /**
+   * Whether `ShareLadder` has actually moved off the top on this link -
+   * resolution, frame rate, or both.
+   *
+   * Deliberately not derived from `sendLimitedBy` directly: that reading is
+   * instantaneous and `bandwidth`/`cpu` show up transiently on shares that are
+   * completely fine, which is the exact evidence `isStarved`/`isCpuStarved`
+   * require two sustained readings before acting on. The ladder position is
+   * that same hysteresis, already paid for - reading it again here rather
+   * than re-deriving stability from the raw reason is what keeps a health
+   * warning from flickering on and off with it.
+   */
+  shareReduced: boolean;
+  /**
    * Whether this link has a path at all: ICE settled and DTLS came up.
    *
    * Distinct from every byte counter above, which cannot tell "connected and
@@ -115,6 +128,8 @@ export interface LinkStats {
   sendWidth: number | null;
   sendHeight: number | null;
   sendLimitedBy: QualityLimit | null;
+  /** See `LinkSample.shareReduced`. */
+  shareReduced: boolean;
   /** False when we are sending them no audio at all - see `notBeingHeard`. */
   sendingAudio: boolean;
   /** False while this link has no path at all - see `notBeingHeard`. */
@@ -315,6 +330,15 @@ export function healthWarning(stats: LinkStats[]): string | null {
     return `Round trip of ${worst} ms - expect to talk over each other`;
   }
 
+  // Checked last: this is about a share's own quality, not about hearing each
+  // other, so a conversation problem always takes the one warning slot first.
+  const reduced = stats.filter((link) => link.shareReduced);
+  if (reduced.length > 0) {
+    return reduced.some((link) => link.sendLimitedBy === 'cpu')
+      ? "Your share is dropping frames - this machine can't encode it fast enough"
+      : "Your share shrank - your upload can't keep up with it";
+  }
+
   return null;
 }
 
@@ -355,6 +379,7 @@ export function toStats(
     sendWidth: now.sendWidth,
     sendHeight: now.sendHeight,
     sendLimitedBy: now.sendLimitedBy,
+    shareReduced: now.shareReduced,
     // Any movement at all counts. Opus sends a few hundred bytes a second even
     // through silence, so a sender that is attached and working is never still.
     sendingAudio: before ? now.outboundAudioBytes > before.outboundAudioBytes : true,
