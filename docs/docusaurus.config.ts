@@ -80,7 +80,7 @@ const config: Config = {
   themeConfig: {
     image: 'img/home.png',
     // The desktop client is dark-only - "nothing about a light BetweenUs
-    // has been designed" (development/ANDROID_TODO.md) - so the docs match
+    // has been designed" (development/TODO.md) - so the docs match
     // it rather than offering a light mode the app itself doesn't have.
     colorMode: {
       defaultMode: 'dark',

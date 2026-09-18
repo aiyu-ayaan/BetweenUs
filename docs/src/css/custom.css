@@ -4,7 +4,7 @@
  * same ground, surface ramp, iris accent, hairline edges, panel radius and
  * shadows the "workbench" client design uses (development/PLANNING.md,
  * phase 26). The client is dark-only ("nothing about a light BetweenUs has
- * been designed" - development/ANDROID_TODO.md), so these docs are too;
+ * been designed" - development/TODO.md), so these docs are too;
  * docusaurus.config.ts disables the light/dark switch.
  */
 

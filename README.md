@@ -732,7 +732,7 @@ A native Android mobile application built with **Kotlin 2.2**, **Jetpack Compose
   the background, on a channel of alpha / beta / stable, downloads the APK
   built for the device's ABI (never the universal one), and hands it to
   Android's package installer - install now or snooze a day. See
-  `development/ANDROID_TODO.md` (phase 15).
+  `development/TODO.md` (phase 15).
 
 ```bash
 # Build and verify the Android client, from the repo root:
@@ -1148,7 +1148,7 @@ All three clients have all of it.
   alpha / beta / stable, downloads the APK built for the device's ABI and hands
   it to a `PackageInstaller` session - which reports what happened, including a
   refusal from a build signed with a different key. Install now, or snooze a
-  day by default. `development/ANDROID_TODO.md` (phase 15).
+  day by default. `development/TODO.md` (phase 15).
 
 ### Deployment & Backups
 
@@ -1270,8 +1270,8 @@ All three clients have all of it.
   the boards themselves need two windows and a person in each.
 - The 16-theme suite's Light Mode category (Daylight, Solarized Light, Rosé
   Pine Dawn) is landed and shared across Desktop, Web and Android; the stale
-  "no light theme" notes still in `development/devdocs/TODO.md` and
-  `ANDROID_TODO.md` predate it and need correcting.
+  "no light theme" notes still in `development/devdocs/TODO.md` predate it and
+  need correcting.
 
 ## Conventions
 
@@ -1301,8 +1301,7 @@ Third-party dependencies keep their own licences.
 | `development/E2EE.md` | Encryption design, threat model, known limits |
 | `development/SECURITY.md` | API trust boundaries: identity, authorization, rate limits, known gaps |
 | `development/TESTING.md` | Running two clients locally, and what to try |
-| `development/TODO.md` | Ordered backlog, including what each phase left open |
-| `development/ANDROID_TODO.md` | Native Android client architecture, roadmap, and completed phases |
+| `development/TODO.md` | Ordered backlog for every client — desktop, web and Android — including what each phase left open |
 | `development/TRACK.md` | The current track: what has landed this pass, and why it was built the way it was |
 | [`docs/docs/architecture/notifications.md`](docs/docs/architecture/notifications.md) | Push notification design: data-only push, background client wakeups, and cross-device push suppression |
 | `docs/docs/architecture/listen-together.md` | Listen Together: the shared clock, why it is not a screen share, and what it deliberately does not do |

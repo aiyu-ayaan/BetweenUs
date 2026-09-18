@@ -79,7 +79,7 @@ been on a device yet. So have statuses - the tray, the story player and the
 composer - which compile and unit-test green and have not been watched on a
 handset. So has the adaptive shell — two panes on tablets and
 unfolded foldables — which has not been on one of those either. Full status, phase by phase:
-[`development/ANDROID_TODO.md`](https://github.com/aiyu-ayaan/BetweenUs/blob/master/development/ANDROID_TODO.md).
+[`development/TODO.md`](https://github.com/aiyu-ayaan/BetweenUs/blob/master/development/TODO.md).
 
 ## Modules
 
