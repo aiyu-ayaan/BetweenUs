@@ -274,7 +274,8 @@ implying more.
 | POST | `/friends/:userId/accept` | Accept |
 | DELETE | `/friends/:userId` | Remove / decline |
 | GET | `/dm` | List DM channels |
-| POST | `/dm` | Open a DM (friends only) |
+| POST | `/dm` | Open a 1:1 (friends only) |
+| POST | `/dm/:channelId/members` | Add a friend to a conversation in progress |
 | GET | `/blocks` | List accounts this user has blocked |
 | POST | `/blocks` | Block an account |
 | DELETE | `/blocks/:userId` | Unblock |
@@ -284,13 +285,45 @@ implying more.
 `UserBlock` rows are directional — "A blocked B" and "B blocked A" are separate
 facts — and the check reads **both** directions. It lives in
 `resolveChannelAccess`, so everything downstream of a channel id closes through
-one function: history, pins, reactions, calls, typing and read markers.
+one function: history, pins, reactions, calls, typing and read markers. A group
+conversation closes the same way a 1:1 always did the moment any one of its
+other members is on either side of a block with the account asking.
 
 Blocking ends the friendship in the same transaction but never deletes the
 channel: it holds two people's history, and unblocking brings the conversation
 back intact. Search, the friend-request endpoint and the DM list all answer
 `USER_NOT_FOUND` whichever way the block runs, so neither the block nor its
 direction is something the far side can test for.
+
+### Group DMs
+
+`ChannelMember` was always a generic allowlist with nothing capping a direct
+message at two rows, so a group is the same `Channel` (`type: 'DM'`,
+`serverId: null`) with more than two members — no schema change. What *was*
+two-person-shaped: `openDirectChannel`'s existing-conversation lookup (now
+requires exactly two members, so a group the pair happen to share is never
+mistaken for their 1:1), and the block check inside `resolveChannelAccess`
+(now checked against every other member instead of the first one found).
+
+Adding a third (or fourth, …) person is `POST /dm/:channelId/members`
+(`FriendsService.addDirectMember`). **Any current member may add anyone they
+are friends with** — the same trust and the same friendship gate a 1:1 already
+runs on; there is no owner or approval step, because either side of an
+existing conversation could always say anything to the other outside it
+anyway. The person being added must not be blocked by (or have blocked) any
+existing member. Adding publishes the existing `friend.changed` wire event
+(`kind: 'dm-member-added'`) to every member old and new, rather than a second
+event that would say the same thing every client already refetches its DM
+list on.
+
+`DirectChannel.participant` stays the first other member — the field every
+existing screen reads, unchanged for a 1:1 — and `.participants` is the full
+list. Desktop's conversation list and header title use the full list; most
+other places that draw a DM by name (quick switcher, forward dialog, push
+notifications) still read `.participant` alone and show only the first other
+member for a group — a known, deliberate gap for a first pass, not a bug
+nobody noticed. Android has the API client and model (`DirectChannel.participants`,
+`BetweenUsApi.addDirectMember`) but no "add someone" screen yet.
 
 ## `/api/v1/statuses`
 

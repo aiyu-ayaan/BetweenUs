@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { disappearingWindowLabel, type Channel } from '@betweenus/shared-types';
+import { disappearingWindowLabel, type Channel, type UserSummary } from '@betweenus/shared-types';
 import { api } from '../../services/api';
-import { ClockIcon, MoreIcon, TrashIcon } from '../../components/icons';
+import { ClockIcon, MoreIcon, TrashIcon, UsersIcon } from '../../components/icons';
 import { DisappearingPicker } from '../../components/DisappearingPicker';
 import { pruneExpired, useChatStore } from '../../stores/chat';
 import { useAuthStore } from '../../stores/auth';
@@ -22,7 +22,9 @@ export function ChannelMenu({ channel }: { channel: Channel }): JSX.Element {
   const [open, setOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [windows, setWindows] = useState(false);
+  const [adding, setAdding] = useState(false);
   const box = useRef<HTMLDivElement>(null);
+  const isDirect = channel.type === 'DM';
 
   useEffect(() => {
     if (!open) return undefined;
@@ -66,6 +68,25 @@ export function ChannelMenu({ channel }: { channel: Channel }): JSX.Element {
           aria-label="Channel options"
           className="absolute end-0 top-full z-50 mt-1 w-56 animate-pop overflow-hidden rounded-xl border border-edge bg-surface-900 py-1 shadow-pop"
         >
+          {/* Only on a direct message: a server channel's members are the
+              server's, added from server settings under a permission - this
+              conversation has no such gate. Any current member may add
+              another, the same trust a 1:1 already runs on. */}
+          {isDirect && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                setAdding(true);
+              }}
+              className="flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-start text-sm text-slate-200 transition-colors duration-150 hover:bg-white/[0.07]"
+            >
+              <UsersIcon className="h-4 w-4" />
+              Add someone
+            </button>
+          )}
+
           {/* Above "clear chat", because it is the same subject arrived at
               from the other end: one draws a line once, the other keeps
               drawing it. Both belong to the conversation somebody is looking
@@ -98,11 +119,137 @@ export function ChannelMenu({ channel }: { channel: Channel }): JSX.Element {
         </div>
       )}
 
+      {adding && <AddDirectMemberDialog channel={channel} onClose={() => setAdding(false)} />}
+
       {windows && <DisappearingDialog channel={channel} onClose={() => setWindows(false)} />}
 
       {confirming && (
         <ClearChatDialog channel={channel} onClose={() => setConfirming(false)} />
       )}
+    </div>
+  );
+}
+
+/**
+ * Brings a friend into this conversation. Any current member may - the
+ * product decision here is the same one a 1:1 already runs on: either side
+ * of a conversation could always say anything to the other outside it
+ * anyway, so there is no approval step to invent. Gated the same way opening
+ * a 1:1 is, on the server: the person added has to be a friend of whoever
+ * added them.
+ */
+function AddDirectMemberDialog({
+  channel,
+  onClose,
+}: {
+  channel: Channel;
+  onClose: () => void;
+}): JSX.Element {
+  const trap = useFocusTrap<HTMLDivElement>();
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<UserSummary[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  useEffect(() => {
+    const escape = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape' && !busy) onClose();
+    };
+    document.addEventListener('keydown', escape);
+    return () => document.removeEventListener('keydown', escape);
+  }, [busy, onClose]);
+
+  const find = (value: string): void => {
+    setQuery(value);
+    setNote(null);
+    if (value.trim().length < 2) {
+      setResults([]);
+      return;
+    }
+    void api
+      .searchUsers(value.trim(), true)
+      .then(setResults)
+      .catch(() => setResults([]));
+  };
+
+  const add = async (person: UserSummary): Promise<void> => {
+    setBusy(true);
+    setNote(null);
+    try {
+      await api.addDirectMember(channel.id, person.id);
+      // The realtime event this publishes refreshes everybody's direct-message
+      // list, including this one's - nothing further to do here but say so.
+      setNote(`${person.displayName || person.username} is in the conversation.`);
+      setQuery('');
+      setResults([]);
+    } catch (error) {
+      setNote(error instanceof Error ? error.message : 'That person could not be added');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 px-4"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !busy) onClose();
+      }}
+    >
+      <div
+        ref={trap}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="add-direct-member-title"
+        className="w-full max-w-md animate-pop rounded-2xl border border-edge bg-surface-900 p-6 shadow-pop"
+      >
+        <h2 id="add-direct-member-title" className="text-lg font-semibold text-slate-50">
+          Add someone
+        </h2>
+        <p className="mt-2 text-sm text-slate-400">
+          Your friends only - this brings them into the conversation without asking anybody's
+          permission first, so it is not a thing to do to somebody who is not expecting it.
+        </p>
+
+        <input
+          value={query}
+          onChange={(event) => find(event.target.value)}
+          placeholder="Search your friends"
+          autoFocus
+          className="mt-4 w-full rounded-lg border border-edge bg-surface-950 px-3 py-2.5 text-slate-100 outline-none transition-colors focus:border-accent/60"
+        />
+
+        {results.length > 0 && (
+          <ul className="mt-2 max-h-52 divide-y divide-edge overflow-y-auto rounded-lg border border-edge">
+            {results.map((person) => (
+              <li key={person.id}>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void add(person)}
+                  className="flex w-full cursor-pointer items-center justify-between px-3 py-2 text-start text-sm text-slate-200 transition-colors duration-150 hover:bg-white/[0.07] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <span>{person.displayName || person.username}</span>
+                  <span className="text-xs text-slate-500">@{person.username}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {note && <p className="mt-3 text-sm text-slate-300">{note}</p>}
+
+        <div className="mt-6 flex justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={busy}
+            className="cursor-pointer rounded-md border border-edge px-4 py-2 text-sm text-slate-300 transition-colors duration-200 hover:border-slate-500 hover:text-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Done
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

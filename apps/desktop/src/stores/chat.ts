@@ -1060,13 +1060,16 @@ function notificationText(message: DecryptedMessage): string | null {
 
 /**
  * A direct message is a channel; the client only has to give it the shape the
- * rest of the app already knows, named after the person on the other end.
+ * rest of the app already knows, named after whoever else is in it. A 1:1 is
+ * named for the one other person; a group joins every other name, the way a
+ * group text reads in every messaging app that has one.
  */
 function toDirectChannel(direct: DirectChannel): Channel {
+  const names = direct.participants.map((person) => person.displayName || person.username);
   return {
     id: direct.channelId,
     serverId: null,
-    name: direct.participant.displayName || direct.participant.username,
+    name: names.join(', '),
     type: 'DM',
     topic: null,
     isPrivate: true,

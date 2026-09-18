@@ -54,8 +54,9 @@ export async function resolveChannelAccess(
   });
   if (!channel) return null;
 
-  // A direct message has no server to take a role from; being one of the two
-  // people on it is the whole of the authorization.
+  // A direct message has no server to take a role from; being one of the
+  // people on it is the whole of the authorization - one other person today,
+  // possibly more in a group, `ChannelMember` has never capped it at two.
   if (channel.serverId === null) {
     const seats = await prisma.channelMember.findMany({
       where: { channelId },
@@ -69,8 +70,15 @@ export async function resolveChannelAccess(
     // every sibling caller open. Null and not a 403 - the same answer a
     // stranger's channel id gets, because "you have been blocked" is not
     // something the far side asked to have announced.
-    const other = seats.find((seat) => seat.userId !== userId);
-    if (other && (await isBlockedBetween(userId, other.userId))) return null;
+    //
+    // Checked against every other member, not just the first one found: a
+    // group conversation is closed to this account the moment any one of its
+    // other members is on either side of a block with them, the same way a
+    // 1:1 already was before there could be more than one "other".
+    const others = seats.filter((seat) => seat.userId !== userId);
+    for (const other of others) {
+      if (await isBlockedBetween(userId, other.userId)) return null;
+    }
 
     return {
       channelId: channel.id,

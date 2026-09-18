@@ -724,6 +724,11 @@ object BetweenUsApi {
         DirectChannel.from(authed("POST", "/api/v1/dm", obj("userId" to userId)))
     }
 
+    /** Adds a friend to a conversation already in progress. Any current member may. */
+    suspend fun addDirectMember(channelId: String, userId: String): DirectChannel = io {
+        DirectChannel.from(authed("POST", "/api/v1/dm/$channelId/members", obj("userId" to userId)))
+    }
+
     // --- statuses ---
     //
     // A post that expires after a day, sealed the way a message is. What

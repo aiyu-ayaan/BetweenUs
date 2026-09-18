@@ -543,16 +543,36 @@ data class ChannelMember(val userId: String, val username: String, val displayNa
 }
 
 /** A direct message channel, named by the person on the other end of it. */
-data class DirectChannel(val channelId: String, val participant: UserSummary) {
+/**
+ * `ChannelMember` has never capped a conversation at two, so this is one or
+ * more other people in it - [participant] stays the first of them, the field
+ * every existing screen reads; [participants] is everyone else, for a group.
+ */
+data class DirectChannel(
+    val channelId: String,
+    val participant: UserSummary,
+    val participants: List<UserSummary>,
+) {
     fun toJson(): JSONObject = JSONObject()
         .put("channelId", channelId)
         .put("participant", participant.toJson())
+        .put(
+            "participants",
+            JSONArray().also { array -> participants.forEach { array.put(it.toJson()) } },
+        )
 
     companion object {
-        fun from(json: JSONObject) = DirectChannel(
-            channelId = json.getString("channelId"),
-            participant = UserSummary.from(json.getJSONObject("participant")),
-        )
+        fun from(json: JSONObject): DirectChannel {
+            val participant = UserSummary.from(json.getJSONObject("participant"))
+            val participants = json.optJSONArray("participants")
+                ?.let { array -> (0 until array.length()).map { UserSummary.from(array.getJSONObject(it)) } }
+                ?: listOf(participant)
+            return DirectChannel(
+                channelId = json.getString("channelId"),
+                participant = participant,
+                participants = participants,
+            )
+        }
     }
 }
 

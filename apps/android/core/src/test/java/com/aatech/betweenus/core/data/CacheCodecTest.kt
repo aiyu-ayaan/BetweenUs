@@ -91,7 +91,7 @@ class CacheCodecTest {
 
     @Test
     fun `direct channel and friend survive a round trip`() {
-        roundTrip(DirectChannel("c1", user), DirectChannel::toJson, DirectChannel::from)
+        roundTrip(DirectChannel("c1", user, listOf(user)), DirectChannel::toJson, DirectChannel::from)
         roundTrip(
             Friend(user, FriendshipStatus.PENDING, "incoming"),
             Friend::toJson,

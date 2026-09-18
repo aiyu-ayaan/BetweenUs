@@ -268,7 +268,7 @@ export class PushService implements OnModuleInit {
   private async onFriendChanged(payload: {
     userIds: string[];
     actorId?: string;
-    kind?: 'requested' | 'accepted' | 'removed';
+    kind?: 'requested' | 'accepted' | 'removed' | 'dm-member-added';
   }): Promise<void> {
     const { actorId, kind } = payload;
     if (!actorId || (kind !== 'requested' && kind !== 'accepted')) return;

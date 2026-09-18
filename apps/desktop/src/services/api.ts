@@ -717,6 +717,13 @@ export const api = {
   openDirectChannel: (userId: string): Promise<DirectChannel> =>
     request('/api/v1/dm', { method: 'POST', body: JSON.stringify({ userId }) }),
 
+  /** Adds a friend to a conversation already in progress. Any current member may. */
+  addDirectMember: (channelId: string, userId: string): Promise<DirectChannel> =>
+    request(`/api/v1/dm/${channelId}/members`, {
+      method: 'POST',
+      body: JSON.stringify({ userId }),
+    }),
+
   // --- End-to-end encryption key directory ---
 
   registerDeviceKey: (body: RegisterDeviceKeyRequest): Promise<DeviceKey> =>

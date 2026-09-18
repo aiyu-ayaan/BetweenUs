@@ -286,11 +286,16 @@ export class FriendsService {
 
     return channels
       .map((channel) => {
-        const other = channel.members.find((member) => member.userId !== userId);
-        if (!other || hidden.has(other.userId)) return null;
+        // Every other member, not just the first one found - a group DM has
+        // more than one, and dropping the rest silently showed the whole
+        // conversation under one arbitrary name.
+        const [first, ...rest] = channel.members.filter((member) => member.userId !== userId);
+        const others = first ? [first, ...rest] : [];
+        if (!first || others.some((other) => hidden.has(other.userId))) return null;
         return {
           channelId: channel.id,
-          participant: toSummary(other.user),
+          participant: toSummary(first.user),
+          participants: others.map((other) => toSummary(other.user)),
           createdAt: channel.createdAt.toISOString(),
         };
       })
@@ -314,13 +319,17 @@ export class FriendsService {
       });
     }
 
-    const existing = await prisma.channel.findFirst({
+    // Exactly two members, not just "both of these two are somewhere in it":
+    // a group DM the pair happen to share is not the 1:1 either of them would
+    // mean by opening a conversation with the other by name.
+    const candidates = await prisma.channel.findMany({
       where: {
         type: 'DM',
         AND: [{ members: { some: { userId } } }, { members: { some: { userId: otherUserId } } }],
       },
       include: { members: { include: { user: true } } },
     });
+    const existing = candidates.find((candidate) => candidate.members.length === 2);
 
     const channel =
       existing ??
@@ -348,6 +357,92 @@ export class FriendsService {
     return {
       channelId: channel.id,
       participant: toSummary(other.user),
+      participants: [toSummary(other.user)],
+      createdAt: channel.createdAt.toISOString(),
+    };
+  }
+
+  /**
+   * Adds someone to a conversation already in progress. Any current member
+   * may - the same trust a 1:1 already runs on, since either side of one
+   * could always say anything to the other outside it anyway. Gated the same
+   * way starting a 1:1 is: the person being added has to be a friend of
+   * whoever is adding them, so this stays "bring in your people" and not a
+   * way to put a message in front of a stranger.
+   */
+  async addDirectMember(
+    actorId: string,
+    channelId: string,
+    newUserId: string,
+  ): Promise<DirectChannel> {
+    const channel = await prisma.channel.findUnique({
+      where: { id: channelId },
+      include: { members: { include: { user: true } } },
+    });
+    if (!channel || channel.type !== 'DM' || !channel.members.some((m) => m.userId === actorId)) {
+      // The same answer a channel that does not exist gets: a non-member has
+      // no more business learning this one does than learning any other does.
+      throw new NotFoundException({ code: 'CHANNEL_NOT_FOUND', message: 'Channel not found' });
+    }
+
+    if (newUserId === actorId || channel.members.some((m) => m.userId === newUserId)) {
+      // Already true, so the caller's request is satisfied rather than refused.
+      const [first, ...rest] = channel.members.filter((m) => m.userId !== actorId);
+      if (!first) {
+        throw new NotFoundException({ code: 'CHANNEL_NOT_FOUND', message: 'Channel not found' });
+      }
+      return {
+        channelId: channel.id,
+        participant: toSummary(first.user),
+        participants: [first, ...rest].map((m) => toSummary(m.user)),
+        createdAt: channel.createdAt.toISOString(),
+      };
+    }
+
+    if (await isBlockedBetween(actorId, newUserId)) {
+      throw new NotFoundException({ code: 'USER_NOT_FOUND', message: 'No such user' });
+    }
+    const friendship = await this.require(actorId, newUserId);
+    if (friendship.status !== 'ACCEPTED') {
+      throw new ForbiddenException({
+        code: 'NOT_FRIENDS',
+        message: 'You can only add people you are friends with',
+      });
+    }
+    // Forcing two blocked people into the same room is not something adding a
+    // third person should be able to do to either of them.
+    for (const member of channel.members) {
+      if (await isBlockedBetween(newUserId, member.userId)) {
+        throw new ForbiddenException({
+          code: 'BLOCKED',
+          message: 'That person cannot be added to this conversation',
+        });
+      }
+    }
+
+    await prisma.channelMember.create({ data: { channelId, userId: newUserId } });
+
+    const memberIds = [...channel.members.map((m) => m.userId), newUserId];
+    // Reuses the wire event every client already refetches its direct-message
+    // list on, rather than adding a second one that says the same thing.
+    await this.events.publish(EVENTS.FRIEND_CHANGED, {
+      userIds: memberIds,
+      actorId,
+      kind: 'dm-member-added',
+    });
+
+    const newUser = await prisma.user.findUniqueOrThrow({ where: { id: newUserId } });
+    const [first, ...rest] = [...channel.members.map((m) => m.user), newUser].filter(
+      (user) => user.id !== actorId,
+    );
+    if (!first) {
+      throw new NotFoundException({ code: 'CHANNEL_NOT_FOUND', message: 'Channel not found' });
+    }
+    const others = [first, ...rest];
+    return {
+      channelId: channel.id,
+      participant: toSummary(first),
+      participants: others.map(toSummary),
       createdAt: channel.createdAt.toISOString(),
     };
   }

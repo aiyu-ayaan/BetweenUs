@@ -1250,14 +1250,31 @@ export interface SendFriendRequestRequest {
   username: string;
 }
 
-/** A direct message channel, named by the person on the other end of it. */
+/**
+ * A direct message channel. `ChannelMember` has always been a generic
+ * allowlist with nothing capping it at two, so this is one conversation with
+ * one or more other people in it - a 1:1 today, a group tomorrow, with no
+ * schema change between them.
+ */
 export interface DirectChannel {
   channelId: string;
+  /**
+   * The first other member. For a 1:1 this is the whole conversation and the
+   * field every existing client reads; for a group, see `participants` for
+   * everyone else in it.
+   */
   participant: UserSummary;
+  /** Every other member of the conversation, in no particular order. */
+  participants: UserSummary[];
   createdAt: string;
 }
 
 export interface OpenDirectChannelRequest {
+  userId: string;
+}
+
+/** Adds someone to a conversation already in progress. Any current member may. */
+export interface AddDirectMemberRequest {
   userId: string;
 }
 

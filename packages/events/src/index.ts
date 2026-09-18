@@ -219,7 +219,7 @@ export interface EventPayloads {
   [EVENTS.FRIEND_CHANGED]: {
     userIds: string[];
     actorId?: string;
-    kind?: 'requested' | 'accepted' | 'removed';
+    kind?: 'requested' | 'accepted' | 'removed' | 'dm-member-added';
   };
   [EVENTS.STATUS_CHANGED]: {
     /** Everyone who should re-read their tray: the author's friends, and the author. */

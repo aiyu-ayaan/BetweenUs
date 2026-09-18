@@ -44,6 +44,7 @@ class QuickSwitcherTest {
     private fun direct(id: String, name: String) = DirectChannel(
         channelId = id,
         participant = UserSummary(name, name, name, null),
+        participants = listOf(UserSummary(name, name, name, null)),
     )
 
     private val servers = listOf(server("s1", "Workshop"), server("s2", "Garden"))

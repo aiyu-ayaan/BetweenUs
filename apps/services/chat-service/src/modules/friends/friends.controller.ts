@@ -13,6 +13,7 @@ import {
 import { IsString, IsUUID, Length } from 'class-validator';
 import { CurrentUser, JwtAuthGuard, type AuthenticatedUser } from '@betweenus/auth';
 import type {
+  AddDirectMemberRequest,
   BlockedUser,
   BlockUserRequest,
   DirectChannel,
@@ -30,6 +31,11 @@ export class SendFriendRequestDto implements SendFriendRequestRequest {
 }
 
 export class OpenDirectChannelDto implements OpenDirectChannelRequest {
+  @IsUUID()
+  userId!: string;
+}
+
+export class AddDirectMemberDto implements AddDirectMemberRequest {
   @IsUUID()
   userId!: string;
 }
@@ -137,5 +143,15 @@ export class DirectChannelsController {
     @Body() dto: OpenDirectChannelDto,
   ): Promise<DirectChannel> {
     return this.friends.openDirectChannel(user.id, dto.userId);
+  }
+
+  /** Any current member may add another - see `FriendsService.addDirectMember`. */
+  @Post(':channelId/members')
+  addMember(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('channelId', ParseUUIDPipe) channelId: string,
+    @Body() dto: AddDirectMemberDto,
+  ): Promise<DirectChannel> {
+    return this.friends.addDirectMember(user.id, channelId, dto.userId);
   }
 }
