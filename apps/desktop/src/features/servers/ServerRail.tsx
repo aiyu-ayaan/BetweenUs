@@ -17,10 +17,10 @@ interface RailItem {
 }
 
 const SHOWCASE_SERVERS: RailItem[] = [
-  { id: 'bu-server', name: 'BetweenUs HQ' },
-  { id: 'os-server', name: 'Open Source', badge: 3 },
-  { id: 'rt-server', name: 'Realtime Labs' },
-  { id: 'cg-server', name: 'CodeGraph' },
+  { id: 'server-bu', name: 'BU' },
+  { id: 'server-os', name: 'OS', badge: 3 },
+  { id: 'server-rt', name: 'RT' },
+  { id: 'server-cg', name: 'CG' },
 ];
 
 export function ServerRail({ className }: { className?: string } = {}): JSX.Element {
@@ -31,6 +31,7 @@ export function ServerRail({ className }: { className?: string } = {}): JSX.Elem
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const [invited, setInvited] = useState<string | null>(null);
+  const [selectedRailId, setSelectedRailId] = useState<string>('betweenus-hq');
 
   useEffect(() => {
     const code = pendingInvite();
@@ -61,37 +62,38 @@ export function ServerRail({ className }: { className?: string } = {}): JSX.Elem
     }
   };
 
-  // Primary active server is either real active server or the first server
-  const isPrimaryActive = view === 'server' && (activeServerId === servers[0]?.id || !activeServerId);
+  // BetweenUs HQ is active when in server view and either it is selected or primary
+  const isPrimaryActive = view === 'server' && (selectedRailId === 'betweenus-hq' || !activeServerId);
 
   return (
     <nav
       aria-label="Servers"
-      className={`flex w-16 shrink-0 flex-col items-center gap-1.5 overflow-y-auto overflow-x-hidden bg-[#0b0f19] py-2 ${className ?? ''}`}
+      className={`relative flex w-16 shrink-0 flex-col items-center gap-1.5 overflow-y-auto bg-[#0b0f19] py-2.5 ${className ?? ''}`}
     >
-      {/* Top BetweenUs HQ Master Button */}
+      {/* Top BetweenUs HQ Master Button with Active Ring & Marker */}
       <RailButton
         label="BetweenUs HQ"
         active={isPrimaryActive}
         onClick={() => {
-          if (servers[0]) {
-            void selectServer(servers[0].id);
-          } else {
-            useChatStore.setState({ view: 'server' });
-          }
+          setSelectedRailId('betweenus-hq');
+          useChatStore.setState({ view: 'server' });
+          if (servers[0]) void selectServer(servers[0].id);
         }}
-        activeClasses="bg-accent text-white shadow-lg shadow-accent/25 rounded-2xl"
+        activeClasses="bg-accent text-white shadow-lg shadow-accent/30 rounded-2xl ring-2 ring-accent ring-offset-2 ring-offset-[#0b0f19]"
         shape="rounded-2xl"
       >
-        <BetweenUsLogoIcon className="h-6 w-6" />
+        <BetweenUsLogoIcon className="h-6 w-6 text-white" />
       </RailButton>
 
       {/* Direct Messages Icon */}
       <RailButton
         label="Direct messages"
-        active={view === 'home'}
-        onClick={showHome}
-        activeClasses="bg-accent/20 text-accent rounded-2xl"
+        active={view === 'home' || selectedRailId === 'home'}
+        onClick={() => {
+          setSelectedRailId('home');
+          showHome();
+        }}
+        activeClasses="bg-accent text-white shadow-lg shadow-accent/25 rounded-2xl ring-2 ring-accent ring-offset-2 ring-offset-[#0b0f19]"
         shape="rounded-2xl"
       >
         <MessageIcon className="h-5 w-5" />
@@ -99,42 +101,47 @@ export function ServerRail({ className }: { className?: string } = {}): JSX.Elem
 
       <hr className="my-1 w-8 border-t border-edge/60" />
 
-      {/* Real Servers from Store if multiple exist, else showcase items */}
+      {/* Real Servers or Showcase Servers (BU, OS, RT, CG) */}
       {servers.length > 1
-        ? servers.slice(1).map((server) => (
-            <RailButton
-              key={server.id}
-              label={server.name}
-              active={view === 'server' && server.id === activeServerId}
-              onClick={() => void selectServer(server.id)}
-              activeClasses="bg-accent text-white rounded-2xl"
-              shape="rounded-full hover:rounded-2xl"
-            >
-              <ServerIcon server={server} size="rail" />
-            </RailButton>
-          ))
-        : SHOWCASE_SERVERS.map((item, idx) => (
-            <RailButton
-              key={item.id}
-              label={item.name}
-              active={view === 'server' && idx === 0 && !activeServerId}
-              badge={item.badge}
-              onClick={() => {
-                if (servers[0]) void selectServer(servers[0].id);
-              }}
-              activeClasses="bg-accent text-white rounded-2xl"
-              shape="rounded-full hover:rounded-2xl"
-            >
-              <span className="text-xs font-semibold tracking-wider">
-                {item.name
-                  .split(/\s+/)
-                  .map((w) => w[0])
-                  .join('')
-                  .slice(0, 2)
-                  .toUpperCase()}
-              </span>
-            </RailButton>
-          ))}
+        ? servers.slice(1).map((server) => {
+            const isActive = view === 'server' && (activeServerId === server.id || selectedRailId === server.id);
+            return (
+              <RailButton
+                key={server.id}
+                label={server.name}
+                active={isActive}
+                onClick={() => {
+                  setSelectedRailId(server.id);
+                  void selectServer(server.id);
+                }}
+                activeClasses="bg-accent text-white rounded-2xl ring-2 ring-accent ring-offset-2 ring-offset-[#0b0f19]"
+                shape="rounded-full hover:rounded-2xl"
+              >
+                <ServerIcon server={server} size="rail" />
+              </RailButton>
+            );
+          })
+        : SHOWCASE_SERVERS.map((item) => {
+            const isActive = view === 'server' && selectedRailId === item.id;
+            return (
+              <RailButton
+                key={item.id}
+                label={item.name}
+                active={isActive}
+                badge={item.badge}
+                onClick={() => {
+                  setSelectedRailId(item.id);
+                  useChatStore.setState({ view: 'server' });
+                }}
+                activeClasses="bg-accent text-white rounded-2xl ring-2 ring-accent ring-offset-2 ring-offset-[#0b0f19]"
+                shape="rounded-full hover:rounded-2xl"
+              >
+                <span className="text-xs font-bold tracking-wider text-inherit">
+                  {item.name}
+                </span>
+              </RailButton>
+            );
+          })}
 
       {/* Add Server Button */}
       <RailButton
@@ -254,11 +261,11 @@ function RailButton({
 }): JSX.Element {
   return (
     <div className="group relative flex w-full justify-center my-0.5">
-      {/* Active side indicator marker */}
+      {/* Active side indicator marker - explicitly pinned to left-0 */}
       <span
         aria-hidden="true"
-        className={`absolute -start-0.5 top-1/2 w-[3px] -translate-y-1/2 rounded-full bg-accent transition-[height,opacity] duration-200 ease-out ${
-          active ? 'h-7 opacity-100' : 'h-2.5 opacity-0 group-hover:opacity-60'
+        className={`absolute left-0 top-1/2 w-1.5 -translate-y-1/2 rounded-r-full bg-white shadow-[0_0_8px_rgba(255,255,255,0.9)] transition-all duration-200 ease-out ${
+          active ? 'h-8 opacity-100 scale-100' : 'h-2 opacity-0 scale-75 group-hover:h-4 group-hover:opacity-60 group-hover:scale-100'
         }`}
       />
       <button
@@ -267,7 +274,7 @@ function RailButton({
         title={label}
         aria-label={label}
         aria-current={active ? 'true' : undefined}
-        className={`relative flex h-11 w-11 cursor-pointer items-center justify-center overflow-visible transition-all duration-200 focus:outline-none active:scale-[0.96] ${shape} ${
+        className={`relative flex h-11 w-11 cursor-pointer items-center justify-center transition-all duration-200 focus:outline-none active:scale-[0.96] ${shape} ${
           active
             ? activeClasses
             : `bg-surface-800/80 hover:bg-accent/20 hover:text-white ${idleTextClasses}`

@@ -63,7 +63,7 @@ const DEFAULT_TEXT_CHANNELS = [
 export function ChannelSidebar({
   onOpenUserSettings,
   onOpenServerSettings,
-  className = 'w-64',
+  className = 'w-60',
 }: {
   onOpenUserSettings: () => void;
   onOpenServerSettings: () => void;
@@ -108,7 +108,7 @@ export function ChannelSidebar({
         }}
       />
 
-      <nav aria-label="Channels" className="min-h-0 flex-1 overflow-y-auto px-2.5 pb-2">
+      <nav aria-label="Channels" className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
         {/* Text Channels Section */}
         <SectionHeading
           label="TEXT CHANNELS"
@@ -157,34 +157,33 @@ export function ChannelSidebar({
           addLabel="Create voice channel"
         />
 
-        <div className="space-y-1">
-          {/* Active Lounge Room with Speaking Tree */}
-          <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-2 shadow-sm">
-            <div className="flex items-center justify-between text-xs font-semibold text-emerald-400">
-              <span className="flex items-center gap-1.5">
-                <SpeakerIcon className="h-3.5 w-3.5 text-emerald-400" />
-                Lounge
+        <div className="space-y-0.5">
+          {/* Lounge Channel Row */}
+          <div className="group">
+            <button
+              type="button"
+              className="flex w-full cursor-pointer items-center justify-between rounded-lg px-2.5 py-1.5 text-start text-[13px] font-medium text-emerald-400 transition-colors duration-150 hover:bg-white/[0.05]"
+            >
+              <span className="flex items-center gap-2 min-w-0">
+                <SpeakerIcon className="h-4 w-4 shrink-0 text-emerald-400" />
+                <span className="truncate">Lounge</span>
               </span>
               <span className="font-mono text-[11px] text-emerald-400/80">[3/8]</span>
-            </div>
-            <div className="mt-2 space-y-1.5 ps-2">
-              <div className="flex items-center gap-2 text-xs font-medium text-emerald-300">
-                <span className="relative flex h-2 w-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
-                </span>
-                <span>aiyu (speaking)</span>
+            </button>
+
+            {/* Speaking Participants in Lounge */}
+            <div className="space-y-0.5 ps-7 pt-0.5 pb-1">
+              <div className="flex items-center gap-2 py-0.5 text-xs font-medium text-slate-200">
+                <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+                <span className="truncate">aiyu (speaking)</span>
               </div>
-              <div className="flex items-center gap-2 text-xs font-medium text-emerald-300">
-                <span className="relative flex h-2 w-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
-                </span>
-                <span>alex (speaking)</span>
+              <div className="flex items-center gap-2 py-0.5 text-xs font-medium text-slate-200">
+                <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+                <span className="truncate">alex (speaking)</span>
               </div>
-              <div className="flex items-center gap-2 text-xs text-slate-400">
-                <span className="h-2 w-2 rounded-full bg-slate-500" />
-                <span>sophia</span>
+              <div className="flex items-center gap-2 py-0.5 text-xs text-slate-400">
+                <span className="h-2 w-2 shrink-0 rounded-full bg-slate-500" />
+                <span className="truncate">sophia</span>
               </div>
             </div>
           </div>
@@ -214,7 +213,7 @@ export function ChannelSidebar({
         {/* Direct Messages Section */}
         <SectionHeading label="DIRECT MESSAGES" />
 
-        <div className="space-y-1 pt-0.5">
+        <div className="space-y-0.5 pt-0.5">
           {SHOWCASE_DMS.map((dm) => (
             <div
               key={dm.name}
@@ -340,7 +339,7 @@ function SectionHeading({
   addLabel?: string;
 }): JSX.Element {
   return (
-    <div className="flex items-center justify-between px-1 pb-1.5 pt-3.5">
+    <div className="flex items-center justify-between px-1 pb-1 pt-3.5">
       <span className="text-[11px] font-bold tracking-wider text-slate-400">{label}</span>
       {onAdd && (
         <button

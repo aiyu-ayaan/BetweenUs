@@ -45,9 +45,9 @@ export function TopBar({
         : 'BetweenUs HQ / #general';
 
   return (
-    <header className="drag-region hidden md:flex h-10 shrink-0 items-center justify-between border-b border-edge/60 bg-surface-950/80 px-2.5 backdrop-blur-md">
-      {/* Brand mark and navigation tabs */}
-      <div className={`flex items-center gap-2 ${isMac ? 'ps-[72px]' : 'ps-1'}`}>
+    <header className="drag-region hidden md:flex h-11 shrink-0 items-center justify-between border-b border-edge/60 bg-surface-950 px-3 backdrop-blur-md">
+      {/* Brand mark, sidebar toggle, and navigation tabs */}
+      <div className={`flex items-center gap-2 shrink-0 ${isMac ? 'ps-[72px]' : 'ps-0.5'}`}>
         <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent text-white shadow-md shadow-accent/20">
           <BetweenUsLogoIcon className="h-4 w-4" />
         </div>
@@ -55,8 +55,15 @@ export function TopBar({
           BetweenUs
         </span>
 
+        {/* Sidebar Toggle placed safely on left */}
+        <LayoutToggle
+          label={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
+          on={sidebarOpen}
+          onClick={onToggleSidebar}
+        />
+
         {/* View Switcher Tabs */}
-        <nav aria-label="Workspaces" className="ms-2 hidden lg:flex items-center gap-0.5 rounded-lg border border-edge bg-white/[0.02] p-0.5">
+        <nav aria-label="Workspaces" className="ms-1 hidden lg:flex items-center gap-0.5 rounded-lg border border-edge bg-white/[0.02] p-0.5">
           <button
             type="button"
             onClick={() => onTabChange?.('workbench')}
@@ -101,7 +108,7 @@ export function TopBar({
         <button
           type="button"
           onClick={onOpenSwitcher}
-          className="no-drag group flex h-7 w-full max-w-md cursor-pointer items-center gap-2 rounded-lg border border-edge bg-white/[0.03] px-2.5 text-[13px] text-slate-400 transition-colors duration-150 hover:border-white/10 hover:bg-white/[0.06] hover:text-slate-200"
+          className="no-drag group flex h-7 w-full max-w-sm cursor-pointer items-center gap-2 rounded-lg border border-edge bg-white/[0.03] px-2.5 text-[13px] text-slate-400 transition-colors duration-150 hover:border-white/10 hover:bg-white/[0.06] hover:text-slate-200"
         >
           <SearchIcon className="h-3.5 w-3.5 shrink-0 text-slate-400 group-hover:text-slate-200" aria-hidden="true" />
           <span className="min-w-0 truncate">{here}</span>
@@ -111,8 +118,8 @@ export function TopBar({
         </button>
       </div>
 
-      {/* Right Telemetry & Actions */}
-      <div className="flex items-center gap-2 shrink-0 pe-2">
+      {/* Right Telemetry & Actions with ample spacing from Windows Window Controls */}
+      <div className="flex items-center gap-2 shrink-0">
         {/* WebRTC Mesh Latency Beacon */}
         <div className="flex items-center gap-1.5 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-400 select-none shadow-sm">
           <span className="relative flex h-2 w-2">
@@ -143,15 +150,11 @@ export function TopBar({
           <SettingsIcon className="h-4 w-4" />
         </button>
 
-        {/* Layout Toggle */}
-        <LayoutToggle
-          label={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
-          on={sidebarOpen}
-          onClick={onToggleSidebar}
+        {/* Dedicated Window Controls safe zone on Windows (140px min width) */}
+        <div
+          aria-hidden="true"
+          className={`shrink-0 pointer-events-none select-none ${isMac ? 'w-2' : 'w-[140px]'}`}
         />
-
-        {/* Overlay gap for Electron */}
-        <div className={`hidden shrink-0 md:block ${isMac ? 'w-4' : 'w-24'}`} />
       </div>
     </header>
   );
