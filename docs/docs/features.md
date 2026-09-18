@@ -29,6 +29,7 @@ import useBaseUrl from '@docusaurus/useBaseUrl';
 | **Remote Desktop Control** | 🖥️ Agent & Controller | 🎮 Controller Only | 👁️ Viewer Only |
 | **Moments (24h Ephemeral Stories)** | ✅ Full Support | ✅ Full Support | ✅ Full Support |
 | **Multi-Theme Engine (16 Themes)** | ✅ 16 Themes + Accents | ✅ 16 Themes + Accents | ✅ 16 Themes + Material You |
+| **Server Rail Folders** | ✅ Collapsible, per machine | ✅ Collapsible, per machine | ➖ Flat rail |
 | **Granular Server RBAC & Roles** | ✅ Full Administration | ✅ Full Administration | ✅ Member Views |
 | **E2EE Key Backup & Machine Revocation** | ✅ Full Device Registry | ✅ Full Device Registry | ✅ Passphrase Backup |
 
@@ -174,6 +175,11 @@ BetweenUs provides a customizable appearance system with **16 curated themes**, 
 - **Material You Dynamic Theming**: On Android, accent tones and container surfaces adapt to your wallpaper color palette.
 - **Interface Density Scaling**: Adjust typography and element padding between *Compact*, *Cozy*, and *Roomy*.
 - **OS Theme Auto-Sync**: Automatically switch between Daylight and dark themes based on your operating system preferences.
+- **Server Rail Folders**: Group servers into named, collapsible folders in the rail. A collapsed folder still carries the unread badge of everything inside it, so folding a server away never hides that it wants you.
+
+:::note Personalization stays on your machine
+Themes, accent, density, per-person call volumes and rail folders are all stored locally on the installation that set them — never on the server. Two members of the same server have no reason to agree on what a folder is called or where it sits, so none of these add a column, an endpoint or an event, and nothing another account does can rearrange your rail.
+:::
 
 ---
 
