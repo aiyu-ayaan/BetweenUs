@@ -100,6 +100,15 @@ class CacheCodecTest {
     }
 
     @Test
+    fun `a blocked entry survives a round trip`() {
+        roundTrip(
+            BlockedUser(user, "2026-09-18T10:00:00.000Z"),
+            BlockedUser::toJson,
+            BlockedUser::from,
+        )
+    }
+
+    @Test
     fun `a voice note survives a round trip, waveform and all`() {
         val voice = MessageAttachment(
             key = "k1",

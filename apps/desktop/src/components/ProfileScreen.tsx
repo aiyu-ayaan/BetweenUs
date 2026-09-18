@@ -14,7 +14,7 @@
  */
 import { useEffect } from 'react';
 import { create } from 'zustand';
-import type { PresenceStatus } from '@betweenus/shared-types';
+import { handleOf, type PresenceStatus } from '@betweenus/shared-types';
 import { usePresenceStore } from '../stores/presence';
 import { useChatStore } from '../stores/chat';
 import { profilePresence } from '../services/last-seen';
@@ -130,7 +130,14 @@ function Screen({ person }: { person: ProfilePerson }): JSX.Element {
           >
             {person.displayName}
           </h2>
-          <p className="text-sm text-slate-400">@{member?.username ?? person.username}</p>
+          {handleOf({
+            username: member?.username ?? person.username,
+            displayName: person.displayName,
+          }) && (
+            <p className="text-sm text-slate-400">
+              @{member?.username ?? person.username}
+            </p>
+          )}
           <p className="mt-2 text-xs text-slate-400">
             {profilePresence(status as PresenceStatus, lastSeenAt)}
           </p>

@@ -7,7 +7,7 @@ import {
   LAST_SEEN_VISIBILITIES,
   type LastSeenVisibility,
 } from '@betweenus/shared-types';
-import type { ActiveStatus, DeviceKey, StatusPrivacy } from '@betweenus/shared-types';
+import { handleOf, labelOf, type ActiveStatus, type DeviceKey, type StatusPrivacy } from '@betweenus/shared-types';
 import { useAuthStore } from '../../stores/auth';
 import { useChatStore } from '../../stores/chat';
 import { usePresenceStore } from '../../stores/presence';
@@ -797,11 +797,13 @@ function MomentsSection({ onBack }: { onBack: () => void }): JSX.Element {
                             ringColour="border-surface-950"
                           />
                           <span className="min-w-0 flex-1 truncate text-sm text-slate-200">
-                            {friend.user.displayName}
+                            {labelOf(friend.user)}
                           </span>
-                          <span className="shrink-0 truncate text-xs text-slate-500">
-                            @{friend.user.username}
-                          </span>
+                          {handleOf(friend.user) && (
+                            <span className="shrink-0 truncate text-xs text-slate-500">
+                              {handleOf(friend.user)}
+                            </span>
+                          )}
                         </label>
                       </li>
                     );

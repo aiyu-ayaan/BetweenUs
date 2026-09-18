@@ -11,6 +11,7 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import com.aatech.betweenus.core.data.BlockedUser
 import com.aatech.betweenus.core.data.Channel
 import com.aatech.betweenus.core.data.DirectChannel
 import com.aatech.betweenus.core.data.Friend
@@ -221,6 +222,11 @@ object Cache {
 
     fun putFriends(friends: List<Friend>) =
         writeList("friends", jsonArrayOfObjects(friends) { it.toJson() })
+
+    suspend fun blocked(): List<BlockedUser>? = readList("blocked") { BlockedUser.from(it) }
+
+    fun putBlocked(blocked: List<BlockedUser>) =
+        writeList("blocked", jsonArrayOfObjects(blocked) { it.toJson() })
 
     suspend fun members(): Map<String, List<ServerMember>>? =
         readMap("members") { array -> array.map { ServerMember.from(it) } }

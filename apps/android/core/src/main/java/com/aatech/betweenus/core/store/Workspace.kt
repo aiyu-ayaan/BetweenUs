@@ -50,10 +50,10 @@ object Workspace {
     /**
      * Everyone this account has blocked.
      *
-     * Not cached to disk, unlike the lists above. It is read on one settings
-     * screen rather than drawn on every frame, so the one round trip it costs
-     * to open that screen is cheaper than a codec and a round-trip test for a
-     * list nobody is waiting on.
+     * Cached to disk like the lists above, so opening the settings screen
+     * offline shows who is blocked rather than nothing at all. A stale entry
+     * here is harmless in a way a stale presence is not: the block itself is
+     * enforced by the server, and this list only says what it is enforcing.
      */
     private val _blocked = MutableStateFlow<List<BlockedUser>>(emptyList())
     val blocked: StateFlow<List<BlockedUser>> = _blocked.asStateFlow()
@@ -161,6 +161,7 @@ object Workspace {
         Cache.channels()?.let { _channels.value = it }
         Cache.directChannels()?.let { _directChannels.value = it }
         Cache.friends()?.let { _friends.value = it }
+        Cache.blocked()?.let { _blocked.value = it }
         Cache.members()?.let { _members.value = it }
         Cache.unread()?.let { _unread.value = it }
     }
@@ -232,7 +233,10 @@ object Workspace {
     suspend fun loadBlocked() {
         // A deployment that has not been redeployed yet answers 404 here, and a
         // missing block list is not a reason for a settings screen to fail.
-        runCatching { BetweenUsApi.blocked() }.onSuccess { _blocked.value = it }
+        runCatching { BetweenUsApi.blocked() }.onSuccess {
+            _blocked.value = it
+            Cache.putBlocked(it)
+        }
     }
 
     /**
@@ -250,6 +254,7 @@ object Workspace {
         _directChannels.update { list -> list.filterNot { it.participant.id == userId } }
         Cache.putFriends(_friends.value)
         Cache.putDirectChannels(_directChannels.value)
+        Cache.putBlocked(_blocked.value)
         resubscribe()
     }
 
@@ -263,6 +268,7 @@ object Workspace {
     suspend fun unblock(userId: String) {
         BetweenUsApi.unblockUser(userId)
         _blocked.update { list -> list.filterNot { it.user.id == userId } }
+        Cache.putBlocked(_blocked.value)
         loadDirectChannels()
         loadFriends()
     }

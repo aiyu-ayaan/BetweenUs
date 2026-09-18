@@ -568,6 +568,10 @@ data class Friend(
  * other side is told.
  */
 data class BlockedUser(val user: UserSummary, val blockedAt: String) {
+    fun toJson(): JSONObject = JSONObject()
+        .put("user", user.toJson())
+        .put("blockedAt", blockedAt)
+
     companion object {
         fun from(json: JSONObject) = BlockedUser(
             user = UserSummary.from(json.getJSONObject("user")),

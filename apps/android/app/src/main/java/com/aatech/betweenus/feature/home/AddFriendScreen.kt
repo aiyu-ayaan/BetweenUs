@@ -40,6 +40,7 @@ import com.aatech.betweenus.ui.components.IconAction
 import com.aatech.betweenus.ui.components.ListRow
 import com.aatech.betweenus.ui.components.Notice
 import com.aatech.betweenus.ui.components.SectionLabel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -55,6 +56,9 @@ import kotlinx.coroutines.launch
  * friend is not a search result here at all, and a request already in flight is
  * shown with what it is waiting on rather than a button that would be refused.
  */
+/** How long typing has to stop before the search is sent. */
+private const val SEARCH_DEBOUNCE_MS = 250L
+
 @Composable
 fun AddFriendScreen(onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
@@ -77,6 +81,10 @@ fun AddFriendScreen(onBack: () -> Unit) {
             searching = false
             return@LaunchedEffect
         }
+        // Debounced by the effect itself: a keystroke cancels this coroutine
+        // before the delay is up, so only the term somebody stopped typing is
+        // ever asked for.
+        delay(SEARCH_DEBOUNCE_MS)
         searching = true
         results = runCatching { BetweenUsApi.searchUsers(term) }
             .onFailure { note = Session.messageOf(it) }

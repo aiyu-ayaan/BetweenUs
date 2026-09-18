@@ -1187,6 +1187,26 @@ export interface UserSummary {
   about: string;
 }
 
+/** What a person is called: their display name, or their username if they never set one. */
+export function labelOf(person: Pick<UserSummary, 'username' | 'displayName'>): string {
+  return person.displayName.trim() || person.username;
+}
+
+/**
+ * The "@name" line drawn under `labelOf`, or null when it would only repeat it.
+ *
+ * An account that never set a display name is shown once, not twice: "test"
+ * over "@test" is a row that looks like a rendering bug. Here rather than in
+ * each client because it is the same rule on every screen that draws a person -
+ * the Android client's `UserSummary.handle` is this, and the desktop used to
+ * draw both unconditionally.
+ */
+export function handleOf(person: Pick<UserSummary, 'username' | 'displayName'>): string | null {
+  const name = person.displayName.trim();
+  if (!name || name.toLowerCase() === person.username.toLowerCase()) return null;
+  return `@${person.username}`;
+}
+
 export type FriendshipStatus = 'PENDING' | 'ACCEPTED';
 
 export interface Friend {

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Friend } from '@betweenus/shared-types';
+import { handleOf, labelOf, type Friend } from '@betweenus/shared-types';
 import { useFriendsStore } from '../../stores/friends';
 import { usePresenceStore, useStatusOf } from '../../stores/presence';
 import { Avatar } from '../../components/Avatar';
@@ -222,12 +222,20 @@ function FriendList({
               ringColour="border-surface-900"
             />
             <div className="min-w-0 flex-1">
-              <p className="truncate font-semibold text-slate-100">{friend.user.displayName}</p>
-              <p className="truncate text-sm text-slate-400">
-                @{friend.user.username}
-                {friend.direction === 'incoming' && ' · Incoming request'}
-                {friend.direction === 'outgoing' && ' · Request sent'}
-              </p>
+              <p className="truncate font-semibold text-slate-100">{labelOf(friend.user)}</p>
+              {/* The handle is dropped when it only repeats the name above it,
+                  which leaves the direction on its own rather than a blank line. */}
+              {(handleOf(friend.user) || friend.direction) && (
+                <p className="truncate text-sm text-slate-400">
+                  {[
+                    handleOf(friend.user),
+                    friend.direction === 'incoming' ? 'Incoming request' : null,
+                    friend.direction === 'outgoing' ? 'Request sent' : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </p>
+              )}
             </div>
 
             <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
@@ -368,8 +376,10 @@ function AddFriend(): JSX.Element {
                   ringColour="border-surface-900"
                 />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold text-slate-100">{person.displayName}</p>
-                  <p className="truncate text-sm text-slate-400">@{person.username}</p>
+                  <p className="truncate font-semibold text-slate-100">{labelOf(person)}</p>
+                  {handleOf(person) && (
+                    <p className="truncate text-sm text-slate-400">{handleOf(person)}</p>
+                  )}
                 </div>
                 <IconButton
                   label={`Send a request to ${person.displayName}`}

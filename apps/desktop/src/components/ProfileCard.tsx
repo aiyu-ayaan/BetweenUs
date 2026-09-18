@@ -13,7 +13,7 @@
  * itself is identical either way, which is the point of it being one component.
  */
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import type { PresenceStatus } from '@betweenus/shared-types';
+import { handleOf, labelOf, type PresenceStatus } from '@betweenus/shared-types';
 import { usePresenceStore } from '../stores/presence';
 import { profilePresence } from '../services/last-seen';
 import { Avatar } from './Avatar';
@@ -229,9 +229,11 @@ export function ProfileCard({
           className="truncate text-[15px] font-semibold text-slate-50"
           style={person.colour ? { color: person.colour } : undefined}
         >
-          {person.displayName}
+          {labelOf(person)}
         </p>
-        <p className="truncate text-xs text-slate-400">@{person.username}</p>
+        {handleOf(person) && (
+          <p className="truncate text-xs text-slate-400">{handleOf(person)}</p>
+        )}
 
         <p className="mt-3 text-xs text-slate-400">{line}</p>
 
