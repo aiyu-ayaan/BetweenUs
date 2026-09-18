@@ -17,6 +17,7 @@ import type {
   Channel,
   ChannelMember,
   InvitePreview,
+  ServerAuditEntry,
   ServerCustomRole,
   ServerEmoji,
   ServerInvite,
@@ -79,6 +80,14 @@ export class ServersController {
     @Param('code') code: string,
   ): Promise<InvitePreview> {
     return this.servers.invitePreview(user.id, code);
+  }
+
+  @Get(':serverId/audit')
+  audit(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('serverId', ParseUUIDPipe) serverId: string,
+  ): Promise<ServerAuditEntry[]> {
+    return this.servers.audit(user.id, serverId);
   }
 
   @Get(':serverId/invites')

@@ -2,6 +2,7 @@ import { serverNow } from '../../services/server-clock';
 import { useEffect, useRef, useState } from 'react';
 import type {
   Channel,
+  ServerAuditEntry,
   ServerCustomRole,
   ServerEmoji,
   UpdateServerRoleRequest,
@@ -51,7 +52,15 @@ import { Webhooks } from './Webhooks';
 
 const isMac = typeof window !== 'undefined' && window.betweenus?.platform === 'darwin';
 
-type Section = 'overview' | 'roles' | 'members' | 'channels' | 'invites' | 'emoji' | 'webhooks';
+type Section =
+  | 'overview'
+  | 'roles'
+  | 'members'
+  | 'channels'
+  | 'invites'
+  | 'emoji'
+  | 'webhooks'
+  | 'audit';
 
 const SECTIONS: Array<{ id: Section; label: string; icon: typeof UsersIcon }> = [
   { id: 'overview', label: 'Overview', icon: ShieldIcon },
@@ -63,6 +72,7 @@ const SECTIONS: Array<{ id: Section; label: string; icon: typeof UsersIcon }> = 
   // A globe: a webhook is the one thing in this list that reaches in from
   // outside the deployment.
   { id: 'webhooks', label: 'Webhooks', icon: GlobeIcon },
+  { id: 'audit', label: 'Audit Log', icon: ShieldIcon },
 ];
 
 /**
@@ -198,6 +208,7 @@ export function ServerSettings({ onClose }: { onClose: () => void }): JSX.Elemen
           {section === 'invites' && <Invites />}
           {section === 'emoji' && <EmojiSection />}
           {section === 'webhooks' && <Webhooks />}
+          {section === 'audit' && <AuditLog />}
         </div>
 
         {/* Desktop Close ESC button */}
@@ -299,6 +310,75 @@ function DangerButton({ compact = false }: { compact?: boolean } = {}): JSX.Elem
             </div>
           </div>
         </div>
+      )}
+    </>
+  );
+}
+
+/**
+ * The append-only trail of moderation actions on this server - a role
+ * changed, a member removed, a role created/edited/deleted, the server's own
+ * settings. A realtime event reaches whoever is connected and is then gone;
+ * this is what answers "who did that, and when" afterwards.
+ */
+function AuditLog(): JSX.Element {
+  const servers = useChatStore((state) => state.servers);
+  const activeServerId = useChatStore((state) => state.activeServerId);
+  const server = servers.find((item) => item.id === activeServerId);
+  const [entries, setEntries] = useState<ServerAuditEntry[] | null>(null);
+  const [failure, setFailure] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!server) return;
+    let live = true;
+    setEntries(null);
+    setFailure(null);
+    void api
+      .serverAudit(server.id)
+      .then((rows) => {
+        if (live) setEntries(rows);
+      })
+      .catch((error: unknown) => {
+        if (live) setFailure(error instanceof Error ? error.message : 'That could not be loaded');
+      });
+    return () => {
+      live = false;
+    };
+  }, [server]);
+
+  return (
+    <>
+      <h1 className="text-xl font-semibold text-slate-50">Audit log</h1>
+      <p className="mt-1.5 text-sm text-slate-400">
+        Role changes, removals and server settings changes, newest first. Needs Manage Server.
+      </p>
+
+      {failure && <p className="mt-4 text-sm text-danger">{failure}</p>}
+      {!entries && !failure && <p className="mt-4 text-sm text-slate-400">Loading…</p>}
+      {entries && entries.length === 0 && (
+        <p className="mt-4 text-sm text-slate-400">Nothing has been logged yet.</p>
+      )}
+      {entries && entries.length > 0 && (
+        <ul className="mt-4 divide-y divide-edge">
+          {entries.map((entry) => (
+            <li key={entry.id} className="py-3 text-sm">
+              <p className="text-slate-200">
+                <span className="font-medium">{entry.actorLabel ?? 'a deleted account'}</span>
+                {' — '}
+                {entry.action}
+                {entry.targetLabel ? ` — ${entry.targetLabel}` : ''}
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                {new Date(entry.createdAt).toLocaleString()}
+              </p>
+              {entry.detail && (
+                <pre className="mt-1.5 overflow-x-auto rounded bg-surface-950 p-2 text-xs text-slate-400">
+                  {JSON.stringify(entry.detail, null, 2)}
+                </pre>
+              )}
+            </li>
+          ))}
+        </ul>
       )}
     </>
   );

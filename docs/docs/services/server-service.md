@@ -33,6 +33,7 @@ effective-permission resolver every other service calls into.
 | POST | `/:serverId/emoji` | Upload a custom emoji |
 | DELETE | `/:serverId/emoji/:emojiId` | Delete a custom emoji |
 | GET | `/:serverId/channels` | List a server's channels |
+| GET | `/:serverId/audit` | Moderation audit trail: role/permission changes, removals, role create/update/delete, server settings (`MANAGE_SERVER`) |
 
 ## `/api/v1/channels`
 

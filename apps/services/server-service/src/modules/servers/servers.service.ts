@@ -5,7 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { areFriends, prisma, resolveChannelAccess } from '@betweenus/database';
+import { areFriends, prisma, recordServerAudit, resolveChannelAccess } from '@betweenus/database';
 import { envOr } from '@betweenus/config';
 import { EVENTS, EventBus } from '@betweenus/events';
 import {
@@ -26,6 +26,7 @@ import type {
   ServerInvite as ServerInviteDto,
   UpdateChannelRequest,
   Server,
+  ServerAuditEntry,
   ServerMember,
   ServerRole,
   ServerWithRole,
@@ -257,6 +258,24 @@ export class ServersService {
       include: { user: true, roles: HELD_ROLES },
     });
 
+    await recordServerAudit({
+      serverId,
+      actorId,
+      targetId: targetUserId,
+      targetLabel: `@${target.user.username}`,
+      action: 'member.updated',
+      detail: {
+        ...(data.role !== undefined ? { role: { from: target.role, to: data.role } } : {}),
+        ...(dto.grantedPermissions !== undefined
+          ? { grantedPermissions: { from: target.grantedPermissions, to: data.grantedPermissions } }
+          : {}),
+        ...(dto.deniedPermissions !== undefined
+          ? { deniedPermissions: { from: target.deniedPermissions, to: data.deniedPermissions } }
+          : {}),
+        ...(dto.roleIds !== undefined ? { roleIds: dto.roleIds } : {}),
+      },
+    });
+
     // The member whose permissions these are is usually somebody else, on
     // another machine, holding a server list fetched when they signed in.
     // Without this they keep the permissions they had at that moment - a grant
@@ -440,6 +459,7 @@ export class ServersService {
 
     const target = await prisma.serverMember.findUnique({
       where: { serverId_userId: { serverId, userId: targetUserId } },
+      include: { user: true },
     });
     if (!target) {
       throw new NotFoundException({ code: 'MEMBER_NOT_FOUND', message: 'Member not found' });
@@ -457,6 +477,17 @@ export class ServersService {
         message: 'You cannot remove a member at or above your own role',
       });
     }
+
+    // Written before the delete: the member row - and the username it labels
+    // this entry with - is gone the moment after.
+    await recordServerAudit({
+      serverId,
+      actorId,
+      targetId: targetUserId,
+      targetLabel: `@${target.user.username}`,
+      action: 'member.removed',
+      detail: { role: target.role },
+    });
 
     await prisma.serverMember.delete({ where: { id: target.id } });
     await this.events.publish(EVENTS.SERVER_MEMBER_REMOVED, { serverId, userId: targetUserId });
@@ -482,6 +513,11 @@ export class ServersService {
     const membership = await this.requireMembershipRow(userId, serverId);
     this.require(permissionsOf(membership), PERMISSIONS.MANAGE_SERVER);
 
+    const before = await prisma.server.findUniqueOrThrow({
+      where: { id: serverId },
+      select: { name: true, iconUrl: true, description: true, messageTtlSeconds: true },
+    });
+
     const server = await prisma.server.update({
       where: { id: serverId },
       data: {
@@ -492,6 +528,22 @@ export class ServersService {
           : {}),
         ...(dto.messageTtlSeconds !== undefined
           ? { messageTtlSeconds: dto.messageTtlSeconds }
+          : {}),
+      },
+    });
+
+    await recordServerAudit({
+      serverId,
+      actorId: userId,
+      action: 'server.updated',
+      detail: {
+        ...(dto.name !== undefined ? { name: { from: before.name, to: server.name } } : {}),
+        ...(dto.iconUrl !== undefined ? { iconUrl: { from: before.iconUrl, to: server.iconUrl } } : {}),
+        ...(dto.description !== undefined
+          ? { description: { from: before.description, to: server.description } }
+          : {}),
+        ...(dto.messageTtlSeconds !== undefined
+          ? { messageTtlSeconds: { from: before.messageTtlSeconds, to: server.messageTtlSeconds } }
           : {}),
       },
     });
@@ -565,6 +617,16 @@ export class ServersService {
       },
       include: { _count: { select: { members: true } } },
     });
+
+    await recordServerAudit({
+      serverId,
+      actorId: userId,
+      targetId: role.id,
+      targetLabel: role.name,
+      action: 'role.created',
+      detail: { name: role.name, colour: role.colour, rank: role.rank, permissions: role.permissions },
+    });
+
     return toCustomRole(role);
   }
 
@@ -590,6 +652,22 @@ export class ServersService {
       include: { _count: { select: { members: true } } },
     });
 
+    await recordServerAudit({
+      serverId,
+      actorId: userId,
+      targetId: role.id,
+      targetLabel: role.name,
+      action: 'role.updated',
+      detail: {
+        ...(dto.name !== undefined ? { name: { from: role.name, to: updated.name } } : {}),
+        ...(dto.colour !== undefined ? { colour: { from: role.colour, to: updated.colour } } : {}),
+        ...(dto.rank !== undefined ? { rank: { from: role.rank, to: updated.rank } } : {}),
+        ...(dto.permissions !== undefined
+          ? { permissions: { from: role.permissions, to: updated.permissions } }
+          : {}),
+      },
+    });
+
     // Everyone holding it just had their permissions change, and each of them
     // is on a machine somewhere holding a server list fetched at sign-in.
     await this.announceRoleHolders(serverId, role.id);
@@ -603,6 +681,17 @@ export class ServersService {
     // Collected before the delete: the join rows go with it, so afterwards
     // there is nothing left to say who has to be told.
     await this.announceRoleHolders(serverId, role.id);
+
+    // Also before the delete: the role's own name is gone the moment after.
+    await recordServerAudit({
+      serverId,
+      actorId: userId,
+      targetId: role.id,
+      targetLabel: role.name,
+      action: 'role.deleted',
+      detail: { name: role.name },
+    });
+
     await prisma.serverCustomRole.delete({ where: { id: role.id } });
   }
 
@@ -635,17 +724,26 @@ export class ServersService {
     return held;
   }
 
-  private async requireRole(serverId: string, roleId: string): Promise<{ id: string }> {
+  private async requireRole(
+    serverId: string,
+    roleId: string,
+  ): Promise<{ id: string; name: string; colour: string | null; rank: number; permissions: string[] }> {
     const role = await prisma.serverCustomRole.findUnique({
       where: { id: roleId },
-      select: { id: true, serverId: true },
+      select: { id: true, serverId: true, name: true, colour: true, rank: true, permissions: true },
     });
     // A role id from another server is not found here, the same as one that
     // never existed.
     if (!role || role.serverId !== serverId) {
       throw new NotFoundException({ code: 'ROLE_NOT_FOUND', message: 'Role not found' });
     }
-    return { id: role.id };
+    return {
+      id: role.id,
+      name: role.name,
+      colour: role.colour,
+      rank: role.rank,
+      permissions: role.permissions,
+    };
   }
 
   /** Tells everybody holding a role that what they may do has changed. */
@@ -709,6 +807,32 @@ export class ServersService {
     });
 
     return toInvite(invite);
+  }
+
+  /**
+   * The append-only trail of what has been done to this server - a role
+   * change, a removal, a role created/edited/deleted, the server's own
+   * settings. Gated the same as everything it records: whoever could not
+   * have made these changes has no reason to read who did.
+   */
+  async audit(userId: string, serverId: string): Promise<ServerAuditEntry[]> {
+    await this.requirePermission(userId, serverId, PERMISSIONS.MANAGE_SERVER);
+    const rows = await prisma.serverAudit.findMany({
+      where: { serverId },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+      include: { actor: { select: { username: true } } },
+    });
+    return rows.map((row) => ({
+      id: row.id,
+      action: row.action,
+      actorId: row.actorId,
+      actorLabel: row.actor ? `@${row.actor.username}` : null,
+      targetId: row.targetId,
+      targetLabel: row.targetLabel,
+      detail: row.detail as Record<string, unknown> | null,
+      createdAt: row.createdAt.toISOString(),
+    }));
   }
 
   async invites(userId: string, serverId: string): Promise<ServerInviteDto[]> {

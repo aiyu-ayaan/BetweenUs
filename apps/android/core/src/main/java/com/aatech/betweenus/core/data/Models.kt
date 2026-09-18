@@ -470,6 +470,30 @@ data class ServerCustomRole(
     }
 }
 
+/**
+ * One moderation action on a server - a role changed, a member removed, a
+ * role created/edited/deleted, the server's own settings. No screen reads
+ * this yet on Android; the model exists so the API surface matches the
+ * desktop client's, which does.
+ */
+data class ServerAuditEntry(
+    val id: String,
+    val action: String,
+    val actorLabel: String?,
+    val targetLabel: String?,
+    val createdAt: String,
+) {
+    companion object {
+        fun from(json: JSONObject) = ServerAuditEntry(
+            id = json.optString("id"),
+            action = json.optString("action"),
+            actorLabel = json.stringOrNull("actorLabel"),
+            targetLabel = json.stringOrNull("targetLabel"),
+            createdAt = json.optString("createdAt"),
+        )
+    }
+}
+
 // --- channels ---
 
 enum class ChannelType { TEXT, VOICE, DM;

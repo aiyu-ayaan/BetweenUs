@@ -52,6 +52,7 @@ import type {
   UpdateWebhookRequest,
   WebhookSummary,
   WebhookWithToken,
+  ServerAuditEntry,
   ServerMember,
   ServerInvite,
   ServerWithRole,
@@ -357,6 +358,10 @@ export const api = {
 
   updateServer: (serverId: string, body: UpdateServerRequest): Promise<ServerWithRole> =>
     request(`/api/v1/servers/${serverId}`, { method: 'PATCH', body: JSON.stringify(body) }),
+
+  /** The trail of who did what to this server. Needs MANAGE_SERVER, same as everything on it. */
+  serverAudit: (serverId: string): Promise<ServerAuditEntry[]> =>
+    request(`/api/v1/servers/${serverId}/audit`),
 
   deleteServer: (serverId: string): Promise<void> =>
     request(`/api/v1/servers/${serverId}`, { method: 'DELETE' }),

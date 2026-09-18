@@ -301,6 +301,11 @@ object BetweenUsApi {
         ServerInvite.from(authed("DELETE", "/api/v1/servers/$serverId/invites/${enc(code)}"))
     }
 
+    /** The trail of who did what to this server. Needs MANAGE_SERVER, same as everything on it. */
+    suspend fun serverAudit(serverId: String): List<ServerAuditEntry> = io {
+        authedArray("GET", "/api/v1/servers/$serverId/audit").map { ServerAuditEntry.from(it) }
+    }
+
     suspend fun updateServer(
         serverId: String,
         name: String?,

@@ -148,6 +148,7 @@ erDiagram
     Server ||--o{ ServerInvite : has
     Server ||--o{ ServerCustomRole : has
     Server ||--o{ ServerEmoji : has
+    Server ||--o{ ServerAudit : records
     ServerMember }o--o{ ServerCustomRole : "holds (via ServerMemberRole)"
     Channel ||--o{ ChannelMember : "restricts to (if private)"
     Channel ||--o{ ChannelRead : "has read markers"
@@ -166,6 +167,17 @@ window it is a real **deletion** — the sweeper destroys the row and its blobs
 when it closes, for everybody — and that is precisely why it outranks a
 member's own setting. A member may choose to see less than the server keeps,
 never more. Set with `MANAGE_SERVER`, and only to one of the published windows.
+
+### `ServerAudit`
+Append-only trail for a server's own moderation actions — a member's role or
+permissions changed, a member removed, a custom role created/updated/deleted,
+the server's own settings. Same shape as `AdminAudit` and `RemoteAudit` on
+purpose: `actorId`/`targetId`/`targetLabel`/`action`/`detail Json`/`createdAt`,
+actor `SetNull` so deleting an account never destroys the record of what it
+did. Written by `recordServerAudit`, which swallows its own failures the same
+way `recordRemoteAudit` does — an audit row that could not be written must
+never take the moderation action down with it. Read via
+`GET /servers/:id/audit`, gated by `MANAGE_SERVER` like everything it records.
 
 ### `ServerMember`
 One row per `(server, user)`. `role` is the fixed 5-rung hierarchy

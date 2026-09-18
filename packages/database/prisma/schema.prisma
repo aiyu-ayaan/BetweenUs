@@ -178,6 +178,7 @@ model User {
   remoteSessions  RemoteSession[]      @relation("RemoteSessionUser")
   remoteAudit     RemoteAudit[]        @relation("RemoteAuditActor")
   adminAudit      AdminAudit[]         @relation("AdminAuditActor")
+  serverAudit     ServerAudit[]        @relation("ServerAuditActor")
   attachments     Attachment[]         @relation("AttachmentUploader")
   messageViews    MessageView[]
   callSessions    CallSession[]        @relation("CallSessionUser")
@@ -574,6 +575,7 @@ model Server {
   invites  ServerInvite[]
   roles    ServerCustomRole[]
   emoji    ServerEmoji[]
+  audit    ServerAudit[]
 
   @@index([ownerId])
   @@map("servers")
@@ -845,6 +847,36 @@ model ServerEmoji {
   @@unique([serverId, name])
   @@index([serverId])
   @@map("server_emoji")
+}
+
+/// Append-only trail for what `server-service` used to only publish as a
+/// realtime event and then forget - a moderator demoted at 3am, a role
+/// quietly handed MANAGE_SERVER, a member removed, none of it answerable
+/// after the fact. Same shape as `AdminAudit` / `RemoteAudit`, on purpose:
+/// this is the third copy of a pattern that should not be invented a fourth
+/// time.
+model ServerAudit {
+  id       String  @id @default(uuid())
+  serverId String
+  /// Null once the actor's own account is deleted. The row outlives it.
+  actorId  String?
+  /// Who or what it was done to, when the action has a target - a member, a
+  /// role. Null for actions on the server itself (its own settings).
+  targetId String?
+  /// How the target read at the time - `@ayaan`, a role's name. Never updated.
+  targetLabel String?
+  /// member.role.changed, member.permissions.changed, member.removed,
+  /// role.created, role.updated, role.deleted, server.updated.
+  action   String
+  detail   Json?
+
+  createdAt DateTime @default(now())
+
+  server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  actor  User?  @relation("ServerAuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([serverId, createdAt])
+  @@map("server_audit")
 }
 
 /// What a row in a conversation *is*.

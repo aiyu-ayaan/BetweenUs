@@ -475,6 +475,25 @@ export interface AdminAuditPage {
   nextCursor: string | null;
 }
 
+/**
+ * One moderation action on a server - a role changed, a member removed, a
+ * role created/edited/deleted, the server's own settings. Append-only, and
+ * readable only with MANAGE_SERVER: the same permission that can do the
+ * things this trail records.
+ */
+export interface ServerAuditEntry {
+  id: string;
+  action: string;
+  actorId: string | null;
+  /** How the actor read at the time; null once their account is gone. */
+  actorLabel: string | null;
+  targetId: string | null;
+  /** The subject as it read when it happened - it may not exist any more. */
+  targetLabel: string | null;
+  detail: Record<string, unknown> | null;
+  createdAt: string;
+}
+
 /** Never carries the secret itself - only whether one is stored. */
 export interface AdminOAuthProvider {
   provider: 'google' | 'github';
