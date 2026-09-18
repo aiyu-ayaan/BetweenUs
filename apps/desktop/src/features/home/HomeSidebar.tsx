@@ -1,11 +1,10 @@
 import { useChatStore } from '../../stores/chat';
 import { useFriendsStore } from '../../stores/friends';
 import { useStatusOf } from '../../stores/presence';
-import { runsOf, useStatusStore } from '../../stores/status';
 import { UserPanel } from '../settings/UserPanel';
 import { VoicePanel } from '../voice/VoicePanel';
 import { Avatar } from '../../components/Avatar';
-import { ActivityIcon, MonitorIcon, UsersIcon, XIcon } from '../../components/icons';
+import { MonitorIcon, UsersIcon, XIcon } from '../../components/icons';
 import { SkeletonRows } from '../../components/Skeleton';
 import { listState } from '../../services/list-state';
 
@@ -13,24 +12,30 @@ import { listState } from '../../services/list-state';
  * The home sidebar: the Friends screen at the top, then one row per open
  * conversation. Closing a conversation only hides it - the messages stay, and
  * it comes back the moment anything new arrives in it.
+ *
+ * Moments used to have a row here too. It is now a top-level tab in the top
+ * bar (`TopBar`'s `TopTab`), reachable from a server as well as from home, so
+ * a second way into the same screen buried under Friends would only be a
+ * second place to keep in sync with the first.
  */
 export function HomeSidebar({
   showingFriends,
   onShowFriends,
-  showingStatus,
-  onShowStatus,
   showingRemote,
   onShowRemote,
   onOpenUserSettings,
+  onNavigate,
   className = 'w-60',
 }: {
   showingFriends: boolean;
   onShowFriends: () => void;
-  showingStatus: boolean;
-  onShowStatus: () => void;
   showingRemote: boolean;
   onShowRemote: () => void;
   onOpenUserSettings: () => void;
+  /** Called on any click in this list - see `ServerRail`'s prop of the same
+      name for why. Friends/Remote already call back through their own
+      handlers; this also covers picking a direct message, which does not. */
+  onNavigate?: () => void;
   className?: string;
 }): JSX.Element {
   const directChannels = useFriendsStore((state) => state.directChannels);
@@ -47,10 +52,6 @@ export function HomeSidebar({
   const pending = useFriendsStore((state) =>
     state.friends.filter((friend) => friend.direction === 'incoming').length,
   );
-  // How many people have something unwatched. The same number the ring says,
-  // counted per person rather than per post: what the badge is answering is
-  // "is there anybody to catch up on", not "how many pictures are there".
-  const unwatched = useStatusStore((state) => runsOf(state).filter((run) => run.unseen).length);
 
   return (
     <aside className={`panel flex shrink-0 flex-col bg-surface-800 ${className}`}>
@@ -60,7 +61,11 @@ export function HomeSidebar({
         </h2>
       </header>
 
-      <nav aria-label="Direct messages" className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
+      <nav
+        aria-label="Direct messages"
+        onClickCapture={onNavigate}
+        className="min-h-0 flex-1 overflow-y-auto px-2 py-2"
+      >
         <button
           type="button"
           onClick={onShowFriends}
@@ -77,27 +82,6 @@ export function HomeSidebar({
             <span className="rounded-full bg-danger px-1.5 text-xs font-bold text-white">
               {pending}
               <span className="sr-only"> pending requests</span>
-            </span>
-          )}
-        </button>
-
-        {/* Statuses sit under Friends rather than in the conversation list:
-            they are a place to go, not a conversation, and a row that came and
-            went as people posted would move the list under somebody's cursor. */}
-        <button
-          type="button"
-          onClick={onShowStatus}
-          aria-current={showingStatus ? 'page' : undefined}
-          className={`mt-0.5 flex w-full cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-start transition-colors duration-200 ${
-            showingStatus ? 'row-active' : 'row-idle'
-          }`}
-        >
-          <ActivityIcon className="h-5 w-5 shrink-0" />
-          <span className="flex-1 font-medium">Moments</span>
-          {unwatched > 0 && (
-            <span className="rounded-full bg-status-online px-1.5 text-xs font-bold text-surface-900">
-              {unwatched}
-              <span className="sr-only"> people with new updates</span>
             </span>
           )}
         </button>

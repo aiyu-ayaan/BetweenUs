@@ -4,6 +4,7 @@ import { ServerRail } from '../servers/ServerRail';
 import { ChannelSidebar } from '../channels/ChannelSidebar';
 import { HomeSidebar } from '../home/HomeSidebar';
 import { closedPanelProps, useFocusTrap } from '../../services/focus-trap';
+import { TOP_TABS, type TopTab } from './TopBar';
 
 export interface MobileDrawerProps {
   open: boolean;
@@ -11,11 +12,14 @@ export interface MobileDrawerProps {
   onOpenUserSettings: () => void;
   onOpenServerSettings: () => void;
   onShowFriends: () => void;
-  onShowStatus: () => void;
   onShowRemote: () => void;
   showingFriends: boolean;
-  showingStatus: boolean;
   showingRemote: boolean;
+  /** Workbench / Activities / Moments - `TopBar`'s tabs, mirrored here since
+      the top bar itself is desktop-only (`hidden md:flex`) and a phone has
+      nowhere else to reach Activities or Moments from. */
+  topTab: TopTab;
+  onChangeTopTab: (tab: TopTab) => void;
 }
 
 /**
@@ -28,11 +32,11 @@ export function MobileDrawer({
   onOpenUserSettings,
   onOpenServerSettings,
   onShowFriends,
-  onShowStatus,
   onShowRemote,
   showingFriends,
-  showingStatus,
   showingRemote,
+  topTab,
+  onChangeTopTab,
 }: MobileDrawerProps): JSX.Element {
   const drawer = useFocusTrap<HTMLDivElement>(open);
   const view = useChatStore((state) => state.view);
@@ -96,48 +100,72 @@ export function MobileDrawer({
           open ? 'translate-x-0' : '-translate-x-full pointer-events-none'
         }`}
       >
-        <div className="flex h-full w-full gap-1.5 p-1.5">
-          {/* Server Rail */}
-          <ServerRail />
+        <div className="flex h-full w-full flex-col gap-1.5 p-1.5">
+          {/* Workbench / Activities / Moments - the top bar's own tabs are
+              `hidden md:flex`, so this is the only way a phone reaches
+              Activities or Moments at all. */}
+          <div className="flex shrink-0 items-center gap-0.5 rounded-lg border border-edge bg-white/[0.03] p-0.5">
+            {TOP_TABS.map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => {
+                  onChangeTopTab(id);
+                  onClose();
+                }}
+                aria-current={topTab === id ? 'page' : undefined}
+                className={`flex h-8 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md text-[12.5px] font-medium transition-colors duration-150 ${
+                  topTab === id
+                    ? 'bg-accent/20 text-white shadow-sm'
+                    : 'text-slate-400 hover:bg-white/[0.06] hover:text-slate-200'
+                }`}
+              >
+                <Icon className="h-4 w-4 shrink-0" />
+                {label}
+              </button>
+            ))}
+          </div>
 
-          {/* Channels / Home Sidebar */}
-          <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-            {view === 'home' ? (
-              <HomeSidebar
-                showingFriends={showingFriends}
-                onShowFriends={() => {
-                  onShowFriends();
-                  onClose();
-                }}
-                showingStatus={showingStatus}
-                onShowStatus={() => {
-                  onShowStatus();
-                  onClose();
-                }}
-                showingRemote={showingRemote}
-                onShowRemote={() => {
-                  onShowRemote();
-                  onClose();
-                }}
-                onOpenUserSettings={() => {
-                  onOpenUserSettings();
-                  onClose();
-                }}
-                className="w-full flex-1"
-              />
-            ) : (
-              <ChannelSidebar
-                onOpenUserSettings={() => {
-                  onOpenUserSettings();
-                  onClose();
-                }}
-                onOpenServerSettings={() => {
-                  onOpenServerSettings();
-                  onClose();
-                }}
-                className="w-full flex-1"
-              />
-            )}
+          <div className="flex min-h-0 flex-1 gap-1.5">
+            {/* Server Rail */}
+            <ServerRail onNavigate={() => onChangeTopTab('workbench')} />
+
+            {/* Channels / Home Sidebar */}
+            <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+              {view === 'home' ? (
+                <HomeSidebar
+                  showingFriends={showingFriends}
+                  onShowFriends={() => {
+                    onShowFriends();
+                    onClose();
+                  }}
+                  showingRemote={showingRemote}
+                  onShowRemote={() => {
+                    onShowRemote();
+                    onClose();
+                  }}
+                  onOpenUserSettings={() => {
+                    onOpenUserSettings();
+                    onClose();
+                  }}
+                  onNavigate={() => onChangeTopTab('workbench')}
+                  className="w-full flex-1"
+                />
+              ) : (
+                <ChannelSidebar
+                  onOpenUserSettings={() => {
+                    onOpenUserSettings();
+                    onClose();
+                  }}
+                  onOpenServerSettings={() => {
+                    onOpenServerSettings();
+                    onClose();
+                  }}
+                  onNavigate={() => onChangeTopTab('workbench')}
+                  className="w-full flex-1"
+                />
+              )}
+            </div>
           </div>
         </div>
       </div>

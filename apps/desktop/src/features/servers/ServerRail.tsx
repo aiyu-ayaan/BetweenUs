@@ -10,10 +10,27 @@ import { CompassIcon, MessageIcon, PlusIcon } from '../../components/icons';
 import { ServerIcon } from '../../components/ServerIcon';
 import { useFocusTrap } from '../../services/focus-trap';
 
-export function ServerRail({ className }: { className?: string } = {}): JSX.Element {
+export function ServerRail({
+  className,
+  onNavigate,
+}: {
+  className?: string;
+  /** Called on any click in the rail - what `App.tsx` uses to drop the top
+      bar back to Workbench, since picking a server the workbench is already
+      pinned to changes nothing in the chat store for an effect to react to. */
+  onNavigate?: () => void;
+} = {}): JSX.Element {
   const trap = useFocusTrap<HTMLDivElement>();
-  const { servers, channels, unread, view, activeServerId, selectServer, showHome, createServer } =
-    useChatStore();
+  const {
+    servers,
+    channelServerId,
+    unread,
+    view,
+    activeServerId,
+    selectServer,
+    showHome,
+    createServer,
+  } = useChatStore();
   const [dialog, setDialog] = useState<'none' | 'create' | 'join'>('none');
   const [value, setValue] = useState('');
   const [busy, setBusy] = useState(false);
@@ -52,6 +69,7 @@ export function ServerRail({ className }: { className?: string } = {}): JSX.Elem
   return (
     <nav
       aria-label="Servers"
+      onClickCapture={onNavigate}
       className={`relative flex w-16 shrink-0 flex-col items-center gap-1.5 overflow-y-auto bg-[#0b0f19] py-2.5 ${className ?? ''}`}
     >
       {/* Direct Messages Icon Button */}
@@ -70,8 +88,13 @@ export function ServerRail({ className }: { className?: string } = {}): JSX.Elem
       {/* Real Servers from store */}
       {servers.map((server) => {
         const isActive = view === 'server' && activeServerId === server.id;
-        const serverChannels = channels.filter((c) => c.serverId === server.id);
-        const serverUnread = serverChannels.reduce((sum, c) => sum + (unread[c.id] ?? 0), 0);
+        // Summed from the durable channelId -> serverId map, not from
+        // `channels` - that array is reset to whichever server is currently
+        // open, so every other server's icon read a permanent zero here.
+        const serverUnread = Object.entries(unread).reduce(
+          (sum, [channelId, count]) => (channelServerId[channelId] === server.id ? sum + count : sum),
+          0,
+        );
 
         return (
           <RailButton

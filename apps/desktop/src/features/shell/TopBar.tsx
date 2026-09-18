@@ -8,18 +8,25 @@ import {
   SettingsIcon,
 } from '../../components/icons';
 import { useVoiceStore } from '../../stores/voice';
+import { runsOf, useStatusStore } from '../../stores/status';
 
 const isMac = typeof window !== 'undefined' && window.betweenus?.platform === 'darwin';
 
 /** The three places the top bar can point the workspace at. */
 export type TopTab = 'workbench' | 'activities' | 'moments';
 
-const TABS: Array<{ id: TopTab; label: string; icon: (props: { className?: string }) => JSX.Element }> = [
+/** Exported so `MobileDrawer` can draw the same three tabs - the top bar
+    itself is desktop-only, so a phone needs its own copy of this row. */
+export const TOP_TABS: Array<{
+  id: TopTab;
+  label: string;
+  icon: (props: { className?: string }) => JSX.Element;
+}> = [
   { id: 'workbench', label: 'Workbench', icon: AppsIcon },
-  { id: 'activities', label: 'Activities', icon: ClockIcon },
-  // Same mark `HomeSidebar` already draws beside "Moments" - one icon, one
-  // meaning, wherever the app offers the tray.
+  // Same mark `HomeSidebar` used to draw beside "Moments" before that row
+  // moved here - one icon, one meaning, wherever the app offers the tray.
   { id: 'moments', label: 'Moments', icon: ActivityIcon },
+  { id: 'activities', label: 'Activities', icon: ClockIcon },
 ];
 
 export interface TopBarProps {
@@ -40,6 +47,11 @@ export function TopBar({
   onChangeTopTab,
 }: TopBarProps): JSX.Element {
   const voiceStatus = useVoiceStore((state) => state.status);
+  // How many people have something unwatched - the same count the Moments
+  // tray itself uses to decide "Recent" from "Viewed". `HomeSidebar` used to
+  // carry this badge; it belongs here now, since this is the only Moments
+  // entry point left on desktop.
+  const unwatched = useStatusStore((state) => runsOf(state).filter((run) => run.unseen).length);
 
   return (
     <header className="drag-region hidden md:flex h-11 shrink-0 items-center justify-between border-b border-edge/60 bg-surface-950 px-3 backdrop-blur-md">
@@ -66,7 +78,7 @@ export function TopBar({
           main panel on this), not a breadcrumb of where you already are. */}
       <nav aria-label="Workspace" className="no-drag flex min-w-0 flex-1 justify-center px-4">
         <div className="flex items-center gap-0.5 rounded-lg border border-edge bg-white/[0.03] p-0.5">
-          {TABS.map(({ id, label, icon: Icon }) => (
+          {TOP_TABS.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               type="button"
@@ -80,6 +92,12 @@ export function TopBar({
             >
               <Icon className="h-3.5 w-3.5 shrink-0" />
               {label}
+              {id === 'moments' && unwatched > 0 && (
+                <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-status-online px-1 text-[10px] font-bold text-surface-900">
+                  {unwatched}
+                  <span className="sr-only"> people with new moments</span>
+                </span>
+              )}
             </button>
           ))}
         </div>

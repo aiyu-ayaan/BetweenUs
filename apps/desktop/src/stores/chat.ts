@@ -71,6 +71,15 @@ interface ChatState {
   /** channelId -> unread message count, for the dot in the sidebar. */
   unread: Record<string, number>;
   /**
+   * channelId -> the server it belongs to, for every server this account has
+   * ever loaded the channel list of - not only the one on screen. `channels`
+   * itself is reset to the active server's list on every `selectServer`, so
+   * it cannot answer "which server does this unread channel belong to" for
+   * anything but the server already open; this map is what the server rail's
+   * own unread badge (`ServerRail`) reads instead, and it only grows.
+   */
+  channelServerId: Record<string, string>;
+  /**
    * channelId -> the read marker as this client last saw it. Kept because the
    * divider below is "everything after this", and the marker moves the moment
    * a channel is opened - so it has to be read before it is advanced.
@@ -260,6 +269,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   activeServerId: null,
   activeChannelId: null,
   unread: {},
+  channelServerId: {},
   readMarkers: {},
   divider: {},
   history: {},
@@ -287,6 +297,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // Watch every server, not only the open one: being added to or removed
     // from one has to reach this client wherever it happens to be looking.
     chatSocket.syncServers(servers.map((server) => server.id));
+
+    // Which channel belongs to which server, for every server at once - not
+    // only whichever one gets opened first. Without this the rail's unread
+    // badge stayed blank for every server but the one already on screen,
+    // because `channels` only ever holds the active server's list. Fired and
+    // forgotten: the rail's badge simply fills in as these answer, the way
+    // the read markers and the servers list themselves already do.
+    void Promise.allSettled(servers.map((server) => api.channels(server.id))).then((results) => {
+      const map: Record<string, string> = {};
+      results.forEach((result, index) => {
+        if (result.status !== 'fulfilled') return;
+        const serverId = servers[index]!.id;
+        for (const channel of result.value) map[channel.id] = serverId;
+      });
+      set({ channelServerId: { ...get().channelServerId, ...map } });
+    });
   },
 
   loadUnread: async () => {
@@ -414,6 +440,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
     set({ channels, members });
     void cache.putChannels(serverId, channels).catch(() => undefined);
+    // Keep the rail's map current for the server that is actually open -
+    // the background fetch in `loadServers` may still be in flight, or this
+    // server may have gained or lost a channel since it last answered.
+    const channelServerId = { ...get().channelServerId };
+    for (const channel of channels) channelServerId[channel.id] = serverId;
+    set({ channelServerId });
 
     // Subscribed to every readable channel, not only the open one: a message in
     // another channel has to arrive for it to be counted or notified about.

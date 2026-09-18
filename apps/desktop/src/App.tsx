@@ -405,6 +405,7 @@ function Session(): JSX.Element {
 function Workbench(): JSX.Element {
   const view = useChatStore((state) => state.view);
   const activeChannelId = useChatStore((state) => state.activeChannelId);
+  const activeServerId = useChatStore((state) => state.activeServerId);
   const channel = useChatStore((state) => state.activeChannel());
 
   /**
@@ -425,7 +426,7 @@ function Workbench(): JSX.Element {
   const isMobile = useIsMobile();
 
   const [settings, setSettings] = useState<'none' | 'user' | 'server'>('none');
-  const [homeScreen, setHomeScreen] = useState<'friends' | 'status' | 'remote' | null>('friends');
+  const [homeScreen, setHomeScreen] = useState<'friends' | 'remote' | null>('friends');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   /**
    * Where the top bar has pointed the main panel - independent of which
@@ -472,10 +473,26 @@ function Workbench(): JSX.Element {
   }, [isMobile, isRightPanelOpen]);
 
   // Opening a conversation is what leaves the friends screen; nothing else has
-  // to know about that flag.
+  // to know about that flag. It is also what leaves Activities or Moments:
+  // those tabs pre-empt this same panel, so picking a channel or a server out
+  // of the sidebar while one of them is open used to land on a channel that
+  // was selected but never actually shown - the tab kept covering it. Server
+  // and channel are both watched because choosing a server can select its
+  // default channel without that id ever changing (a fresh sign-in's first
+  // server, for instance).
   useEffect(() => {
     if (activeChannelId) setHomeScreen(null);
-  }, [activeChannelId]);
+    setTopTab('workbench');
+  }, [activeChannelId, activeServerId]);
+
+  // Same reasoning for Friends and Remote machines: picking either out of the
+  // sidebar while Activities or Moments has the panel covered must return to
+  // Workbench too, or the row lights up as selected behind a screen that
+  // still shows something else entirely.
+  const goHome = (screen: 'friends' | 'remote'): void => {
+    setHomeScreen(screen);
+    setTopTab('workbench');
+  };
 
   // The global bindings. `Ctrl+K` was for a long time the only one, on the
   // reasoning that everything is reachable from it - which is right about
@@ -534,7 +551,7 @@ function Workbench(): JSX.Element {
       <UpdateNotice />
 
       <div className="flex min-h-0 flex-1 gap-1.5 px-1.5 pb-1.5">
-        <ServerRail className="hidden md:flex" />
+        <ServerRail className="hidden md:flex" onNavigate={() => setTopTab('workbench')} />
 
         {/* Collapsing the toolbar slides the panel into the rail rather than
             popping it out of existence - the outer clip animates width while
@@ -552,18 +569,18 @@ function Workbench(): JSX.Element {
           {view === 'home' ? (
             <HomeSidebar
               showingFriends={homeScreen === 'friends'}
-              onShowFriends={() => setHomeScreen('friends')}
-              showingStatus={homeScreen === 'status'}
-              onShowStatus={() => setHomeScreen('status')}
+              onShowFriends={() => goHome('friends')}
               showingRemote={homeScreen === 'remote'}
-              onShowRemote={() => setHomeScreen('remote')}
+              onShowRemote={() => goHome('remote')}
               onOpenUserSettings={() => setSettings('user')}
+              onNavigate={() => setTopTab('workbench')}
               className="flex h-full w-60"
             />
           ) : (
             <ChannelSidebar
               onOpenUserSettings={() => setSettings('user')}
               onOpenServerSettings={() => setSettings('server')}
+              onNavigate={() => setTopTab('workbench')}
               className="flex h-full w-60"
             />
           )}
@@ -580,8 +597,6 @@ function Workbench(): JSX.Element {
           <StatusScreen onOpenMenu={() => setShowDrawer(true)} />
         ) : view === 'home' && homeScreen === 'remote' ? (
           <RemoteView onOpenMenu={() => setShowDrawer(true)} />
-        ) : view === 'home' && homeScreen === 'status' ? (
-          <StatusScreen onOpenMenu={() => setShowDrawer(true)} />
         ) : view === 'home' && homeScreen === 'friends' ? (
           <FriendsView onOpenMenu={() => setShowDrawer(true)} />
         ) : channel?.type === 'VOICE' ||
@@ -654,12 +669,12 @@ function Workbench(): JSX.Element {
         onClose={() => setShowDrawer(false)}
         onOpenUserSettings={() => setSettings('user')}
         onOpenServerSettings={() => setSettings('server')}
-        onShowFriends={() => setHomeScreen('friends')}
-        onShowStatus={() => setHomeScreen('status')}
-        onShowRemote={() => setHomeScreen('remote')}
+        onShowFriends={() => goHome('friends')}
+        onShowRemote={() => goHome('remote')}
         showingFriends={homeScreen === 'friends'}
-        showingStatus={homeScreen === 'status'}
         showingRemote={homeScreen === 'remote'}
+        topTab={topTab}
+        onChangeTopTab={setTopTab}
       />
 
       {switcher && <QuickSwitcher onClose={() => setSwitcher(false)} />}

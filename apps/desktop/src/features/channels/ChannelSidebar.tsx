@@ -22,10 +22,14 @@ import {
 export function ChannelSidebar({
   onOpenUserSettings,
   onOpenServerSettings,
+  onNavigate,
   className = 'w-60',
 }: {
   onOpenUserSettings: () => void;
   onOpenServerSettings: () => void;
+  /** Called on any click in the channel list - see `ServerRail`'s prop of
+      the same name for why this can't just be an effect on the chat store. */
+  onNavigate?: () => void;
   className?: string;
 }): JSX.Element {
   const { servers, channels, activeServerId, activeChannelId, unread, selectChannel } =
@@ -52,7 +56,11 @@ export function ChannelSidebar({
         }}
       />
 
-      <nav aria-label="Channels" className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+      <nav
+        aria-label="Channels"
+        onClickCapture={onNavigate}
+        className="min-h-0 flex-1 overflow-y-auto px-2 pb-2"
+      >
         {/* Text Channels Section */}
         <SectionHeading
           label="TEXT CHANNELS"
