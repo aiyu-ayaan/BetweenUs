@@ -251,6 +251,27 @@ fun ChatScreen(
     var following by remember(channelId) { mutableStateOf(true) }
 
     /**
+     * The one bubble that should play the arrival pop - sent or received,
+     * either counts - never a page of history scrolling into view. Mirrors
+     * the desktop client's `seenNewest` ref: the first newest id seen after
+     * a channel switch is recorded without animating anything, and only a
+     * *later* change to the newest id marks that message as `justArrivedId`,
+     * cleared once its animation has had time to finish.
+     */
+    var seenNewestId by remember(channelId) { mutableStateOf<String?>(null) }
+    var justArrivedId by remember(channelId) { mutableStateOf<String?>(null) }
+    val newestId = messages.lastOrNull { !it.message.isArrival }?.id
+    LaunchedEffect(newestId) {
+        val id = newestId ?: return@LaunchedEffect
+        val seen = seenNewestId
+        seenNewestId = id
+        if (seen == null || seen == id) return@LaunchedEffect
+        justArrivedId = id
+        delay(500)
+        if (justArrivedId == id) justArrivedId = null
+    }
+
+    /**
      * The header's line needs to know when this person was last here, and a
      * `presence.sync` carries only the people who are here now - so the one
      * case the line exists for is the one the socket says nothing about.
@@ -670,6 +691,7 @@ fun ChatScreen(
                         onPlayVideo = { uri, name ->
                             playingVideo = uri to name
                         },
+                        justArrived = readable.id == justArrivedId,
                     )
                 }
             }

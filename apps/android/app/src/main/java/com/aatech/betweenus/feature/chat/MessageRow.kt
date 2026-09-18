@@ -4,8 +4,12 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -182,6 +186,13 @@ fun MessageRow(
     onReact: (String) -> Unit,
     onViewImage: (Bitmap, String) -> Unit = { _, _ -> },
     onPlayVideo: (Uri, String) -> Unit = { _, _ -> },
+    /**
+     * Whether this is the one message that just arrived - sent or received,
+     * either counts - so it plays the pop-in `ChatScreen` asked for. Never
+     * true for a page of history scrolling into view; see `ChatScreen`'s
+     * `justArrivedId` for how "just now" is told apart from "just loaded".
+     */
+    justArrived: Boolean = false,
 ) {
     val message = readable.message
     // A webhook posts as the account that opened it, so `author` is a person
@@ -273,6 +284,32 @@ fun MessageRow(
     val density = LocalDensity.current
     val haptics = LocalHapticFeedback.current
     val slide = remember(message.id) { Animatable(0f) }
+
+    /**
+     * The pop-in, the way iMessage's does it: 0.75 scale and 10dp low,
+     * settling at 1 with a slight overshoot on the way - the same
+     * `cubic-bezier(0.34, 1.56, 0.64, 1)` the desktop client uses as the
+     * `tween`'s easing, which is what supplies the overshoot on its own
+     * rather than needing a hand-written keyframe animation for it.
+     *
+     * Scoped to the bubble stack below (the `Column` holding the bubble,
+     * its reactions and its seen-by row) and never to this whole `Row`,
+     * which also holds the avatar - animating the row's scale together
+     * moved the avatar and the bubble apart and back as it played, which
+     * read as the row's own gutter jittering rather than a bubble arriving.
+     */
+    val arrive = remember(message.id) { Animatable(if (justArrived) 0f else 1f) }
+    LaunchedEffect(justArrived) {
+        if (justArrived) {
+            arrive.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(
+                    durationMillis = 460,
+                    easing = CubicBezierEasing(0.34f, 1.56f, 0.64f, 1f),
+                ),
+            )
+        }
+    }
     /** How far it has to go to count, and how far it will go at all. */
     val threshold = with(density) { 64.dp.toPx() }
     val limit = with(density) { 88.dp.toPx() }
@@ -434,7 +471,21 @@ fun MessageRow(
                 }
             }
 
-            Column(horizontalAlignment = if (isSelf) Alignment.End else Alignment.Start) {
+            Column(
+                horizontalAlignment = if (isSelf) Alignment.End else Alignment.Start,
+                modifier = Modifier.graphicsLayer {
+                    scaleX = 0.75f + 0.25f * arrive.value
+                    scaleY = 0.75f + 0.25f * arrive.value
+                    alpha = arrive.value.coerceIn(0f, 1f)
+                    translationY = (1f - arrive.value) * 10.dp.toPx()
+                    // The corner nearest the gutter/avatar - bottom-right for
+                    // your own bubble, bottom-left for everyone else's - so
+                    // it visibly grows from its own anchored edge instead of
+                    // from its centre, which is what let a narrow bubble
+                    // nudge sideways against the avatar next to it.
+                    transformOrigin = TransformOrigin(if (isSelf) 1f else 0f, 1f)
+                },
+            ) {
                 // The bubble.
                 //
                 // The tail is the one square corner, on the outer top edge of
