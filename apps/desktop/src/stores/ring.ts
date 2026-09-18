@@ -142,8 +142,11 @@ export const useRingStore = create<RingState>((set, get) => ({
  * Without this, joining the channel from the sidebar while it is ringing
  * leaves the ringtone playing over the call somebody has just walked into.
  */
-useVoiceStore.subscribe((state, previous) => {
-  if (state.channelId === previous.channelId) return;
-  const ringing = useRingStore.getState().incoming;
-  if (ringing && state.channelId === ringing.channelId) useRingStore.getState().dismiss();
+queueMicrotask(() => {
+  useVoiceStore.subscribe((state, previous) => {
+    if (state.channelId === previous.channelId) return;
+    const ringing = useRingStore.getState().incoming;
+    if (ringing && state.channelId === ringing.channelId) useRingStore.getState().dismiss();
+  });
 });
+
