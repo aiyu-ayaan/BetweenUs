@@ -37,6 +37,21 @@ assert.equal(mentionsMe('@everyone standup in five', me), true);
 assert.equal(mentionsMe('@here quick question', me), true);
 assert.equal(mentionsMe('@everyones problem', me), false);
 
+// A role this account holds addresses it; one it does not hold does not. The
+// names come from the member row's `roleIds` resolved against the server's
+// roles, so a role that exists but is held by somebody else never arrives here.
+const staffer = { username: 'ann', displayName: 'Ann Wexford', roles: ['designers', 'Core Team'] };
+assert.equal(mentionsMe('@designers can we look at this', staffer), true);
+assert.equal(mentionsMe('@DESIGNERS please', staffer), true);
+// A role name with a space is matched as written, exactly as a display name is.
+assert.equal(mentionsMe('@Core Team standup', staffer), true);
+// The boundary rule holds for roles too: a longer name is a different role.
+assert.equal(mentionsMe('@designerships', staffer), false);
+// A role held by somebody else is not a mention of me.
+assert.equal(mentionsMe('@designers ping', me), false);
+// No roles at all is the ordinary case and must not match everything.
+assert.equal(mentionsMe('@designers ping', { username: 'ann', roles: [] }), false);
+
 // Nothing to read is not a mention: an undecryptable message and an empty one
 // both arrive here.
 assert.equal(mentionsMe(null, me), false);

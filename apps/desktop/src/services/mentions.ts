@@ -8,7 +8,8 @@
  * checks the answer against is all the server stores.
  *
  * The rules are Discord's, minus the ids: a mention is `@` followed by a
- * username or a display name, or one of the two broadcasts.
+ * username, a display name, the name of a custom role this account holds, or
+ * one of the two broadcasts.
  */
 
 /** `@everyone` and `@here` both address the room. */
@@ -20,6 +21,18 @@ const BOUNDARY = /[\s.,:;!?'"()[\]{}<>@-]/;
 export interface MentionTarget {
   username: string;
   displayName?: string | null;
+  /**
+   * The names of the custom roles this account holds *in the server this
+   * message was said in* - never every role the server has.
+   *
+   * Names rather than ids for the same reason the rest of this file matches
+   * names: the wire format is the text somebody typed, and `@designers` is
+   * what they typed. A role is therefore matched exactly as a display name is,
+   * spaces and all, and inherits that rule's one known weakness - two roles
+   * whose names differ only by trailing words are told apart by the boundary
+   * check and nothing else.
+   */
+  roles?: readonly string[];
 }
 
 /**
@@ -37,7 +50,7 @@ export function mentionsMe(text: string | null | undefined, me: MentionTarget): 
   if (!text) return false;
   const haystack = text.toLowerCase();
 
-  const names = [me.username, me.displayName, ...BROADCASTS]
+  const names = [me.username, me.displayName, ...(me.roles ?? []), ...BROADCASTS]
     .filter((name): name is string => typeof name === 'string' && name.trim().length > 0)
     .map((name) => name.trim().toLowerCase());
 
