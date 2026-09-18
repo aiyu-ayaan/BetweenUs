@@ -1,0 +1,1660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>BetweenUs Android Mobile Showcase</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --ground: #0b0f19;
+      --surface-950: #070a11;
+      --surface-900: #0f172a;
+      --surface-850: #141c2e;
+      --surface-800: #192237;
+      --surface-700: #1e293b;
+      --surface-600: #2a374f;
+      --accent: #6366f1;
+      --accent-hover: #4f46e5;
+      --accent-light: #818cf8;
+      --accent-glow: rgba(99, 102, 241, 0.35);
+      --edge: rgba(255, 255, 255, 0.09);
+      --edge-active: rgba(99, 102, 241, 0.4);
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-subtle: #64748b;
+      --status-online: #3fd68c;
+      --status-idle: #f5b83d;
+      --status-dnd: #ff5d5d;
+      --phone-bezel: #1a2233;
+    }
+
+    body {
+      width: 1080px;
+      height: 2400px;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: #03060c;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI Variable Display', 'Segoe UI', system-ui, sans-serif;
+      color: var(--text-main);
+      -webkit-font-smoothing: antialiased;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    /* Device Chassis */
+    .device-chassis {
+      width: 1080px;
+      height: 2400px;
+      position: relative;
+      background: var(--ground);
+      border: 14px solid var(--phone-bezel);
+      border-radius: 54px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      box-shadow:
+        inset 0 0 0 2px rgba(255, 255, 255, 0.16),
+        inset 0 0 0 5px rgba(0, 0, 0, 0.7),
+        0 30px 90px rgba(0, 0, 0, 0.95);
+    }
+
+    /* Ambient background gradient inside screen */
+    .screen-ambient {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      background-image:
+        radial-gradient(circle 800px at 50% -10%, rgba(99, 102, 241, 0.22), transparent 70%),
+        radial-gradient(circle 600px at 95% 40%, rgba(63, 214, 140, 0.08), transparent 70%),
+        radial-gradient(circle 700px at 10% 85%, rgba(236, 72, 153, 0.08), transparent 75%);
+    }
+
+    /* Top Camera Punch Hole Cutout */
+    .camera-punch-hole {
+      position: absolute;
+      top: 18px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: #000000;
+      border: 2px solid rgba(255, 255, 255, 0.08);
+      z-index: 999;
+      box-shadow: 0 0 6px rgba(0, 0, 0, 0.8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .camera-punch-hole::after {
+      content: '';
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, rgba(99, 102, 241, 0.6), rgba(15, 23, 42, 0.9));
+    }
+
+    /* Android Status Bar */
+    .status-bar {
+      height: 64px;
+      padding: 0 36px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: relative;
+      z-index: 50;
+      flex-shrink: 0;
+    }
+
+    .status-bar-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .clock {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      color: #ffffff;
+    }
+
+    .status-icon-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #94a3b8;
+    }
+
+    .status-bar-right {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .network-badge {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: #f1f5f9;
+    }
+
+    .battery-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .battery-pct {
+      font-size: 19px;
+      font-weight: 600;
+      color: #f1f5f9;
+    }
+
+    .battery-shell {
+      width: 32px;
+      height: 16px;
+      border: 2px solid #f1f5f9;
+      border-radius: 5px;
+      padding: 2px;
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+    .battery-shell::after {
+      content: '';
+      position: absolute;
+      right: -5px;
+      width: 3px;
+      height: 7px;
+      background: #f1f5f9;
+      border-radius: 0 2px 2px 0;
+    }
+    .battery-fill {
+      width: 95%;
+      height: 100%;
+      background: #3fd68c;
+      border-radius: 2px;
+    }
+
+    /* Top App Bar (Material 3) */
+    .top-app-bar {
+      height: 108px;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(15, 23, 42, 0.88);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--edge);
+      position: relative;
+      z-index: 40;
+      flex-shrink: 0;
+    }
+
+    .bar-left-cluster {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+    }
+
+    .nav-drawer-btn {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #cbd5e1;
+      cursor: pointer;
+    }
+
+    .server-icon-badge {
+      width: 52px;
+      height: 52px;
+      border-radius: 16px;
+      background: linear-gradient(135deg, #6366f1, #4338ca);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 14px rgba(99, 102, 241, 0.45);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+    }
+
+    .server-text-details {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .channel-name {
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .channel-hash {
+      color: var(--accent-light);
+      font-weight: 600;
+      font-size: 24px;
+    }
+
+    .server-subtext {
+      font-size: 17px;
+      color: var(--text-muted);
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .online-indicator-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--status-online);
+      box-shadow: 0 0 6px var(--status-online);
+    }
+
+    .bar-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .action-icon-btn {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #cbd5e1;
+      cursor: pointer;
+    }
+
+    /* Active Voice Banner */
+    .voice-banner {
+      margin: 12px 24px 6px 24px;
+      padding: 12px 22px;
+      border-radius: 20px;
+      background: linear-gradient(135deg, rgba(20, 28, 46, 0.95), rgba(15, 23, 42, 0.98));
+      border: 1px solid rgba(63, 214, 140, 0.35);
+      box-shadow:
+        0 8px 24px rgba(0, 0, 0, 0.45),
+        0 0 16px rgba(63, 214, 140, 0.12);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: relative;
+      z-index: 35;
+      flex-shrink: 0;
+    }
+
+    .voice-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .pulse-halo-speaker {
+      position: relative;
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      background: rgba(63, 214, 140, 0.15);
+      border: 1px solid rgba(63, 214, 140, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #3fd68c;
+    }
+
+    .pulse-dot {
+      position: absolute;
+      top: -3px;
+      right: -3px;
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      background: #3fd68c;
+      box-shadow: 0 0 10px #3fd68c;
+    }
+
+    .voice-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .voice-title-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .voice-room-name {
+      font-size: 20px;
+      font-weight: 700;
+      color: #ffffff;
+    }
+
+    .connected-chip {
+      font-size: 15px;
+      font-weight: 600;
+      color: #3fd68c;
+      background: rgba(63, 214, 140, 0.12);
+      padding: 2px 8px;
+      border-radius: 12px;
+      border: 1px solid rgba(63, 214, 140, 0.25);
+    }
+
+    .voice-participants-summary {
+      font-size: 16px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .voice-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .voice-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      border-radius: 14px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .btn-mute {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      color: #e2e8f0;
+    }
+
+    .btn-leave {
+      background: rgba(239, 68, 68, 0.16);
+      border: 1px solid rgba(239, 68, 68, 0.38);
+      color: #fca5a5;
+    }
+
+    /* Main Chat Feed Area */
+    .chat-feed {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: 12px 24px;
+      position: relative;
+      z-index: 10;
+      gap: 16px;
+      overflow: hidden;
+      justify-content: flex-start;
+    }
+
+    /* Feed Header Badges (Date & E2EE) */
+    .feed-center-badges {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 6px 0;
+    }
+
+    .date-pill {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(10px);
+      padding: 6px 18px;
+      border-radius: 20px;
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .e2ee-banner-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(16, 185, 129, 0.09);
+      border: 1px solid rgba(16, 185, 129, 0.28);
+      padding: 6px 18px;
+      border-radius: 22px;
+      color: #34d399;
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      box-shadow: 0 4px 14px rgba(16, 185, 129, 0.08);
+    }
+
+    .e2ee-algo {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 700;
+      color: #6ee7b7;
+      font-size: 15px;
+    }
+
+    /* Message Item Rows */
+    .message-row {
+      display: flex;
+      gap: 16px;
+      max-width: 96%;
+    }
+
+    .message-row.incoming {
+      align-self: flex-start;
+    }
+
+    .message-row.outgoing {
+      align-self: flex-end;
+      flex-direction: row-reverse;
+    }
+
+    /* Avatar with Moments Segmented Glowing Ring */
+    .avatar-wrapper {
+      position: relative;
+      width: 76px;
+      height: 76px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .moments-ring-svg {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 76px;
+      height: 76px;
+      transform: rotate(0deg);
+    }
+
+    .avatar-img-circle {
+      width: 58px;
+      height: 58px;
+      border-radius: 50%;
+      background: #1e293b;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      border: 2px solid #0b0f19;
+      z-index: 2;
+    }
+
+    .avatar-initial {
+      font-size: 24px;
+      font-weight: 700;
+      color: #ffffff;
+    }
+
+    .alex-gradient   { background: linear-gradient(135deg, #3b82f6, #1d4ed8); }
+    .aiyu-gradient   { background: linear-gradient(135deg, #ec4899, #8b5cf6); }
+    .sophia-gradient { background: linear-gradient(135deg, #06b6d4, #0284c7); }
+
+    /* Message Content Column */
+    .msg-column {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .message-row.outgoing .msg-column {
+      align-items: flex-end;
+    }
+
+    .sender-meta {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-left: 4px;
+    }
+
+    .sender-name {
+      font-size: 21px;
+      font-weight: 700;
+      color: #f1f5f9;
+    }
+
+    .staff-badge {
+      font-size: 13px;
+      font-weight: 700;
+      color: #818cf8;
+      background: rgba(99, 102, 241, 0.18);
+      border: 1px solid rgba(99, 102, 241, 0.35);
+      padding: 2px 8px;
+      border-radius: 6px;
+      letter-spacing: 0.03em;
+    }
+
+    .msg-timestamp {
+      font-size: 16px;
+      color: var(--text-subtle);
+    }
+
+    /* Material 3 Compose Message Card */
+    .compose-card {
+      background: var(--surface-700);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 24px 24px 24px 6px;
+      padding: 18px 22px;
+      box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+      position: relative;
+    }
+
+    .compose-card.outgoing-bubble {
+      background: linear-gradient(135deg, #3730a3, #4338ca);
+      border-color: rgba(129, 140, 248, 0.35);
+      border-radius: 24px 24px 6px 24px;
+      box-shadow: 0 6px 22px rgba(67, 56, 202, 0.35);
+    }
+
+    .msg-text {
+      font-size: 22px;
+      line-height: 1.45;
+      color: #f8fafc;
+      font-weight: 400;
+    }
+
+    /* Replying-to Quoted Snippet */
+    .reply-quote-box {
+      margin-bottom: 10px;
+      padding: 8px 14px;
+      border-left: 4px solid #a5b4fc;
+      background: rgba(0, 0, 0, 0.25);
+      border-radius: 4px 12px 12px 4px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .reply-quote-author {
+      font-size: 15px;
+      font-weight: 700;
+      color: #c7d2fe;
+    }
+
+    .reply-quote-text {
+      font-size: 16px;
+      color: #e2e8f0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Attachment Preview Card */
+    .attachment-card {
+      margin-top: 12px;
+      border-radius: 18px;
+      background: #111827;
+      border: 1px solid rgba(99, 102, 241, 0.32);
+      overflow: hidden;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    }
+
+    .attachment-visual-preview {
+      width: 580px;
+      height: 220px;
+      background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 16px;
+      overflow: hidden;
+    }
+
+    .attachment-schematic-svg {
+      width: 100%;
+      height: 100%;
+    }
+
+    .attachment-badge-overlay {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      background: rgba(15, 23, 42, 0.88);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(63, 214, 140, 0.35);
+      padding: 4px 12px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: #3fd68c;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .attachment-footer {
+      padding: 12px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(15, 23, 42, 0.95);
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .file-desc-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .file-icon-box {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      background: rgba(99, 102, 241, 0.16);
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #818cf8;
+    }
+
+    .file-info-text {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .file-name {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 17px;
+      font-weight: 600;
+      color: #ffffff;
+    }
+
+    .file-details {
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+
+    .download-action-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 14px;
+      border-radius: 12px;
+      background: rgba(99, 102, 241, 0.22);
+      border: 1px solid rgba(99, 102, 241, 0.4);
+      color: #a5b4fc;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    /* Voice Note Player Bubble */
+    .voice-note-card {
+      margin-top: 10px;
+      padding: 14px 18px;
+      border-radius: 16px;
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .voice-play-circle {
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #10b981, #059669);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #ffffff;
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+      flex-shrink: 0;
+    }
+
+    .waveform-bars {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      height: 36px;
+      flex: 1;
+    }
+
+    .w-bar {
+      width: 4px;
+      border-radius: 2px;
+      background: #818cf8;
+    }
+
+    .w-bar.played {
+      background: #34d399;
+    }
+
+    .voice-duration-tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-left: 8px;
+      flex-shrink: 0;
+    }
+
+    /* Emoji Reaction Row */
+    .reactions-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    .message-row.outgoing .reactions-bar {
+      justify-content: flex-end;
+    }
+
+    .reaction-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      font-size: 18px;
+      font-weight: 600;
+      color: #f1f5f9;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+    }
+    .reaction-pill.active {
+      background: rgba(99, 102, 241, 0.25);
+      border-color: rgba(99, 102, 241, 0.45);
+      color: #ffffff;
+    }
+
+    .meta-time-status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 6px;
+      justify-content: flex-end;
+    }
+
+    .read-receipt-check {
+      color: #3fd68c;
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: -2px;
+    }
+
+    /* Typing indicator row */
+    .typing-indicator-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 2px 8px;
+      color: var(--text-subtle);
+      font-size: 17px;
+      font-weight: 500;
+    }
+
+    .typing-dots {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .typing-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      opacity: 0.8;
+    }
+
+    /* WhatsApp-Style Media Picker Bottom Sheet & Composer */
+    .media-sheet-container {
+      background: linear-gradient(180deg, #141c2c 0%, #0d131f 100%);
+      border-top: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 36px 36px 0 0;
+      box-shadow: 0 -12px 48px rgba(0, 0, 0, 0.65);
+      display: flex;
+      flex-direction: column;
+      padding: 12px 24px 18px 24px;
+      gap: 14px;
+      position: relative;
+      z-index: 60;
+      flex-shrink: 0;
+    }
+
+    .sheet-handle-pill {
+      width: 52px;
+      height: 5px;
+      border-radius: 3px;
+      background: rgba(255, 255, 255, 0.24);
+      margin: 0 auto 2px auto;
+    }
+
+    /* 4 WhatsApp Quick Action Icons */
+    .sheet-action-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 2px 18px;
+    }
+
+    .sheet-action-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .action-circle-btn {
+      width: 66px;
+      height: 66px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .bg-document { background: linear-gradient(135deg, #6366f1, #4f46e5); }
+    .bg-camera   { background: linear-gradient(135deg, #ec4899, #db2777); }
+    .bg-gallery  { background: linear-gradient(135deg, #a855f7, #9333ea); }
+    .bg-audio    { background: linear-gradient(135deg, #f59e0b, #d97706); }
+
+    .action-label {
+      font-size: 16px;
+      font-weight: 600;
+      color: #cbd5e1;
+    }
+
+    /* Gallery Thumbnails Strip */
+    .gallery-preview-strip {
+      display: flex;
+      gap: 14px;
+      overflow: hidden;
+      padding: 2px 0;
+    }
+
+    .gallery-thumb-card {
+      width: 140px;
+      height: 140px;
+      border-radius: 20px;
+      position: relative;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      flex-shrink: 0;
+    }
+
+    .thumb-camera-live {
+      background: linear-gradient(135deg, #1e293b, #0f172a);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      color: #94a3b8;
+    }
+
+    .thumb-selected-badge {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: var(--accent);
+      border: 2px solid #ffffff;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 700;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+    }
+
+    /* Audio Recorder Pill */
+    .audio-recorder-dock {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 18px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 20px;
+    }
+
+    .audio-rec-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 15px;
+      color: #f87171;
+      font-weight: 600;
+    }
+
+    .rec-pulse-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #ef4444;
+      box-shadow: 0 0 8px #ef4444;
+    }
+
+    .audio-rec-hint {
+      font-size: 15px;
+      color: var(--text-subtle);
+    }
+
+    /* Composer Input Row */
+    .composer-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-top: 2px;
+    }
+
+    .compose-input-pill {
+      flex: 1;
+      height: 70px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 35px;
+      padding: 0 22px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .input-icon {
+      color: #94a3b8;
+      cursor: pointer;
+    }
+
+    .input-placeholder {
+      flex: 1;
+      font-size: 22px;
+      color: #64748b;
+      font-weight: 400;
+    }
+
+    .right-input-actions {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .send-circle-btn {
+      width: 70px;
+      height: 70px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #6366f1, #4f46e5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #ffffff;
+      box-shadow:
+        0 6px 20px rgba(99, 102, 241, 0.55),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    /* Android Navigation Gesture Bar */
+    .nav-gesture-container {
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding-bottom: 8px;
+      flex-shrink: 0;
+    }
+
+    .home-gesture-bar {
+      width: 170px;
+      height: 5px;
+      border-radius: 3px;
+      background: rgba(255, 255, 255, 0.55);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Sleek Modern Smartphone Chassis -->
+  <div class="device-chassis">
+    <div class="screen-ambient"></div>
+
+    <!-- Camera Punch Hole Cutout -->
+    <div class="camera-punch-hole"></div>
+
+    <!-- Android Status Bar -->
+    <div class="status-bar">
+      <div class="status-bar-left">
+        <span class="clock">9:41</span>
+        <span class="status-icon-dot"></span>
+        <!-- Small BetweenUs app notification glyph -->
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+          <rect x="2" y="2" width="20" height="20" rx="6" fill="#6366f1" fill-opacity="0.3" stroke="#6366f1" stroke-width="1.5"/>
+          <path d="M7 8L12 13L17 8M7 13L12 18L17 13" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+
+      <div class="status-bar-right">
+        <!-- 5G Badge -->
+        <span class="network-badge">5G</span>
+
+        <!-- Cellular Signal Icon -->
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+          <path d="M4 19H5.5V17H4V19ZM8 19H9.5V14H8V19ZM12 19H13.5V11H12V19ZM16 19H17.5V7H16V19ZM20 19H21.5V3H20V19Z" fill="#f1f5f9"/>
+        </svg>
+
+        <!-- Wi-Fi Icon -->
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+          <path d="M12 18C12.5523 18 13 17.5523 13 17C13 16.4477 12.5523 16 12 16C11.4477 16 11 16.4477 11 17C11 17.5523 11.4477 18 12 18Z" fill="#f1f5f9"/>
+          <path d="M8.5 13.5C9.46 12.54 10.73 12 12 12C13.27 12 14.54 12.54 15.5 13.5" stroke="#f1f5f9" stroke-width="2" stroke-linecap="round"/>
+          <path d="M5 10C6.91 8.09 9.46 7 12 7C14.54 7 17.09 8.09 19 10" stroke="#f1f5f9" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+
+        <!-- Battery 98% Pill -->
+        <div class="battery-group">
+          <span class="battery-pct">98%</span>
+          <div class="battery-shell">
+            <div class="battery-fill"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Top App Bar (Material 3) -->
+    <div class="top-app-bar">
+      <div class="bar-left-cluster">
+        <!-- Burger menu icon -->
+        <div class="nav-drawer-btn">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round">
+            <line x1="3" y1="6" x2="21" y2="6"/>
+            <line x1="3" y1="12" x2="21" y2="12"/>
+            <line x1="3" y1="18" x2="21" y2="18"/>
+          </svg>
+        </div>
+
+        <!-- Server icon -->
+        <div class="server-icon-badge">
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none">
+            <path d="M12 2L3 7V17L12 22L21 17V7L12 2Z" fill="#ffffff" fill-opacity="0.9"/>
+            <circle cx="12" cy="12" r="3.5" fill="#6366f1"/>
+          </svg>
+        </div>
+
+        <div class="server-text-details">
+          <div class="channel-name">
+            <span class="channel-hash">#</span>general
+          </div>
+          <div class="server-subtext">
+            <span>BetweenUs HQ</span>
+            <span style="opacity: 0.4;">•</span>
+            <span class="online-indicator-dot"></span>
+            <span>18 online</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action buttons -->
+      <div class="bar-actions">
+        <!-- Search icon -->
+        <div class="action-icon-btn">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+            <circle cx="11" cy="11" r="8"/>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+        </div>
+
+        <!-- Voice Call Icon -->
+        <div class="action-icon-btn">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+          </svg>
+        </div>
+
+        <!-- More options 3 dots -->
+        <div class="action-icon-btn">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+            <circle cx="12" cy="5" r="1.5" fill="currentColor"/>
+            <circle cx="12" cy="12" r="1.5" fill="currentColor"/>
+            <circle cx="12" cy="19" r="1.5" fill="currentColor"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- Active Voice Banner Docked Under App Bar -->
+    <div class="voice-banner">
+      <div class="voice-left">
+        <div class="pulse-halo-speaker">
+          <div class="pulse-dot"></div>
+          <!-- Speaker icon -->
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+          </svg>
+        </div>
+
+        <div class="voice-meta">
+          <div class="voice-title-row">
+            <span class="voice-room-name">Lounge</span>
+            <span class="connected-chip">3 connected</span>
+          </div>
+          <span class="voice-participants-summary">aiyu, alex, sophia</span>
+        </div>
+      </div>
+
+      <div class="voice-actions">
+        <div class="voice-btn btn-mute">
+          <!-- Mic icon -->
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+            <line x1="12" y1="19" x2="12" y2="23"/>
+            <line x1="8" y1="23" x2="16" y2="23"/>
+          </svg>
+          <span>Mute</span>
+        </div>
+
+        <div class="voice-btn btn-leave">
+          <!-- Phone off icon -->
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+            <path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"/>
+            <line x1="1" y1="1" x2="23" y2="23"/>
+          </svg>
+          <span>Leave</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Chat Feed -->
+    <div class="chat-feed">
+      <!-- Date & E2EE Banner Pills -->
+      <div class="feed-center-badges">
+        <div class="date-pill">Today, September 18</div>
+        <div class="e2ee-banner-pill">
+          <!-- Lock icon -->
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+            <rect x="3" y="11" width="18" height="11" rx="3" ry="3"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+          <span>End-to-end encrypted with</span>
+          <span class="e2ee-algo">AES-256-GCM</span>
+        </div>
+      </div>
+
+      <!-- Message 1: From alex (Incoming) -->
+      <div class="message-row incoming">
+        <!-- Avatar with Moments Segmented Glowing Ring (3 segments) -->
+        <div class="avatar-wrapper">
+          <svg class="moments-ring-svg" viewBox="0 0 88 88" fill="none">
+            <defs>
+              <filter id="glow-alex" x="-20%" y="-20%" width="140%" height="140%">
+                <feGaussianBlur stdDeviation="2.5" result="blur"/>
+                <feMerge>
+                  <feMergeNode in="blur"/>
+                  <feMergeNode in="SourceGraphic"/>
+                </feMerge>
+              </filter>
+            </defs>
+            <!-- 3 Segments: Arc 1 Iris, Arc 2 Fuchsia, Arc 3 Emerald -->
+            <path d="M 49.29 6.37 A 38 38 0 0 1 79.23 58.23" stroke="#6366f1" stroke-width="3.8" stroke-linecap="round" filter="url(#glow-alex)"/>
+            <path d="M 73.94 67.40 A 38 38 0 0 1 14.06 67.40" stroke="#ec4899" stroke-width="3.8" stroke-linecap="round" filter="url(#glow-alex)"/>
+            <path d="M 8.77 58.23 A 38 38 0 0 1 38.71 6.37" stroke="#3fd68c" stroke-width="3.8" stroke-linecap="round" filter="url(#glow-alex)"/>
+          </svg>
+          <div class="avatar-img-circle alex-gradient">
+            <span class="avatar-initial">A</span>
+          </div>
+        </div>
+
+        <div class="msg-column">
+          <div class="sender-meta">
+            <span class="sender-name">alex</span>
+            <span class="staff-badge">CORE DEV</span>
+            <span class="msg-timestamp">12:24 PM</span>
+          </div>
+
+          <div class="compose-card">
+            <div class="msg-text">
+              Hey team! Just pushed the Android Compose release with local media vault.
+            </div>
+
+            <!-- Rich photo attachment preview card -->
+            <div class="attachment-card">
+              <div class="attachment-visual-preview">
+                <div class="attachment-badge-overlay">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                  </svg>
+                  <span>Decrypted locally</span>
+                </div>
+
+                <!-- Architectural Diagram Illustration -->
+                <svg class="attachment-schematic-svg" viewBox="0 0 540 200" fill="none">
+                  <!-- Keystore Node -->
+                  <rect x="20" y="55" width="130" height="90" rx="14" fill="#1e293b" stroke="#6366f1" stroke-width="1.8"/>
+                  <circle cx="85" cy="85" r="16" fill="rgba(99, 102, 241, 0.2)"/>
+                  <path d="M85 78V88M81 83H89" stroke="#818cf8" stroke-width="2" stroke-linecap="round"/>
+                  <text x="85" y="125" fill="#f8fafc" font-size="13" font-weight="600" text-anchor="middle" font-family="Inter">Android Keystore</text>
+                  <text x="85" y="137" fill="#94a3b8" font-size="10" text-anchor="middle" font-family="JetBrains Mono">StrongBox HSM</text>
+
+                  <!-- Flow Arrow 1 -->
+                  <path d="M150 100 H195" stroke="#6366f1" stroke-width="2" stroke-dasharray="4 3"/>
+                  <polygon points="195,100 188,96 188,104" fill="#6366f1"/>
+
+                  <!-- AES-GCM Vault Node -->
+                  <rect x="205" y="45" width="145" height="110" rx="16" fill="#1e1b4b" stroke="#818cf8" stroke-width="2"/>
+                  <rect x="220" y="58" width="115" height="26" rx="6" fill="rgba(99, 102, 241, 0.3)"/>
+                  <text x="277" y="75" fill="#c7d2fe" font-size="11" font-weight="700" text-anchor="middle" font-family="JetBrains Mono">AES-256-GCM</text>
+                  <circle cx="277" cy="112" r="14" fill="#3fd68c" fill-opacity="0.2"/>
+                  <path d="M272 112L276 116L283 108" stroke="#3fd68c" stroke-width="2.2" stroke-linecap="round"/>
+                  <text x="277" y="142" fill="#f8fafc" font-size="12" font-weight="600" text-anchor="middle" font-family="Inter">Encrypted Vault</text>
+
+                  <!-- Flow Arrow 2 -->
+                  <path d="M350 100 H395" stroke="#3fd68c" stroke-width="2" stroke-dasharray="4 3"/>
+                  <polygon points="395,100 388,96 388,104" fill="#3fd68c"/>
+
+                  <!-- Compose 120Hz Pipeline Node -->
+                  <rect x="405" y="55" width="120" height="90" rx="14" fill="#1e293b" stroke="#3fd68c" stroke-width="1.8"/>
+                  <circle cx="465" cy="85" r="16" fill="rgba(63, 214, 140, 0.2)"/>
+                  <path d="M459 85L463 89L471 81" stroke="#3fd68c" stroke-width="2" stroke-linecap="round"/>
+                  <text x="465" y="125" fill="#f8fafc" font-size="13" font-weight="600" text-anchor="middle" font-family="Inter">Compose UI</text>
+                  <text x="465" y="137" fill="#3fd68c" font-size="11" font-weight="700" text-anchor="middle" font-family="JetBrains Mono">120Hz Refresh</text>
+                </svg>
+              </div>
+
+              <div class="attachment-footer">
+                <div class="file-desc-left">
+                  <div class="file-icon-box">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <rect x="3" y="3" width="18" height="18" rx="4"/>
+                      <circle cx="8.5" cy="8.5" r="1.5" fill="currentColor"/>
+                      <polyline points="21 15 16 10 5 21"/>
+                    </svg>
+                  </div>
+                  <div class="file-info-text">
+                    <span class="file-name">vault_crypto_pipeline.webp</span>
+                    <span class="file-details">2.4 MB • Verified AES-256 Envelope</span>
+                  </div>
+                </div>
+
+                <div class="download-action-badge">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                  </svg>
+                  <span>Saved</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Emoji Reaction Pills for Alex -->
+          <div class="reactions-bar">
+            <div class="reaction-pill active">
+              <span>🔥</span>
+              <span>4</span>
+            </div>
+            <div class="reaction-pill">
+              <span>❤️</span>
+              <span>3</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Message 2: From aiyu (Outgoing) with Quoted Reply -->
+      <div class="message-row outgoing">
+        <!-- Avatar with Moments Segmented Glowing Ring (3 segments) -->
+        <div class="avatar-wrapper">
+          <svg class="moments-ring-svg" viewBox="0 0 88 88" fill="none">
+            <defs>
+              <filter id="glow-aiyu" x="-20%" y="-20%" width="140%" height="140%">
+                <feGaussianBlur stdDeviation="2.5" result="blur"/>
+                <feMerge>
+                  <feMergeNode in="blur"/>
+                  <feMergeNode in="SourceGraphic"/>
+                </feMerge>
+              </filter>
+            </defs>
+            <path d="M 49.29 6.37 A 38 38 0 0 1 79.23 58.23" stroke="#ec4899" stroke-width="3.8" stroke-linecap="round" filter="url(#glow-aiyu)"/>
+            <path d="M 73.94 67.40 A 38 38 0 0 1 14.06 67.40" stroke="#3fd68c" stroke-width="3.8" stroke-linecap="round" filter="url(#glow-aiyu)"/>
+            <path d="M 8.77 58.23 A 38 38 0 0 1 38.71 6.37" stroke="#6366f1" stroke-width="3.8" stroke-linecap="round" filter="url(#glow-aiyu)"/>
+          </svg>
+          <div class="avatar-img-circle aiyu-gradient">
+            <span class="avatar-initial">AI</span>
+          </div>
+        </div>
+
+        <div class="msg-column">
+          <div class="sender-meta" style="margin-right: 4px;">
+            <span class="sender-name">aiyu</span>
+            <span class="msg-timestamp">12:26 PM</span>
+          </div>
+
+          <div class="compose-card outgoing-bubble">
+            <!-- Quoted Reply to Alex -->
+            <div class="reply-quote-box">
+              <span class="reply-quote-author">alex</span>
+              <span class="reply-quote-text">Hey team! Just pushed the Android Compose release...</span>
+            </div>
+
+            <div class="msg-text">
+              Verified on Pixel 9. Smooth 120Hz gesture scrolling and background WebRTC call sync! 🚀
+            </div>
+            <div class="meta-time-status">
+              <span class="msg-timestamp" style="color: rgba(255, 255, 255, 0.7);">12:26 PM</span>
+              <!-- Emerald Double Checkmark -->
+              <span class="read-receipt-check">✓✓</span>
+            </div>
+          </div>
+
+          <!-- Emoji Reaction Pills for Aiyu -->
+          <div class="reactions-bar">
+            <div class="reaction-pill active">
+              <span>🚀</span>
+              <span>5</span>
+            </div>
+            <div class="reaction-pill">
+              <span>✨</span>
+              <span>2</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Message 3: From sophia with Voice Note Attachment (Incoming) -->
+      <div class="message-row incoming">
+        <div class="avatar-wrapper">
+          <svg class="moments-ring-svg" viewBox="0 0 88 88" fill="none">
+            <defs>
+              <filter id="glow-sophia" x="-20%" y="-20%" width="140%" height="140%">
+                <feGaussianBlur stdDeviation="2.5" result="blur"/>
+                <feMerge>
+                  <feMergeNode in="blur"/>
+                  <feMergeNode in="SourceGraphic"/>
+                </feMerge>
+              </filter>
+            </defs>
+            <path d="M 49.29 6.37 A 38 38 0 0 1 79.23 58.23" stroke="#f59e0b" stroke-width="3.8" stroke-linecap="round" filter="url(#glow-sophia)"/>
+            <path d="M 73.94 67.40 A 38 38 0 0 1 14.06 67.40" stroke="#6366f1" stroke-width="3.8" stroke-linecap="round" filter="url(#glow-sophia)"/>
+            <path d="M 8.77 58.23 A 38 38 0 0 1 38.71 6.37" stroke="#3fd68c" stroke-width="3.8" stroke-linecap="round" filter="url(#glow-sophia)"/>
+          </svg>
+          <div class="avatar-img-circle sophia-gradient">
+            <span class="avatar-initial">S</span>
+          </div>
+        </div>
+
+        <div class="msg-column">
+          <div class="sender-meta">
+            <span class="sender-name">sophia</span>
+            <span class="msg-timestamp">12:27 PM</span>
+          </div>
+
+          <div class="compose-card">
+            <div class="msg-text">
+              Testing audio playback on Pixel Buds Pro. Opus stream is super clean:
+            </div>
+
+            <!-- Jetpack Compose Voice Note Player Card -->
+            <div class="voice-note-card">
+              <div class="voice-play-circle">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="#ffffff">
+                  <polygon points="6 3 20 12 6 21 6 3"></polygon>
+                </svg>
+              </div>
+
+              <!-- Interactive Audio Waveform -->
+              <div class="waveform-bars">
+                <div class="w-bar played" style="height: 14px;"></div>
+                <div class="w-bar played" style="height: 22px;"></div>
+                <div class="w-bar played" style="height: 18px;"></div>
+                <div class="w-bar played" style="height: 28px;"></div>
+                <div class="w-bar played" style="height: 32px;"></div>
+                <div class="w-bar played" style="height: 24px;"></div>
+                <div class="w-bar played" style="height: 16px;"></div>
+                <div class="w-bar played" style="height: 30px;"></div>
+                <div class="w-bar played" style="height: 34px;"></div>
+                <div class="w-bar played" style="height: 20px;"></div>
+                <div class="w-bar" style="height: 26px;"></div>
+                <div class="w-bar" style="height: 32px;"></div>
+                <div class="w-bar" style="height: 22px;"></div>
+                <div class="w-bar" style="height: 18px;"></div>
+                <div class="w-bar" style="height: 28px;"></div>
+                <div class="w-bar" style="height: 24px;"></div>
+                <div class="w-bar" style="height: 16px;"></div>
+                <div class="w-bar" style="height: 12px;"></div>
+                <div class="w-bar" style="height: 20px;"></div>
+                <div class="w-bar" style="height: 14px;"></div>
+              </div>
+
+              <span class="voice-duration-tag">0:14 / 0:28</span>
+            </div>
+          </div>
+
+          <div class="reactions-bar">
+            <div class="reaction-pill">
+              <span>🎧</span>
+              <span>4</span>
+            </div>
+            <div class="reaction-pill">
+              <span>🎉</span>
+              <span>3</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Peer Typing Status Indicator -->
+      <div class="typing-indicator-row">
+        <div class="avatar-wrapper" style="width: 36px; height: 36px;">
+          <div class="avatar-img-circle" style="width: 32px; height: 32px; background: #8b5cf6;">
+            <span class="avatar-initial" style="font-size: 14px;">M</span>
+          </div>
+        </div>
+        <div class="typing-dots">
+          <div class="typing-dot"></div>
+          <div class="typing-dot" style="opacity: 0.6;"></div>
+          <div class="typing-dot" style="opacity: 0.3;"></div>
+        </div>
+        <span>marcus is typing...</span>
+      </div>
+    </div>
+
+    <!-- WhatsApp-Style Media Picker Bottom Sheet & Composer -->
+    <div class="media-sheet-container">
+      <div class="sheet-handle-pill"></div>
+
+      <!-- Quick Action Buttons Row -->
+      <div class="sheet-action-row">
+        <!-- Document -->
+        <div class="sheet-action-item">
+          <div class="action-circle-btn bg-document">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="16" y1="13" x2="8" y2="13"></line>
+              <line x1="16" y1="17" x2="8" y2="17"></line>
+              <polyline points="10 9 9 9 8 9"></polyline>
+            </svg>
+          </div>
+          <span class="action-label">Document</span>
+        </div>
+
+        <!-- Camera -->
+        <div class="sheet-action-item">
+          <div class="action-circle-btn bg-camera">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round">
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+              <circle cx="12" cy="13" r="4"></circle>
+            </svg>
+          </div>
+          <span class="action-label">Camera</span>
+        </div>
+
+        <!-- Gallery -->
+        <div class="sheet-action-item">
+          <div class="action-circle-btn bg-gallery">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round">
+              <rect x="3" y="3" width="18" height="18" rx="4"></rect>
+              <circle cx="8.5" cy="8.5" r="1.5" fill="#ffffff"></circle>
+              <polyline points="21 15 16 10 5 21"></polyline>
+            </svg>
+          </div>
+          <span class="action-label">Gallery</span>
+        </div>
+
+        <!-- Audio -->
+        <div class="sheet-action-item">
+          <div class="action-circle-btn bg-audio">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round">
+              <path d="M3 18v-6a9 9 0 0 1 18 0v6"></path>
+              <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"></path>
+            </svg>
+          </div>
+          <span class="action-label">Audio</span>
+        </div>
+      </div>
+
+      <!-- Recent Photos Gallery Horizontal Strip -->
+      <div class="gallery-preview-strip">
+        <!-- Live Camera Viewfinder Tile -->
+        <div class="gallery-thumb-card thumb-camera-live">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+            <circle cx="12" cy="13" r="4"></circle>
+          </svg>
+          <span style="font-size: 15px; font-weight: 600; color: #94a3b8;">Capture</span>
+        </div>
+
+        <!-- Photo Thumbnail 1 (Selected) -->
+        <div class="gallery-thumb-card" style="background: linear-gradient(135deg, #1e1b4b, #312e81);">
+          <!-- Code snippet graphic -->
+          <svg width="100%" height="100%" viewBox="0 0 142 142" fill="none">
+            <rect x="15" y="25" width="80" height="8" rx="4" fill="#818cf8"/>
+            <rect x="15" y="45" width="110" height="8" rx="4" fill="#3fd68c" fill-opacity="0.8"/>
+            <rect x="25" y="65" width="90" height="8" rx="4" fill="#f43f5e" fill-opacity="0.7"/>
+            <rect x="25" y="85" width="70" height="8" rx="4" fill="#38bdf8" fill-opacity="0.8"/>
+            <rect x="15" y="105" width="50" height="8" rx="4" fill="#818cf8"/>
+          </svg>
+          <div class="thumb-selected-badge">1</div>
+        </div>
+
+        <!-- Photo Thumbnail 2 -->
+        <div class="gallery-thumb-card" style="background: linear-gradient(135deg, #064e3b, #022c22);">
+          <svg width="100%" height="100%" viewBox="0 0 142 142" fill="none">
+            <circle cx="71" cy="71" r="35" fill="none" stroke="#34d399" stroke-width="4" stroke-dasharray="8 6"/>
+            <path d="M55 71L66 82L87 61" stroke="#34d399" stroke-width="4" stroke-linecap="round"/>
+          </svg>
+        </div>
+
+        <!-- Photo Thumbnail 3 -->
+        <div class="gallery-thumb-card" style="background: linear-gradient(135deg, #4c1d95, #2e1065);">
+          <svg width="100%" height="100%" viewBox="0 0 142 142" fill="none">
+            <polygon points="71,25 110,110 32,110" fill="rgba(168, 85, 247, 0.4)" stroke="#c084fc" stroke-width="3"/>
+            <circle cx="71" cy="65" r="14" fill="#fbbf24"/>
+          </svg>
+        </div>
+
+        <!-- Photo Thumbnail 4 -->
+        <div class="gallery-thumb-card" style="background: linear-gradient(135deg, #831843, #500724);">
+          <svg width="100%" height="100%" viewBox="0 0 142 142" fill="none">
+            <rect x="25" y="35" width="92" height="72" rx="10" fill="none" stroke="#f472b6" stroke-width="3"/>
+            <circle cx="50" cy="60" r="8" fill="#f472b6"/>
+            <path d="M30 95L60 70L85 85L105 65L115 75" stroke="#f472b6" stroke-width="3" stroke-linecap="round"/>
+          </svg>
+        </div>
+      </div>
+
+      <!-- WhatsApp-Style Audio Recorder Pill Dock -->
+      <div class="audio-recorder-dock">
+        <div class="audio-rec-left">
+          <div class="rec-pulse-dot"></div>
+          <span>Audio Recorder Ready</span>
+        </div>
+        <span class="audio-rec-hint">Hold microphone icon below to record • Slide left to cancel</span>
+      </div>
+
+      <!-- Composer Input Row -->
+      <div class="composer-row">
+        <div class="compose-input-pill">
+          <!-- Smiley / Emoji Icon -->
+          <div class="input-icon">
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <path d="M8 14s1.5 2 4 2 4-2 4-2"></path>
+              <line x1="9" y1="9" x2="9.01" y2="9"></line>
+              <line x1="15" y1="9" x2="15.01" y2="9"></line>
+            </svg>
+          </div>
+
+          <!-- Placeholder -->
+          <span class="input-placeholder">Message #general...</span>
+
+          <!-- Right inside icons -->
+          <div class="right-input-actions">
+            <!-- Paperclip attachment icon -->
+            <div class="input-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+                <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
+              </svg>
+            </div>
+
+            <!-- Voice mic icon -->
+            <div class="input-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                <line x1="12" y1="19" x2="12" y2="23"/>
+                <line x1="8" y1="23" x2="16" y2="23"/>
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <!-- Iris Send Button -->
+        <div class="send-circle-btn">
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="transform: translate(2px, -1px);">
+            <line x1="22" y1="2" x2="11" y2="13"></line>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+          </svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- Android Home Navigation Gesture Bar -->
+    <div class="nav-gesture-container">
+      <div class="home-gesture-bar"></div>
+    </div>
+
+  </div>
+
+</body>
+</html>

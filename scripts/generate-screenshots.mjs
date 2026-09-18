@@ -128,7 +128,17 @@ const TARGETS = {
     });
   },
   android: () => {
-    console.log('[screenshot] Target android scheduled for Task 2.');
+    const htmlPath = path.join(TEMPLATES_DIR, 'android.html');
+    const outputPath = path.join(PICTURES_DIR, 'home-android.png');
+    if (!fs.existsSync(htmlPath)) {
+      throw new Error(`Template not found at ${htmlPath}`);
+    }
+    return renderScreenshot({
+      htmlPath,
+      outputPath,
+      width: 1080,
+      height: 2400,
+    });
   },
   features: () => {
     console.log('[screenshot] Target features scheduled for Task 3.');
