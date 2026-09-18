@@ -760,6 +760,8 @@ export interface Server {
   name: string;
   slug: string;
   iconUrl: string | null;
+  /** What this server is about, shown in settings and on the invite card. Null when nothing's set. */
+  description: string | null;
   ownerId: string;
   /**
    * How long a message sent in this server's channels lives, in seconds, or
@@ -786,6 +788,8 @@ export interface CreateServerRequest {
 export interface UpdateServerRequest {
   name?: string;
   iconUrl?: string | null;
+  /** What this server is about. Null clears it. Needs MANAGE_SERVER. */
+  description?: string | null;
   /**
    * The server's disappearing window in seconds; null switches it off. Needs
    * MANAGE_SERVER, and must be one of `DISAPPEARING_WINDOWS`.
@@ -837,6 +841,8 @@ export interface InvitePreview {
   serverId: string;
   name: string;
   iconUrl: string | null;
+  /** What the server is about, or null when nothing's set. */
+  description: string | null;
   memberCount: number;
   /**
    * How many of those members are online, or null when presence could not be

@@ -311,6 +311,7 @@ function Overview(): JSX.Element {
   const server = servers.find((item) => item.id === activeServerId);
 
   const [name, setName] = useState(server?.name ?? '');
+  const [description, setDescription] = useState(server?.description ?? '');
   const [note, setNote] = useState<string | null>(null);
   const [savingWindow, setSavingWindow] = useState(false);
   const [windowNote, setWindowNote] = useState<string | null>(null);
@@ -340,12 +341,15 @@ function Overview(): JSX.Element {
   const save = async (): Promise<void> => {
     setNote(null);
     try {
-      await saveServer({ name: name.trim() });
+      await saveServer({ name: name.trim(), description: description.trim() || null });
       setNote('Saved.');
     } catch (error) {
       setNote(error instanceof Error ? error.message : 'That could not be saved');
     }
   };
+
+  const dirty =
+    name.trim() !== server?.name || description.trim() !== (server?.description ?? '');
 
   return (
     <>
@@ -375,11 +379,26 @@ function Overview(): JSX.Element {
         />
       </label>
 
+      <label className="mt-6 block max-w-sm">
+        <span className="block text-xs font-bold uppercase tracking-wide text-slate-400">
+          Description
+        </span>
+        <textarea
+          value={description}
+          disabled={!canManage}
+          onChange={(event) => setDescription(event.target.value)}
+          maxLength={512}
+          rows={3}
+          placeholder="What's this server about?"
+          className="mt-2 w-full resize-none rounded-lg border border-edge bg-surface-950 px-3 py-2.5 text-slate-100 outline-none transition-colors focus:border-accent/60 disabled:opacity-50"
+        />
+      </label>
+
       {canManage && (
         <button
           type="button"
           onClick={() => void save()}
-          disabled={name.trim().length < 2 || name.trim() === server?.name}
+          disabled={name.trim().length < 2 || !dirty}
           className="mt-4 cursor-pointer rounded bg-accent px-5 py-2 text-sm font-medium text-white transition-colors duration-200 hover:bg-accent-hover active:scale-[0.98] disabled:opacity-50"
         >
           Save changes

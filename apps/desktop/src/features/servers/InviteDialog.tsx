@@ -84,6 +84,9 @@ export function InviteDialog({ code, onClose }: { code: string; onClose: () => v
                 <ServerIcon server={preview} size="lg" />
               </div>
               <h2 className="text-xl font-semibold text-slate-50">{preview.name}</h2>
+              {preview.description && (
+                <p className="max-w-xs text-sm text-slate-400">{preview.description}</p>
+              )}
               <Counts preview={preview} />
             </>
           ) : failure ? (

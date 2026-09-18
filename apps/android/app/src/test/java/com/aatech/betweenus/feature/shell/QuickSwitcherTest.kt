@@ -25,6 +25,7 @@ class QuickSwitcherTest {
         name = name,
         slug = id,
         iconUrl = null,
+        description = null,
         ownerId = "me",
         messageTtlSeconds = null,
         role = ServerRole.MEMBER,

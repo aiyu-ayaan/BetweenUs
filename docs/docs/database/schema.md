@@ -156,7 +156,9 @@ erDiagram
 
 ### `Server`
 A community — `slug` is the public, permanent join handle (superseded by
-`ServerInvite` for anything revocable).
+`ServerInvite` for anything revocable). `description` is nullable free text,
+set with `MANAGE_SERVER` and shown in settings and on the invite preview card
+before anybody joins.
 
 `messageTtlSeconds` is the server's disappearing window: how long a message
 sent in its channels lives, or null for for ever. Unlike the account-level

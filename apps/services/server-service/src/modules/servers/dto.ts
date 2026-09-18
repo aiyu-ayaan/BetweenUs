@@ -153,6 +153,12 @@ export class UpdateServerDto implements UpdateServerRequest {
   @Matches(UPLOADED_PICTURE_URL, { message: 'iconUrl must be an uploaded picture' })
   iconUrl?: string | null;
 
+  /** What this server is about. Null clears it. */
+  @ValidateIf((dto: UpdateServerDto) => dto.description !== null && dto.description !== undefined)
+  @IsString()
+  @MaxLength(512)
+  description?: string | null;
+
   /**
    * How long a message sent here lives, in seconds, or null to keep everything.
    *

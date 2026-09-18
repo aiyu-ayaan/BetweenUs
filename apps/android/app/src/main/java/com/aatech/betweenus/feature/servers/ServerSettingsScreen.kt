@@ -77,6 +77,7 @@ fun ServerSettingsScreen(serverId: String?, onBack: () -> Unit) {
     val server = servers.firstOrNull { it.id == serverId }
 
     var name by remember(server?.id) { mutableStateOf(server?.name.orEmpty()) }
+    var description by remember(server?.id) { mutableStateOf(server?.description.orEmpty()) }
     var note by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     var confirmingDestruction by remember { mutableStateOf(false) }
@@ -159,15 +160,32 @@ fun ServerSettingsScreen(serverId: String?, onBack: () -> Unit) {
                     style = MaterialTheme.typography.bodySmall,
                     color = Slate500,
                 )
+                Spacer(Modifier.height(12.dp))
+                BetweenUsField(
+                    label = "Description",
+                    value = description,
+                    onValueChange = { description = it; note = null },
+                    placeholder = "What's this server about?",
+                    imeAction = ImeAction.Done,
+                    enabled = !busy && server.can("MANAGE_SERVER"),
+                )
                 if (server.can("MANAGE_SERVER")) {
                     Spacer(Modifier.height(12.dp))
                     BetweenUsButton(
                         text = "Save",
                         busy = busy,
-                        enabled = name.isNotBlank() && name != server.name,
+                        enabled = name.isNotBlank() &&
+                            (name != server.name || description.trim() != server.description.orEmpty()),
                         onClick = {
                             act {
-                                BetweenUsApi.updateServer(server.id, name.trim(), null)
+                                val trimmedDescription = description.trim()
+                                BetweenUsApi.updateServer(
+                                    serverId = server.id,
+                                    name = name.trim(),
+                                    iconUrl = null,
+                                    description = trimmedDescription.ifEmpty { null },
+                                    clearDescription = trimmedDescription.isEmpty(),
+                                )
                                 Workspace.refresh()
                             }
                         },

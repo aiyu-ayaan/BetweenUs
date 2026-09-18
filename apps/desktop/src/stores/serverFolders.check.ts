@@ -18,6 +18,7 @@ function server(id: string): ServerWithRole {
     name: id,
     slug: id,
     iconUrl: null,
+    description: null,
     ownerId: 'u1',
     messageTtlSeconds: null,
     createdAt: '2026-01-01T00:00:00.000Z',

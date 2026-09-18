@@ -30,6 +30,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.aatech.betweenus.core.data.ChannelType
 import com.aatech.betweenus.core.data.InviteLink
@@ -265,6 +266,15 @@ private fun InviteCard(
             style = MaterialTheme.typography.titleMedium,
             color = Slate100,
         )
+        invite.description?.let { description ->
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = Slate400,
+                textAlign = TextAlign.Center,
+            )
+        }
         Spacer(Modifier.height(6.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             // The online half is left out entirely when presence could not be

@@ -221,6 +221,8 @@ data class ServerWithRole(
     val name: String,
     val slug: String,
     val iconUrl: String?,
+    /** What this server is about, or null when nothing's set. */
+    val description: String?,
     val ownerId: String,
     /**
      * How long a message sent in this server's channels lives, in seconds, or
@@ -243,6 +245,7 @@ data class ServerWithRole(
         .put("name", name)
         .put("slug", slug)
         .put("iconUrl", iconUrl)
+        .put("description", description)
         .put("ownerId", ownerId)
         .put("messageTtlSeconds", messageTtlSeconds)
         .put("role", role.name)
@@ -254,6 +257,7 @@ data class ServerWithRole(
             name = json.optString("name"),
             slug = json.optString("slug"),
             iconUrl = json.stringOrNull("iconUrl"),
+            description = json.stringOrNull("description"),
             ownerId = json.optString("ownerId"),
             messageTtlSeconds = if (json.isNull("messageTtlSeconds")) null
             else json.optInt("messageTtlSeconds").takeIf { it > 0 },
@@ -353,6 +357,7 @@ data class InvitePreview(
     val serverId: String,
     val name: String,
     val iconUrl: String?,
+    val description: String?,
     val memberCount: Int,
     val onlineCount: Int?,
     val member: Boolean,
@@ -363,6 +368,7 @@ data class InvitePreview(
             serverId = json.optString("serverId"),
             name = json.optString("name"),
             iconUrl = json.stringOrNull("iconUrl"),
+            description = json.stringOrNull("description"),
             memberCount = json.optInt("memberCount"),
             onlineCount = if (json.isNull("onlineCount")) null else json.optInt("onlineCount"),
             member = json.optBoolean("member"),

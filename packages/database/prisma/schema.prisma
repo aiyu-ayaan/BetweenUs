@@ -551,6 +551,10 @@ model Server {
   name      String
   slug      String   @unique
   iconUrl   String?
+  /// Shown on the invite preview card before a join, and in server settings.
+  /// Nullable: most servers have said nothing, and null means exactly that
+  /// rather than an empty string worth rendering as a blank line.
+  description String?
   ownerId   String
   /// How long a message sent in this server's channels lives, in seconds, or
   /// null for "for ever". Set by whoever holds MANAGE_SERVER, and it binds

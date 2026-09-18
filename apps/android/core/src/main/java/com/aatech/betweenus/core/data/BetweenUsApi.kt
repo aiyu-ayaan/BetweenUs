@@ -301,10 +301,18 @@ object BetweenUsApi {
         ServerInvite.from(authed("DELETE", "/api/v1/servers/$serverId/invites/${enc(code)}"))
     }
 
-    suspend fun updateServer(serverId: String, name: String?, iconUrl: String?): ServerWithRole = io {
+    suspend fun updateServer(
+        serverId: String,
+        name: String?,
+        iconUrl: String?,
+        description: String? = null,
+        clearDescription: Boolean = false,
+    ): ServerWithRole = io {
         val body = JSONObject()
         name?.let { body.put("name", it) }
         iconUrl?.let { body.put("iconUrl", it) }
+        if (clearDescription) body.put("description", JSONObject.NULL)
+        else description?.let { body.put("description", it) }
         ServerWithRole.from(authed("PATCH", "/api/v1/servers/$serverId", body))
     }
 

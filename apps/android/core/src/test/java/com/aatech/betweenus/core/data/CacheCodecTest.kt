@@ -40,6 +40,7 @@ class CacheCodecTest {
             name = "BetweenUs",
             slug = "betweenus",
             iconUrl = null,
+            description = "A test server",
             ownerId = "u1",
             messageTtlSeconds = 86_400,
             role = ServerRole.ADMIN,

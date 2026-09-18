@@ -487,6 +487,9 @@ export class ServersService {
       data: {
         ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
         ...(dto.iconUrl !== undefined ? { iconUrl: dto.iconUrl } : {}),
+        ...(dto.description !== undefined
+          ? { description: dto.description?.trim() || null }
+          : {}),
         ...(dto.messageTtlSeconds !== undefined
           ? { messageTtlSeconds: dto.messageTtlSeconds }
           : {}),
@@ -777,6 +780,7 @@ export class ServersService {
       serverId: server.id,
       name: server.name,
       iconUrl: server.iconUrl,
+      description: server.description ?? null,
       memberCount: members.length,
       onlineCount: await onlineAmong(members.map((member) => member.userId)),
       member: members.some((member) => member.userId === userId),
@@ -1190,6 +1194,7 @@ function toServer(row: {
   name: string;
   slug: string;
   iconUrl: string | null;
+  description?: string | null;
   ownerId: string;
   messageTtlSeconds?: number | null;
   createdAt: Date;
@@ -1199,6 +1204,7 @@ function toServer(row: {
     name: row.name,
     slug: row.slug,
     iconUrl: row.iconUrl,
+    description: row.description ?? null,
     ownerId: row.ownerId,
     messageTtlSeconds: row.messageTtlSeconds ?? null,
     createdAt: row.createdAt.toISOString(),
