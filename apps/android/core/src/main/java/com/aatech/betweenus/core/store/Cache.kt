@@ -16,6 +16,7 @@ import com.aatech.betweenus.core.data.Channel
 import com.aatech.betweenus.core.data.DirectChannel
 import com.aatech.betweenus.core.data.Friend
 import com.aatech.betweenus.core.data.Message
+import com.aatech.betweenus.core.data.ServerCustomRole
 import com.aatech.betweenus.core.data.ServerMember
 import com.aatech.betweenus.core.data.ServerWithRole
 import com.aatech.betweenus.core.data.jsonArrayOfObjects
@@ -233,6 +234,12 @@ object Cache {
 
     fun putMembers(members: Map<String, List<ServerMember>>) =
         writeMap("members", members.mapValues { (_, list) -> jsonArrayOfObjects(list) { it.toJson() } })
+
+    suspend fun roles(): Map<String, List<ServerCustomRole>>? =
+        readMap("roles") { array -> array.map { ServerCustomRole.from(it) } }
+
+    fun putRoles(roles: Map<String, List<ServerCustomRole>>) =
+        writeMap("roles", roles.mapValues { (_, list) -> jsonArrayOfObjects(list) { it.toJson() } })
 
     suspend fun unread(): Map<String, Int>? = read("unread")?.let { stored ->
         runCatching {

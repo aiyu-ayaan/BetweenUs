@@ -457,6 +457,21 @@ data class ServerCustomRole(
     val permissions: List<String>,
     val memberCount: Int,
 ) {
+    /**
+     * Written to the local cache beside the member lists, because a role name
+     * is needed in the one place the network is not available: a process woken
+     * by a push, deciding whether a sealed body addressed a role this account
+     * holds.
+     */
+    fun toJson(): JSONObject = JSONObject()
+        .put("id", id)
+        .put("serverId", serverId)
+        .put("name", name)
+        .put("colour", colour)
+        .put("rank", rank)
+        .put("permissions", jsonArrayOf(permissions))
+        .put("memberCount", memberCount)
+
     companion object {
         fun from(json: JSONObject) = ServerCustomRole(
             id = json.optString("id"),

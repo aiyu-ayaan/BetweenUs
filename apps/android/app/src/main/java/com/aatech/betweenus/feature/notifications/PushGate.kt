@@ -108,16 +108,24 @@ object PushGate {
     /**
      * Whether a message mentions this account.
      *
-     * `@username`, `@display name`, and the two everybody-shaped ones. Decided
-     * here because it can only be decided here: the body is sealed, so no
-     * service has ever seen these words.
+     * `@username`, `@display name`, the name of a custom role this account
+     * holds, and the two everybody-shaped ones. Decided here because it can
+     * only be decided here: the body is sealed, so no service has ever seen
+     * these words.
+     *
+     * [roles] are the names this account holds *in the server the message was
+     * said in* - `Workspace.roleNamesIn` - never every role the server has,
+     * which would wake every member for one member's mention. It defaults to
+     * none so a caller that has no roster loaded degrades to the rule as it
+     * stood before roles existed, rather than to a guess.
      */
-    fun mentions(text: String, self: PublicUser): Boolean {
+    fun mentions(text: String, self: PublicUser, roles: List<String> = emptyList()): Boolean {
         val body = text.lowercase()
         return named(body, "everyone") ||
             named(body, "here") ||
             named(body, self.username) ||
-            named(body, self.displayName)
+            named(body, self.displayName) ||
+            roles.any { named(body, it) }
     }
 
     /**

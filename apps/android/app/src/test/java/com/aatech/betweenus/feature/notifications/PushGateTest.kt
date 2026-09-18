@@ -73,6 +73,24 @@ class PushGateTest {
     }
 
     @Test
+    fun `a role I hold is a mention, and one I do not hold is not`() {
+        val mine = listOf("designers", "Core Team")
+        assertTrue(PushGate.mentions("@designers can we look at this", self, mine))
+        assertTrue(PushGate.mentions("@DESIGNERS please", self, mine))
+        // A role name with a space is matched as written, as a display name is.
+        assertTrue(PushGate.mentions("@Core Team standup", self, mine))
+        // The boundary rule holds for a role too: a longer name is another role.
+        assertFalse(PushGate.mentions("@designerships", self, mine))
+        // A role somebody else holds is not a mention of me - the caller passes
+        // only this account's roles, never the server's.
+        assertFalse(PushGate.mentions("@designers ping", self))
+        assertFalse(PushGate.mentions("@designers ping", self, emptyList()))
+        // And a blank name must not match everything, the way an empty display
+        // name already must not.
+        assertFalse(PushGate.mentions("@ hello", self, listOf("")))
+    }
+
+    @Test
     fun `suppresses push when the exact channel is open in the foreground`() {
         val server1General = "chan_server1_general"
         val server2General = "chan_server2_general"

@@ -8,6 +8,7 @@ import com.aatech.betweenus.core.data.ChatSocket
 import com.aatech.betweenus.core.data.DirectChannel
 import com.aatech.betweenus.core.data.Friend
 import com.aatech.betweenus.core.data.BetweenUsApi
+import com.aatech.betweenus.core.data.ServerCustomRole
 import com.aatech.betweenus.core.data.ServerEmoji
 import com.aatech.betweenus.core.data.ServerMember
 import com.aatech.betweenus.core.data.ServerWithRole
@@ -60,6 +61,17 @@ object Workspace {
 
     private val _members = MutableStateFlow<Map<String, List<ServerMember>>>(emptyMap())
     val members: StateFlow<Map<String, List<ServerMember>>> = _members.asStateFlow()
+
+    /**
+     * serverId -> its custom roles.
+     *
+     * Held beside the member lists, and cached with them, because the one place
+     * a role name is genuinely needed is the one place the network is not
+     * there: a process woken by a push, deciding whether a sealed body
+     * addressed a role this account holds.
+     */
+    private val _roles = MutableStateFlow<Map<String, List<ServerCustomRole>>>(emptyMap())
+    val roles: StateFlow<Map<String, List<ServerCustomRole>>> = _roles.asStateFlow()
 
     private val _unread = MutableStateFlow<Map<String, Int>>(emptyMap())
     val unread: StateFlow<Map<String, Int>> = _unread.asStateFlow()
@@ -163,6 +175,7 @@ object Workspace {
         Cache.friends()?.let { _friends.value = it }
         Cache.blocked()?.let { _blocked.value = it }
         Cache.members()?.let { _members.value = it }
+        Cache.roles()?.let { _roles.value = it }
         Cache.unread()?.let { _unread.value = it }
     }
 
@@ -173,6 +186,7 @@ object Workspace {
         _friends.value = emptyList()
         _blocked.value = emptyList()
         _members.value = emptyMap()
+        _roles.value = emptyMap()
         _unread.value = emptyMap()
     }
 
@@ -194,6 +208,10 @@ object Workspace {
             // into a name - so without this every voice roster in the sidebar
             // read "Someone" until the members screen had been opened once.
             servers.forEach { loadMembers(it.id, force = true) }
+            // And the roles, which turn a member's `roleIds` into names. Every
+            // server rather than the one on screen, for the same reason the
+            // members are: a push arrives for a channel nobody has opened.
+            servers.forEach { loadRoles(it.id, force = true) }
             loadDirectChannels()
             loadFriends()
             loadBlocked()
@@ -303,6 +321,34 @@ object Workspace {
             _members.update { it + (serverId to members) }
             Cache.putMembers(_members.value)
         }
+    }
+
+    suspend fun loadRoles(serverId: String, force: Boolean = false) {
+        if (!force && _roles.value.containsKey(serverId)) return
+        runCatching { BetweenUsApi.serverRoles(serverId) }.onSuccess { roles ->
+            _roles.update { it + (serverId to roles) }
+            Cache.putRoles(_roles.value)
+        }
+    }
+
+    /** What this phone knows of a server's roles. Empty until it has answered. */
+    fun rolesOf(serverId: String?): List<ServerCustomRole> =
+        serverId?.let { _roles.value[it] }.orEmpty()
+
+    /**
+     * The names of the roles [userId] holds in the server [channelId] belongs
+     * to - what decides whether a message addressed one of them.
+     *
+     * The join lives here rather than in either caller because both sides of
+     * the feature ask it: the row being drawn, and the push deciding whether to
+     * make a sound. A direct message has no server, so it answers with nothing
+     * and needs no branch of its own.
+     */
+    fun roleNamesIn(channelId: String, userId: String): List<String> {
+        val serverId = channel(channelId)?.serverId ?: return emptyList()
+        val mine = membersOf(serverId).firstOrNull { it.userId == userId } ?: return emptyList()
+        val held = mine.roleIds.toSet()
+        return rolesOf(serverId).filter { it.id in held }.map { it.name }
     }
 
     /**
