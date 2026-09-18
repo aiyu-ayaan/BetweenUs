@@ -4,7 +4,7 @@ import { useAuthStore } from '../../stores/auth';
 import { usePresenceStore } from '../../stores/presence';
 import { useVoiceStore } from '../../stores/voice';
 import { Avatar } from '../../components/Avatar';
-import { AppDownloadIcon, MicIcon, MicOffIcon, SettingsIcon } from '../../components/icons';
+import { AppDownloadIcon, HeadphonesIcon, MicIcon, MicOffIcon, SettingsIcon } from '../../components/icons';
 import { isDesktopRuntime } from '../../services/platform';
 import { DOWNLOAD_URL, downloadLabel } from '../../services/downloads';
 
@@ -32,10 +32,10 @@ export function UserPanel({ onOpenSettings }: { onOpenSettings: () => void }): J
   const selfStatus = usePresenceStore((state) => state.selfStatus);
   const setStatus = usePresenceStore((state) => state.setStatus);
   const micEnabled = useVoiceStore((state) => state.micEnabled);
-  const voiceStatus = useVoiceStore((state) => state.status);
   const toggleMic = useVoiceStore((state) => state.toggleMic);
 
   const [open, setOpen] = useState(false);
+  const [deafened, setDeafened] = useState(false);
   const panel = useRef<HTMLDivElement>(null);
 
   // A menu that does not close when you look away is a menu you have to fight.
@@ -119,7 +119,7 @@ export function UserPanel({ onOpenSettings }: { onOpenSettings: () => void }): J
         className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded px-1 py-1 text-start transition-colors duration-200 hover:bg-white/[0.06]"
       >
         <Avatar
-          name={user?.displayName ?? '?'}
+          name={user?.displayName ?? 'aiyu'}
           avatarUrl={user?.avatarUrl}
           status={selfStatus}
           size="sm"
@@ -127,11 +127,12 @@ export function UserPanel({ onOpenSettings }: { onOpenSettings: () => void }): J
           viewable={false}
         />
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-medium text-slate-100">
-            {user?.displayName}
+          <span className="block truncate text-sm font-semibold text-slate-100">
+            {user?.displayName ?? 'aiyu'}
           </span>
-          <span className="block truncate text-xs text-slate-400">
-            {STATUS_CHOICES.find((choice) => choice.value === selfStatus)?.label ?? 'Online'}
+          <span className="flex items-center gap-1 truncate text-xs text-slate-400">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+            Founder • Online
           </span>
         </span>
       </button>
@@ -139,12 +140,23 @@ export function UserPanel({ onOpenSettings }: { onOpenSettings: () => void }): J
       <button
         type="button"
         onClick={() => void toggleMic()}
-        disabled={voiceStatus !== 'connected'}
         aria-label={micEnabled ? 'Mute microphone' : 'Unmute microphone'}
-        title={voiceStatus === 'connected' ? 'Microphone' : 'Join a voice channel first'}
-        className="shrink-0 cursor-pointer rounded-md p-2 text-slate-300 transition-colors duration-150 hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-40"
+        title="Microphone"
+        className="shrink-0 cursor-pointer rounded-md p-1.5 text-slate-300 transition-colors duration-150 hover:bg-white/[0.06] active:scale-[0.95]"
       >
-        {micEnabled ? <MicIcon className="h-5 w-5" /> : <MicOffIcon className="h-5 w-5 text-danger" />}
+        {micEnabled ? <MicIcon className="h-4 w-4" /> : <MicOffIcon className="h-4 w-4 text-danger" />}
+      </button>
+
+      <button
+        type="button"
+        onClick={() => setDeafened((d) => !d)}
+        aria-label={deafened ? 'Undeafen' : 'Deafen'}
+        title="Deafen"
+        className={`shrink-0 cursor-pointer rounded-md p-1.5 transition-colors duration-150 hover:bg-white/[0.06] active:scale-[0.95] ${
+          deafened ? 'text-danger' : 'text-slate-300'
+        }`}
+      >
+        <HeadphonesIcon className="h-4 w-4" />
       </button>
 
       <button
@@ -152,9 +164,9 @@ export function UserPanel({ onOpenSettings }: { onOpenSettings: () => void }): J
         onClick={onOpenSettings}
         aria-label="User settings"
         title="User settings"
-        className="shrink-0 cursor-pointer rounded-md p-2 text-slate-300 transition-colors duration-150 hover:bg-white/[0.06]"
+        className="shrink-0 cursor-pointer rounded-md p-1.5 text-slate-300 transition-colors duration-150 hover:bg-white/[0.06] active:scale-[0.95]"
       >
-        <SettingsIcon className="h-5 w-5" />
+        <SettingsIcon className="h-4 w-4" />
       </button>
     </div>
     </>

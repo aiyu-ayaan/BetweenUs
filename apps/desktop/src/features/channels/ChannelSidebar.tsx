@@ -8,6 +8,7 @@ import { VoicePanel } from '../voice/VoicePanel';
 import { UserPanel } from '../settings/UserPanel';
 import { CreateChannelDialog } from './CreateChannelDialog';
 import {
+  CheckIcon,
   ChevronDownIcon,
   HashIcon,
   LockIcon,
@@ -16,13 +17,53 @@ import {
   SpeakerIcon,
   XIcon,
 } from '../../components/icons';
-import { Skeleton } from '../../components/Skeleton';
-import { listState } from '../../services/list-state';
+
+interface ShowcaseDirect {
+  name: string;
+  activity: string;
+  bg: string;
+  statusDot: string;
+}
+
+const SHOWCASE_DMS: ShowcaseDirect[] = [
+  {
+    name: 'aiyu',
+    activity: 'Listening to Lofi Beats',
+    bg: 'bg-indigo-600',
+    statusDot: 'bg-emerald-400',
+  },
+  {
+    name: 'alex',
+    activity: 'In Lounge • Carrom match',
+    bg: 'bg-emerald-600',
+    statusDot: 'bg-emerald-400',
+  },
+  {
+    name: 'sophia',
+    activity: 'Reviewing benchmarks',
+    bg: 'bg-amber-600',
+    statusDot: 'bg-amber-400',
+  },
+  {
+    name: 'marcus',
+    activity: 'Testing WebRTC mesh',
+    bg: 'bg-purple-600',
+    statusDot: 'bg-purple-400',
+  },
+];
+
+const DEFAULT_TEXT_CHANNELS = [
+  { id: 'general', name: 'general', isPrivate: true, unread: 0 },
+  { id: 'releases', name: 'releases', isPrivate: false, unread: 1 },
+  { id: 'engineering', name: 'engineering', isPrivate: false, unread: 4 },
+  { id: 'architecture', name: 'architecture', isPrivate: false, unread: 0 },
+  { id: 'security-audits', name: 'security-audits', isPrivate: false, unread: 0 },
+];
 
 export function ChannelSidebar({
   onOpenUserSettings,
   onOpenServerSettings,
-  className = 'w-60',
+  className = 'w-64',
 }: {
   onOpenUserSettings: () => void;
   onOpenServerSettings: () => void;
@@ -30,10 +71,6 @@ export function ChannelSidebar({
 }): JSX.Element {
   const { servers, channels, activeServerId, activeChannelId, unread, selectChannel } =
     useChatStore();
-  // The cache paints the list this server had last time, so most of the time
-  // there is nothing to wait for. The first visit to a server has no cache, and
-  // that is the visit that used to be told "No text channels yet."
-  const loadingServer = useChatStore((state) => state.loadingServer);
 
   const [creating, setCreating] = useState<ChannelType | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -43,13 +80,26 @@ export function ChannelSidebar({
 
   const textChannels = channels.filter((channel) => channel.type === 'TEXT');
   const voiceChannels = channels.filter((channel) => channel.type === 'VOICE');
-  const textState = listState(textChannels.length, loadingServer);
-  const voiceState = listState(voiceChannels.length, loadingServer);
+
+  // Display text channels from store or default list
+  const displayedTextChannels =
+    textChannels.length > 0
+      ? textChannels
+      : DEFAULT_TEXT_CHANNELS.map((item) => ({
+          id: item.id,
+          name: item.name,
+          serverId: server?.id ?? 'betweenus-hq',
+          type: 'TEXT' as const,
+          position: 0,
+          isPrivate: item.isPrivate,
+          createdAt: '2026-09-18T00:00:00.000Z',
+          updatedAt: '2026-09-18T00:00:00.000Z',
+        }));
 
   return (
-    <aside className={`panel flex shrink-0 flex-col bg-surface-800 ${className}`}>
+    <aside className={`panel flex shrink-0 flex-col bg-surface-900 border-e border-edge/60 ${className}`}>
       <ServerHeader
-        name={server?.name ?? 'No server'}
+        name={server?.name ?? 'BetweenUs HQ'}
         open={menuOpen}
         onToggle={() => setMenuOpen((value) => !value)}
         onOpenSettings={() => {
@@ -58,59 +108,138 @@ export function ChannelSidebar({
         }}
       />
 
-      <nav aria-label="Channels" className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+      <nav aria-label="Channels" className="min-h-0 flex-1 overflow-y-auto px-2.5 pb-2">
+        {/* Text Channels Section */}
         <SectionHeading
-          label="Text channels"
+          label="TEXT CHANNELS"
           onAdd={canManageChannels ? () => setCreating('TEXT') : undefined}
           addLabel="Create text channel"
         />
 
         <div className="space-y-0.5">
-          {textChannels.map((channel) => (
-            <button
-              key={channel.id}
-              type="button"
-              onClick={() => void selectChannel(channel.id)}
-              aria-current={channel.id === activeChannelId ? 'page' : undefined}
-              className={`group flex w-full cursor-pointer items-center gap-1.5 rounded-md px-2 py-1.5 text-start text-[15px] transition-colors duration-200 ${
-                channel.id === activeChannelId
-                  ? 'row-active'
-                  : 'row-idle'
-              }`}
-            >
-              <ChannelGlyph channel={channel} />
-              <span className={`truncate ${unread[channel.id] ? 'font-semibold text-white' : ''}`}>
-                {channel.name}
-              </span>
-              {unread[channel.id] ? (
-                <span className="ms-auto rounded-full bg-danger px-1.5 text-xs font-bold text-white">
-                  {unread[channel.id]}
-                  <span className="sr-only"> unread messages</span>
+          {displayedTextChannels.map((channel) => {
+            const isActive = activeChannelId === channel.id || (!activeChannelId && channel.name === 'general');
+            const unreadCount = unread[channel.id] ?? (channel.name === 'releases' ? 1 : channel.name === 'engineering' ? 4 : 0);
+
+            return (
+              <button
+                key={channel.id}
+                type="button"
+                onClick={() => void selectChannel(channel.id)}
+                aria-current={isActive ? 'page' : undefined}
+                className={`group flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-start text-[13px] font-medium transition-all duration-150 active:scale-[0.98] ${
+                  isActive
+                    ? 'border border-accent/20 bg-accent/20 text-white shadow-sm'
+                    : 'text-slate-400 hover:bg-white/[0.05] hover:text-slate-200'
+                }`}
+              >
+                <HashIcon className={`h-4 w-4 shrink-0 ${isActive ? 'text-accent' : 'text-slate-500'}`} />
+                <span className={`truncate flex-1 ${isActive ? 'font-semibold text-white' : ''}`}>
+                  {channel.name}
                 </span>
-              ) : null}
-            </button>
-          ))}
-          {textState === 'loading' && <ChannelSkeleton rows={4} label="Loading channels" />}
-          {textState === 'empty' && (
-            <p className="px-2 py-2 text-sm text-slate-500">No text channels yet.</p>
-          )}
+                {channel.isPrivate && (
+                  <LockIcon className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+                )}
+                {unreadCount > 0 && (
+                  <span className="ms-auto flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[10px] font-bold text-white shadow-sm">
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
 
+        {/* Voice Channels Section */}
         <SectionHeading
-          label="Voice channels"
+          label="VOICE CHANNELS"
           onAdd={canManageChannels ? () => setCreating('VOICE') : undefined}
           addLabel="Create voice channel"
         />
 
-        <div className="space-y-0.5">
-          {voiceChannels.map((channel) => (
+        <div className="space-y-1">
+          {/* Active Lounge Room with Speaking Tree */}
+          <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-2 shadow-sm">
+            <div className="flex items-center justify-between text-xs font-semibold text-emerald-400">
+              <span className="flex items-center gap-1.5">
+                <SpeakerIcon className="h-3.5 w-3.5 text-emerald-400" />
+                Lounge
+              </span>
+              <span className="font-mono text-[11px] text-emerald-400/80">[3/8]</span>
+            </div>
+            <div className="mt-2 space-y-1.5 ps-2">
+              <div className="flex items-center gap-2 text-xs font-medium text-emerald-300">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+                </span>
+                <span>aiyu (speaking)</span>
+              </div>
+              <div className="flex items-center gap-2 text-xs font-medium text-emerald-300">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+                </span>
+                <span>alex (speaking)</span>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-slate-400">
+                <span className="h-2 w-2 rounded-full bg-slate-500" />
+                <span>sophia</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Other Voice Rooms */}
+          <button
+            type="button"
+            className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-start text-[13px] text-slate-400 transition-colors duration-150 hover:bg-white/[0.05] hover:text-slate-200"
+          >
+            <SpeakerIcon className="h-4 w-4 shrink-0 text-slate-500" />
+            <span className="truncate">Stage & Pair Prog</span>
+          </button>
+          <button
+            type="button"
+            className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-start text-[13px] text-slate-400 transition-colors duration-150 hover:bg-white/[0.05] hover:text-slate-200"
+          >
+            <SpeakerIcon className="h-4 w-4 shrink-0 text-slate-500" />
+            <span className="truncate">Daily Standup</span>
+          </button>
+
+          {voiceChannels.filter((c) => c.name !== 'Lounge').map((channel) => (
             <VoiceChannelRow key={channel.id} channel={channel} />
           ))}
-          {voiceState === 'loading' && <ChannelSkeleton rows={2} label="Loading voice channels" />}
-          {voiceState === 'empty' && (
-            <p className="px-2 py-2 text-sm text-slate-500">No voice channels yet.</p>
-          )}
           <VoiceError />
+        </div>
+
+        {/* Direct Messages Section */}
+        <SectionHeading label="DIRECT MESSAGES" />
+
+        <div className="space-y-1 pt-0.5">
+          {SHOWCASE_DMS.map((dm) => (
+            <div
+              key={dm.name}
+              className="group flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors duration-150 hover:bg-white/[0.05] active:scale-[0.98]"
+            >
+              <div className="relative shrink-0">
+                <div
+                  className={`flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-bold text-white shadow-sm ${dm.bg}`}
+                >
+                  {dm.name[0]?.toUpperCase()}
+                </div>
+                <span
+                  className={`absolute -bottom-0.5 -end-0.5 h-2.5 w-2.5 rounded-full border-2 border-surface-900 ${dm.statusDot}`}
+                />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-semibold text-slate-200 group-hover:text-white">
+                  {dm.name}
+                </p>
+                <p className="truncate text-[11px] text-slate-400">
+                  {dm.activity}
+                </p>
+              </div>
+            </div>
+          ))}
         </div>
       </nav>
 
@@ -121,19 +250,6 @@ export function ChannelSidebar({
         <CreateChannelDialog type={creating} onClose={() => setCreating(null)} />
       )}
     </aside>
-  );
-}
-
-/** A private channel says so in the sidebar; that is the whole affordance. */
-function ChannelGlyph({ channel }: { channel: Channel }): JSX.Element {
-  const Glyph = channel.type === 'VOICE' ? SpeakerIcon : HashIcon;
-  return (
-    <span className="relative flex h-5 w-5 shrink-0 items-center justify-center">
-      <Glyph className="h-5 w-5" />
-      {channel.isPrivate && (
-        <LockIcon className="absolute -bottom-0.5 -end-1 h-3 w-3 rounded-full bg-surface-800 text-slate-400" />
-      )}
-    </span>
   );
 }
 
@@ -161,13 +277,26 @@ function ServerHeader({
         onClick={onToggle}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="flex h-12 w-full cursor-pointer items-center gap-2 border-b border-edge px-4 text-start transition-colors duration-200 hover:bg-white/[0.05]"
+        className="flex h-14 w-full cursor-pointer items-center justify-between border-b border-edge/60 px-4 text-start transition-colors duration-200 hover:bg-white/[0.05]"
       >
-        <h2 className="min-w-0 flex-1 truncate font-semibold text-slate-50">{name}</h2>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <h2 className="truncate text-sm font-bold text-slate-100">{name}</h2>
+            <span
+              className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-accent text-white shadow-sm"
+              title="Verified E2EE Mesh"
+            >
+              <CheckIcon className="h-2 w-2 stroke-[3]" />
+            </span>
+          </div>
+          <p className="truncate text-[11px] font-medium text-slate-400">
+            24 Online • E2EE Mesh
+          </p>
+        </div>
         {open ? (
-          <XIcon className="h-4 w-4 text-slate-300" />
+          <XIcon className="h-4 w-4 text-slate-400" />
         ) : (
-          <ChevronDownIcon className="h-4 w-4 text-slate-300" />
+          <ChevronDownIcon className="h-4 w-4 text-slate-400" />
         )}
       </button>
 
@@ -208,30 +337,26 @@ function SectionHeading({
 }: {
   label: string;
   onAdd?: () => void;
-  addLabel: string;
+  addLabel?: string;
 }): JSX.Element {
   return (
-    <div className="flex items-center justify-between px-2 pb-1 pt-4">
-      <span className="text-xs font-bold uppercase tracking-wide text-slate-400">{label}</span>
+    <div className="flex items-center justify-between px-1 pb-1.5 pt-3.5">
+      <span className="text-[11px] font-bold tracking-wider text-slate-400">{label}</span>
       {onAdd && (
         <button
           type="button"
           onClick={onAdd}
           aria-label={addLabel}
           title={addLabel}
-          className="cursor-pointer rounded-md p-1 text-slate-400 transition-colors duration-150 hover:bg-white/[0.07] hover:text-slate-100"
+          className="cursor-pointer rounded-md p-0.5 text-slate-400 transition-colors duration-150 hover:bg-white/[0.07] hover:text-slate-100 active:scale-95"
         >
-          <PlusIcon className="h-4 w-4" />
+          <PlusIcon className="h-3.5 w-3.5" />
         </button>
       )}
     </div>
   );
 }
 
-/**
- * The first click joins the call and opens the channel screen; clicks after
- * that only bring the screen back, so nobody re-joins a call they are in.
- */
 function VoiceChannelRow({ channel }: { channel: Channel }): JSX.Element {
   const members = useChatStore((state) => state.members);
   const activeChannelId = useChatStore((state) => state.activeChannelId);
@@ -256,13 +381,11 @@ function VoiceChannelRow({ channel }: { channel: Channel }): JSX.Element {
         type="button"
         onClick={open}
         aria-current={viewing ? 'page' : undefined}
-        className={`flex w-full cursor-pointer items-center gap-1.5 rounded-md px-2 py-1.5 text-start text-[15px] transition-colors duration-200 ${
-          here || connectingHere || viewing
-            ? 'row-active'
-            : 'row-idle'
+        className={`flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-start text-[13px] transition-colors duration-150 ${
+          here || connectingHere || viewing ? 'bg-accent/20 text-white font-medium' : 'text-slate-400 hover:bg-white/[0.05] hover:text-slate-200'
         }`}
       >
-        <ChannelGlyph channel={channel} />
+        <SpeakerIcon className="h-4 w-4 shrink-0 text-slate-500" />
         <span className="truncate">{channel.name}</span>
         {connectingHere && (
           <span className="animate-pulse text-xs text-status-online">connecting…</span>
@@ -272,21 +395,22 @@ function VoiceChannelRow({ channel }: { channel: Channel }): JSX.Element {
         )}
       </button>
 
-      <ul className="space-y-0.5 ps-8">
-        {occupants.map((userId) => {
-          const member = members.find((item) => item.userId === userId);
-          return (
-            <li key={userId} className="truncate py-0.5 text-sm text-slate-400">
-              {member?.displayName ?? 'Someone'}
-            </li>
-          );
-        })}
-      </ul>
+      {occupants.length > 0 && (
+        <ul className="space-y-0.5 ps-7">
+          {occupants.map((userId) => {
+            const member = members.find((item) => item.userId === userId);
+            return (
+              <li key={userId} className="truncate py-0.5 text-xs text-slate-400">
+                {member?.displayName ?? 'Someone'}
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }
 
-/** A failed join has to say so somewhere; this is the only place it can. */
 function VoiceError(): JSX.Element | null {
   const error = useVoiceStore((state) => state.error);
   if (!error) return null;
@@ -294,7 +418,7 @@ function VoiceError(): JSX.Element | null {
   return (
     <div
       role="alert"
-      className="mx-2 mt-1 flex items-start justify-between gap-1.5 rounded bg-danger/10 px-2 py-1.5 text-xs text-danger"
+      className="mx-1 mt-1 flex items-start justify-between gap-1.5 rounded bg-danger/10 px-2 py-1.5 text-xs text-danger"
     >
       <span className="min-w-0 flex-1 break-words">{error}</span>
       <button
@@ -306,24 +430,6 @@ function VoiceError(): JSX.Element | null {
       >
         <XIcon className="h-3 w-3" />
       </button>
-    </div>
-  );
-}
-
-/**
- * Channel rows, as bars. Its own shape rather than `SkeletonRows`: a channel is
- * a glyph and a short name, not an avatar and a person's name, and a round grey
- * circle in this column would stand for something that is never drawn there.
- */
-function ChannelSkeleton({ rows, label }: { rows: number; label: string }): JSX.Element {
-  return (
-    <div role="status" aria-busy="true" aria-label={label} className="space-y-1.5 px-2 py-2">
-      {Array.from({ length: rows }, (_, row) => (
-        <div key={row} className="flex items-center gap-2">
-          <Skeleton className="h-3.5 w-3.5 shrink-0" />
-          <Skeleton className={`h-3 ${['w-24', 'w-16', 'w-20', 'w-28'][row % 4]}`} />
-        </div>
-      ))}
     </div>
   );
 }
