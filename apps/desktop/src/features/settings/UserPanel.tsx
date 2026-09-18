@@ -40,12 +40,6 @@ export function UserPanel({ onOpenSettings }: { onOpenSettings: () => void }): J
   const setStatus = usePresenceStore((state) => state.setStatus);
   const micEnabled = useVoiceStore((state) => state.micEnabled);
   const toggleMic = useVoiceStore((state) => state.toggleMic);
-  // While a call is up, `VoicePanel` sits directly above this row and its
-  // `VoiceControls` own the microphone. Two mic buttons stacked an inch apart
-  // is one question with two answers, and they are also what squeezed the name
-  // column - so this row hands those two controls over for the length of the
-  // call and takes them back when it ends.
-  const inCall = useVoiceStore((state) => state.status !== 'idle');
 
   const [open, setOpen] = useState(false);
   const [deafened, setDeafened] = useState(false);
@@ -158,31 +152,31 @@ export function UserPanel({ onOpenSettings }: { onOpenSettings: () => void }): J
         </span>
       </button>
 
-      {!inCall && (
-        <>
-          <button
-            type="button"
-            onClick={() => void toggleMic()}
-            aria-label={micEnabled ? 'Mute microphone' : 'Unmute microphone'}
-            title="Microphone"
-            className="spring-press shrink-0 cursor-pointer rounded-lg p-2 text-slate-300 hover:bg-white/[0.06]"
-          >
-            {micEnabled ? <MicIcon className="h-4 w-4" /> : <MicOffIcon className="h-4 w-4 text-danger" />}
-          </button>
+      {/* Always here, in a call or out of one. `VoicePanel` above carries no
+          controls at all, so this row is the only microphone on the sidebar -
+          the rest of the call's controls are in `VoiceChannelView`, one click
+          away through the channel name in that panel. */}
+      <button
+        type="button"
+        onClick={() => void toggleMic()}
+        aria-label={micEnabled ? 'Mute microphone' : 'Unmute microphone'}
+        title="Microphone"
+        className="spring-press shrink-0 cursor-pointer rounded-lg p-2 text-slate-300 hover:bg-white/[0.06]"
+      >
+        {micEnabled ? <MicIcon className="h-4 w-4" /> : <MicOffIcon className="h-4 w-4 text-danger" />}
+      </button>
 
-          <button
-            type="button"
-            onClick={() => setDeafened((d) => !d)}
-            aria-label={deafened ? 'Undeafen' : 'Deafen'}
-            title="Deafen"
-            className={`spring-press shrink-0 cursor-pointer rounded-lg p-2 hover:bg-white/[0.06] ${
-              deafened ? 'text-danger' : 'text-slate-300'
-            }`}
-          >
-            <HeadphonesIcon className="h-4 w-4" />
-          </button>
-        </>
-      )}
+      <button
+        type="button"
+        onClick={() => setDeafened((d) => !d)}
+        aria-label={deafened ? 'Undeafen' : 'Deafen'}
+        title="Deafen"
+        className={`spring-press shrink-0 cursor-pointer rounded-lg p-2 hover:bg-white/[0.06] ${
+          deafened ? 'text-danger' : 'text-slate-300'
+        }`}
+      >
+        <HeadphonesIcon className="h-4 w-4" />
+      </button>
 
       <button
         type="button"

@@ -3,10 +3,13 @@
  *
  * It was a popover on the call controls and that was wrong twice over.
  *
- * **It drew itself twice.** `VoiceControls` is rendered in two places - the
- * sidebar and the channel view - so a single `open` flag in the store produced
- * two live panels side by side, each with its own seek bar, arguing. Shared
- * state may only have one render site, and this is it.
+ * **It drew itself twice.** `VoiceControls` is rendered more than once - the
+ * docked bar and the fullscreen bar in `VoiceChannelView`, and the sidebar
+ * panel too until the sidebar stopped carrying controls - so a single `open`
+ * flag in the store produced two live panels side by side, each with its own
+ * seek bar, arguing. Shared state may only have one render site, and this is
+ * it. The sidebar going quiet does not make that safe again: the channel view
+ * still draws the controls twice on its own.
  *
  * **It was the wrong size for the job.** Picking the next thing to play is not
  * a thing anybody does in a 22rem popover: it wants the site, and the site

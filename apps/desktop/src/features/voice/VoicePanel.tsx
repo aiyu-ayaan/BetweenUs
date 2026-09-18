@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useVoiceStore, type VoiceTile } from '../../stores/voice';
 import { usePeerAudio } from '../../stores/peerAudio';
 import { CallDuration } from './CallDuration';
-import { VoiceControls } from './VoiceControls';
 import { NotHeardNotice } from './NotHeardNotice';
 import { LockIcon, MicOffIcon, SpeakerIcon, SpeakerOffIcon, XIcon } from '../../components/icons';
 
@@ -11,10 +10,21 @@ import { LockIcon, MicOffIcon, SpeakerIcon, SpeakerOffIcon, XIcon } from '../../
  * voice channel - the server one and the home one both mount it, so leaving the
  * server the call is in does not hide the call.
  *
- * Deliberately compact: who is here, whether the call is encrypted, and the
- * controls. Cameras and shared screens belong to `VoiceChannelView`, which has
- * the room for them. The audio is `CallAudio`, mounted once at the root: it has
- * to keep playing while this panel is being unmounted and mounted again by a
+ * Deliberately compact, and **it holds no controls**: who is here, whether the
+ * call is encrypted, how long it has been going, and a way back to it. The
+ * mic, camera, screen, invite and hang-up all live in `VoiceChannelView`, one
+ * click away through the channel name above - a sidebar is somewhere you look
+ * while doing something else, and a row of six 36px buttons in a 240px column
+ * was the widest thing in it. What is left here is status, which is what a
+ * sidebar is for.
+ *
+ * The microphone is still always reachable: `UserPanel` sits directly below
+ * this and carries mic and deafen at all times, in or out of a call. That is
+ * the pair this panel used to duplicate.
+ *
+ * Cameras and shared screens belong to `VoiceChannelView` too, which has the
+ * room for them. The audio is `CallAudio`, mounted once at the root: it has to
+ * keep playing while this panel is being unmounted and mounted again by a
  * sidebar swap.
  *
  * The channel name comes from the store rather than from the caller, because
@@ -83,13 +93,11 @@ export function VoicePanel(): JSX.Element | null {
         </div>
       )}
 
-      <ul className="mb-2 space-y-1">
+      <ul className="space-y-1">
         {tiles.map((tile) => (
           <Participant key={tile.identity} tile={tile} />
         ))}
       </ul>
-
-      <VoiceControls />
     </section>
   );
 }
