@@ -136,6 +136,12 @@ fun ChatScreen(
     val direct = Workspace.directChannel(channelId)
     val title = channel?.name ?: direct?.participant?.label ?: "Conversation"
     val busy = channelId in loading
+    // The roster of whichever server this channel belongs to, for the staff
+    // badge beside a message's author name - null in a direct message, which
+    // has no roles. Read once per channel rather than per row, the same
+    // reason `authorStatus` is passed in rather than looked up in `MessageRow`.
+    val roster by Workspace.members.collectAsState()
+    val serverRoster = channel?.serverId?.let { roster[it] }.orEmpty()
 
     var acting by remember { mutableStateOf<ReadableMessage?>(null) }
     var editing by remember { mutableStateOf<ReadableMessage?>(null) }
@@ -668,6 +674,7 @@ fun ChatScreen(
                         onOpenProfile = { profileOf = it },
                         authorStatus = statuses[readable.message.author.id]
                             ?: PresenceStatus.OFFLINE,
+                        authorRole = serverRoster.firstOrNull { it.userId == readable.message.author.id }?.role,
                         onReply = { replyingTo = readable.quote() },
                         onOpenSeenBy = { seenFor = readable },
                         onOpenQuoted = { quotedId ->

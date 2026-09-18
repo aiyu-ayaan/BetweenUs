@@ -358,3 +358,16 @@ private fun MemberRow(
         onClick = if (self) null else onOpenDirect,
     )
 }
+
+/** Whether a role is one of the three built-in staff rungs. */
+fun isStaff(role: ServerRole): Boolean =
+    role == ServerRole.OWNER || role == ServerRole.ADMIN || role == ServerRole.MODERATOR
+
+private val ROLE_LABEL = mapOf(
+    ServerRole.OWNER to "Founder",
+    ServerRole.ADMIN to "Admin",
+    ServerRole.MODERATOR to "Mod",
+)
+
+/** "Founder" / "Admin" / "Mod" for the built-in staff roles; null otherwise. */
+fun roleBadgeLabel(role: ServerRole): String? = ROLE_LABEL[role]

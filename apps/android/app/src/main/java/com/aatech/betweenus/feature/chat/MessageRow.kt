@@ -96,10 +96,13 @@ import com.aatech.betweenus.core.data.MessageAttachment
 import com.aatech.betweenus.core.data.MessageCustomEmoji
 import com.aatech.betweenus.core.data.PresenceStatus
 import com.aatech.betweenus.core.data.PublicUser
+import com.aatech.betweenus.core.data.ServerRole
 import com.aatech.betweenus.core.data.UserSummary
 import com.aatech.betweenus.core.store.Conversation
 import com.aatech.betweenus.core.store.ReadableMessage
 import com.aatech.betweenus.core.store.Workspace
+import com.aatech.betweenus.feature.members.isStaff
+import com.aatech.betweenus.feature.members.roleBadgeLabel
 import com.aatech.betweenus.ui.components.Avatar
 import com.aatech.betweenus.ui.components.AvatarWithStatus
 import com.aatech.betweenus.ui.components.tintFor
@@ -179,6 +182,9 @@ fun MessageRow(
      * a flow that ticks whenever anybody anywhere changes status.
      */
     authorStatus: PresenceStatus = PresenceStatus.OFFLINE,
+    /** The author's role in this server, null in a direct message. Same
+     * pass-in-rather-than-look-up reasoning as [authorStatus]. */
+    authorRole: ServerRole? = null,
     /** Swiping the row rightwards answers it, the way every phone chat does. */
     onReply: () -> Unit = {},
     onOpenSeenBy: () -> Unit = {},
@@ -527,14 +533,39 @@ fun MessageRow(
                         // Once per run, and never for you: the side of the
                         // screen your bubble is on already said that.
                         if (!isSelf && !grouped) {
-                            Text(
-                                text = hook?.name ?: message.author.label,
-                                style = MaterialTheme.typography.labelLargeEmphasized,
-                                color = tintFor(hook?.id ?: message.author.id),
-                                maxLines = 1,
-                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
                                 modifier = Modifier.padding(bottom = 2.dp),
-                            )
+                            ) {
+                                Text(
+                                    text = hook?.name ?: message.author.label,
+                                    style = MaterialTheme.typography.labelLargeEmphasized,
+                                    color = tintFor(hook?.id ?: message.author.id),
+                                    maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f, fill = false),
+                                )
+                                // Only the built-in staff rungs, and never for a
+                                // webhook: a row has no space to also resolve a
+                                // server's custom roles, and these three are the
+                                // ones worth a reader knowing at a glance.
+                                if (hook == null && authorRole != null && isStaff(authorRole)) {
+                                    roleBadgeLabel(authorRole)?.let { label ->
+                                        Text(
+                                            text = label.uppercase(),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier
+                                                .background(
+                                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                                    RoundedCornerShape(4.dp),
+                                                )
+                                                .padding(horizontal = 4.dp, vertical = 1.dp),
+                                        )
+                                    }
+                                }
+                            }
                         }
                         // The one thing anybody reading this channel is owed:
                         // this message was not end-to-end encrypted, because

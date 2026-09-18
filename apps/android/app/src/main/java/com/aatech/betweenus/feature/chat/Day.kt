@@ -81,6 +81,17 @@ fun dayLabel(iso: String, today: LocalDate = ServerClock.today()): String {
 }
 
 /**
+ * The full calendar date for the day `iso` falls in - "18 September 2026" -
+ * regardless of how recent it is. [dayLabel] alone says "Today", which reads
+ * fine in the conversation but is the wrong word on a divider meant to also
+ * anchor the page to a real date once it is scrolled back to weeks later.
+ */
+fun fullDateLabel(iso: String): String {
+    val day = dayOf(iso) ?: return ""
+    return day.format(dateFormat)
+}
+
+/**
  * Which day the messages under it were sent.
  *
  * The times on the bubbles are only clock times, so a conversation read later
@@ -96,7 +107,7 @@ fun DayDivider(iso: String, modifier: Modifier = Modifier) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = dayLabel(iso),
+            text = "${dayLabel(iso)} — ${fullDateLabel(iso)}",
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier
