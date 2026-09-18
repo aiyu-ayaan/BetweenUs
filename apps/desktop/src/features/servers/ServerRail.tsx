@@ -70,14 +70,14 @@ export function ServerRail({
     <nav
       aria-label="Servers"
       onClickCapture={onNavigate}
-      className={`relative flex w-16 shrink-0 flex-col items-center gap-1.5 overflow-y-auto bg-[#0b0f19] py-2.5 ${className ?? ''}`}
+      className={`relative flex w-16 shrink-0 flex-col items-center gap-1.5 overflow-y-auto bg-surface-950 py-2.5 ${className ?? ''}`}
     >
       {/* Direct Messages Icon Button */}
       <RailButton
         label="Direct messages"
         active={view === 'home'}
         onClick={showHome}
-        activeClasses="bg-accent text-white shadow-lg shadow-accent/25 rounded-2xl ring-2 ring-accent ring-offset-2 ring-offset-[#0b0f19]"
+        activeClasses="bg-accent text-white shadow-lg shadow-accent/25 rounded-2xl ring-2 ring-accent ring-offset-2 ring-offset-surface-950"
         shape={view === 'home' ? 'rounded-2xl' : 'rounded-full hover:rounded-2xl'}
       >
         <MessageIcon className="h-5 w-5" />
@@ -103,7 +103,7 @@ export function ServerRail({
             active={isActive}
             badge={serverUnread > 0 ? serverUnread : undefined}
             onClick={() => void selectServer(server.id)}
-            activeClasses="bg-accent text-white shadow-lg shadow-accent/30 rounded-2xl ring-2 ring-accent ring-offset-2 ring-offset-[#0b0f19]"
+            activeClasses="bg-accent text-white shadow-lg shadow-accent/30 rounded-2xl ring-2 ring-accent ring-offset-2 ring-offset-surface-950"
             shape={isActive ? 'rounded-2xl' : 'rounded-full hover:rounded-2xl'}
           >
             <ServerIcon server={server} size="rail" />
@@ -252,7 +252,7 @@ function RailButton({
       >
         {children}
         {Boolean(badge) && (
-          <span className="absolute -bottom-1 -end-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[10px] font-bold text-white shadow-md ring-2 ring-[#0b0f19]">
+          <span className="absolute -bottom-1 -end-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[10px] font-bold text-white shadow-md ring-2 ring-surface-950">
             {badge}
           </span>
         )}
