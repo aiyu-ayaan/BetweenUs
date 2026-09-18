@@ -3,12 +3,10 @@ import type { ActiveStatus } from '@betweenus/shared-types';
 import { useAuthStore } from '../../stores/auth';
 import { usePresenceStore } from '../../stores/presence';
 import { useVoiceStore } from '../../stores/voice';
-import { useChatStore } from '../../stores/chat';
 import { Avatar } from '../../components/Avatar';
 import { AppDownloadIcon, HeadphonesIcon, MicIcon, MicOffIcon, SettingsIcon } from '../../components/icons';
 import { isDesktopRuntime } from '../../services/platform';
 import { DOWNLOAD_URL, downloadLabel } from '../../services/downloads';
-import { roleBadgeLabel } from '../members/MemberList';
 
 const STATUS_CHOICES: Array<{ value: ActiveStatus; label: string; hint?: string }> = [
   { value: 'online', label: 'Online' },
@@ -42,11 +40,12 @@ export function UserPanel({ onOpenSettings }: { onOpenSettings: () => void }): J
   const setStatus = usePresenceStore((state) => state.setStatus);
   const micEnabled = useVoiceStore((state) => state.micEnabled);
   const toggleMic = useVoiceStore((state) => state.toggleMic);
-  // Your role in whichever server is open, if any - the same built-in labels
-  // the message list badges staff with. Nothing here when the sidebar has no
-  // server (home view, or a fresh sign-in with no server selected yet).
-  const myRole = useChatStore((state) => state.members.find((member) => member.userId === user?.id)?.role);
-  const roleLabel = myRole ? roleBadgeLabel(myRole) : null;
+  // While a call is up, `VoicePanel` sits directly above this row and its
+  // `VoiceControls` own the microphone. Two mic buttons stacked an inch apart
+  // is one question with two answers, and they are also what squeezed the name
+  // column - so this row hands those two controls over for the length of the
+  // call and takes them back when it ends.
+  const inCall = useVoiceStore((state) => state.status !== 'idle');
 
   const [open, setOpen] = useState(false);
   const [deafened, setDeafened] = useState(false);
@@ -146,34 +145,44 @@ export function UserPanel({ onOpenSettings }: { onOpenSettings: () => void }): J
           </span>
           {/* No second dot here - the avatar above already cuts one into its
               own corner for this exact status, and a row that draws the same
-              fact twice reads as two people's presence rather than one. */}
+              fact twice reads as two people's presence rather than one.
+              And no role either: this column is roughly ninety pixels once the
+              avatar and the buttons have taken theirs, so "Founder • Online"
+              truncated to "Foun…", which says neither. The role is already on
+              every message this account sends and beside its name in the
+              member list; what this row is for is who you are and what you are
+              set to. */}
           <span className="block truncate text-xs text-slate-400">
-            {roleLabel ? `${roleLabel} • ${STATUS_WORD[selfStatus]}` : STATUS_WORD[selfStatus]}
+            {STATUS_WORD[selfStatus]}
           </span>
         </span>
       </button>
 
-      <button
-        type="button"
-        onClick={() => void toggleMic()}
-        aria-label={micEnabled ? 'Mute microphone' : 'Unmute microphone'}
-        title="Microphone"
-        className="spring-press shrink-0 cursor-pointer rounded-lg p-2 text-slate-300 hover:bg-white/[0.06]"
-      >
-        {micEnabled ? <MicIcon className="h-4 w-4" /> : <MicOffIcon className="h-4 w-4 text-danger" />}
-      </button>
+      {!inCall && (
+        <>
+          <button
+            type="button"
+            onClick={() => void toggleMic()}
+            aria-label={micEnabled ? 'Mute microphone' : 'Unmute microphone'}
+            title="Microphone"
+            className="spring-press shrink-0 cursor-pointer rounded-lg p-2 text-slate-300 hover:bg-white/[0.06]"
+          >
+            {micEnabled ? <MicIcon className="h-4 w-4" /> : <MicOffIcon className="h-4 w-4 text-danger" />}
+          </button>
 
-      <button
-        type="button"
-        onClick={() => setDeafened((d) => !d)}
-        aria-label={deafened ? 'Undeafen' : 'Deafen'}
-        title="Deafen"
-        className={`spring-press shrink-0 cursor-pointer rounded-lg p-2 hover:bg-white/[0.06] ${
-          deafened ? 'text-danger' : 'text-slate-300'
-        }`}
-      >
-        <HeadphonesIcon className="h-4 w-4" />
-      </button>
+          <button
+            type="button"
+            onClick={() => setDeafened((d) => !d)}
+            aria-label={deafened ? 'Undeafen' : 'Deafen'}
+            title="Deafen"
+            className={`spring-press shrink-0 cursor-pointer rounded-lg p-2 hover:bg-white/[0.06] ${
+              deafened ? 'text-danger' : 'text-slate-300'
+            }`}
+          >
+            <HeadphonesIcon className="h-4 w-4" />
+          </button>
+        </>
+      )}
 
       <button
         type="button"
