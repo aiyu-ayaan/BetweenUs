@@ -1169,7 +1169,7 @@ All three clients have all of it.
   forwarded into a direct message still renders.
 - **Invite links.** `/invite/<code>`, redeemed after sign-in, surviving the
   reload that sign-in causes.
-- **A member menu**: message, add friend, mute, copy id. Muting is per person
+- **A member menu**: message, add friend, mute, copy username. Muting is per person
   and follows the account; a muted person is silent even when they mention you.
 - **History that pages backwards** on desktop and web, anchored so the reader
   stays where they were reading.

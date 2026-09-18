@@ -36,7 +36,7 @@ import kotlinx.coroutines.launch
 /**
  * What a member's row offers besides opening a conversation.
  *
- * The port of the desktop's member menu - message, add friend, mute, copy id -
+ * The port of the desktop's member menu - message, add friend, mute, copy username -
  * as a sheet, because a phone has no right-click and no hover. Nothing here
  * applies to yourself, so the row that opens it is not drawn for you.
  *
@@ -163,10 +163,10 @@ fun MemberMenuSheet(
             }
 
             ListRow(
-                title = "Copy user ID",
+                title = "Copy username",
                 leading = { BetweenUsIcon(BetweenUsIcons.Copy, tint = Slate400) },
                 onClick = {
-                    clipboard.setText(AnnotatedString(member.userId))
+                    clipboard.setText(AnnotatedString(member.username))
                     onDismiss()
                 },
             )

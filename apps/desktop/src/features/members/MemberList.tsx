@@ -347,9 +347,9 @@ function MemberMenu({
       />
 
       <Item
-        label="Copy user ID"
+        label="Copy username"
         onClick={() => {
-          void navigator.clipboard?.writeText(member.userId);
+          void navigator.clipboard?.writeText(member.username);
           onClose();
         }}
       />
