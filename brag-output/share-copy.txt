@@ -1,0 +1,14 @@
+BetweenUs is an all-in-one private communication platform engineered with zero media servers and true end-to-end encryption. From real-time messaging to collaborative voice rooms and outbound remote desktop, every byte is encrypted on-device and streamed directly between peers.
+
+Highlights:
+• True E2EE: Client-sealed AES-256-GCM encryption for messages, attachments, and calls—servers route ciphertext and never hold decryption keys.
+• Zero-Media-Server WebRTC P2P: Direct device-to-device audio, video, and screen sharing with low-latency DTLS-SRTP encryption.
+• Listen Together: Shared, synchronized YouTube queue in voice calls with real-time audio ducking when members speak.
+• Play Together: In-call multiplayer board games including Carrom with authentic 2D rigid-body physics simulation.
+• 24h Moments: Full-screen ephemeral stories with audience encryption keys frozen at post time.
+• Outbound Remote Desktop: Reverse-tunnel desktop administration with zero open inbound ports and sub-20ms control.
+
+Platforms:
+• Desktop: Electron (Windows, macOS, Linux)
+• Web: Modern React SPA
+• Mobile: Native Android (Jetpack Compose & Material 3)

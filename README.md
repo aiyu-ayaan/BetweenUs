@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="video.mp4">▶️ <b>Watch 36s Feature Walkthrough Video (video.mp4)</b></a> &nbsp;•&nbsp; <a href="https://aiyu-ayaan.github.io/BetweenUs/features">📖 <b>Interactive Features &amp; Video Tour</b></a>
+  <a href="video.mp4">▶️ <b>Watch 9:16 Feature Showcase Video (video.mp4)</b></a> &nbsp;•&nbsp; <a href="https://aiyu-ayaan.github.io/BetweenUs/features">📖 <b>Interactive Features &amp; Video Tour</b></a>
 </p>
 
 <p align="center">
@@ -34,6 +34,58 @@ A modern, secure communication platform with end-to-end encrypted messaging, pee
 Messages, attachments, and call media are end-to-end encrypted: the server stores and routes ciphertext, never holding any key that can decrypt it. Voice, video, and screen sharing stream directly between participants via a peer-to-peer WebRTC mesh with DTLS-SRTP encryption — requiring zero media server infrastructure.
 
 `CLAUDE.md` is the target architecture. `development/` tracks what is built, why each decision was taken, and what is deliberately left open. `docs/` is the complete documentation suite covering architecture, services, system design, security, and step-by-step deployment with Docker Compose and Cloudflare Tunnels.
+
+---
+
+## Feature Showcase Gallery
+
+A visual tour of BetweenUs across desktop, web, and native mobile platforms:
+
+- **Desktop Workbench ([`pictures/home.png`](pictures/home.png))**: Floating panel architecture, E2EE chat, inline code, emoji reactions.
+- **Native Android Client ([`pictures/home-android.png`](pictures/home-android.png))**: Jetpack Compose Material 3 interface, WhatsApp-style media picker, Moments story rings.
+- **Voice & Collaborative Activities ([`pictures/voice-listen-play.png`](pictures/voice-listen-play.png))**: Direct P2P WebRTC mesh, synchronized YouTube player with audio ducking, in-call Carrom board physics.
+- **24-Hour Ephemeral Moments ([`pictures/moments-viewer.png`](pictures/moments-viewer.png))**: Full-screen story player, recipient key directory freezing, on-device decryption.
+- **Secure Outbound Remote Desktop ([`pictures/remote-desktop.png`](pictures/remote-desktop.png))**: Zero inbound port dial-out, live low-latency stream, telemetry monitor.
+
+### Desktop Workbench
+Floating panel architecture, E2EE chat, inline code, emoji reactions.
+
+<p align="center">
+  <a href="pictures/home.png">
+    <img src="pictures/home.png" alt="Desktop Workbench - pictures/home.png" width="100%" />
+  </a>
+</p>
+
+### Voice & Collaborative Activities
+Direct P2P WebRTC mesh, synchronized YouTube player with audio ducking, in-call Carrom board physics.
+
+<p align="center">
+  <a href="pictures/voice-listen-play.png">
+    <img src="pictures/voice-listen-play.png" alt="Voice & Collaborative Activities - pictures/voice-listen-play.png" width="100%" />
+  </a>
+</p>
+
+### Native Android Client & 24-Hour Ephemeral Moments
+Jetpack Compose Material 3 interface, WhatsApp-style media picker, Moments story rings, and on-device decryption.
+
+<p align="center">
+  <a href="pictures/home-android.png">
+    <img src="pictures/home-android.png" alt="Native Android Client - pictures/home-android.png" width="46%" />
+  </a>
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <a href="pictures/moments-viewer.png">
+    <img src="pictures/moments-viewer.png" alt="24-Hour Ephemeral Moments - pictures/moments-viewer.png" width="46%" />
+  </a>
+</p>
+
+### Secure Outbound Remote Desktop
+Zero inbound port dial-out, live low-latency stream, telemetry monitor.
+
+<p align="center">
+  <a href="pictures/remote-desktop.png">
+    <img src="pictures/remote-desktop.png" alt="Secure Outbound Remote Desktop - pictures/remote-desktop.png" width="100%" />
+  </a>
+</p>
 
 ---
 
