@@ -1,5 +1,54 @@
 # Changelog
 
+## [1.0.4](https://github.com/aiyu-ayaan/BetweenUs/compare/v1.0.3...v1.0.4) (2026-09-18)
+
+### Features
+
+* Promote Calls & Data to a rail destination
+* Staff role badge and full-date divider in chat
+* Port iMessage-style bubble arrival animation
+* Top-level Workbench/Activities/Moments nav and UI fixes
+* Polish workbench redesign with motion and Apple-style materials
+* Overhaul channel sidebar with voice participant tree and user controls
+* Redesign topbar navigation and server rail
+* Add headphones icon and motion animation tokens
+* Render 9:16 showcase video with baked poster frame 0
+* Implement 9:16 hyperframes composition for betweenus
+
+### Bug fixes
+
+* Workbench UI redesign, chat animation polish, and theme contrast fixes across Desktop and Android
+* Darken low-contrast accent in two light themes
+* Make the server rail follow the active theme
+* Make the iMessage-style bubble pop actually animate
+* Server rail unread badges, top-bar nav consistency
+* Remove placeholder box, fix titlebar button spacing, and add active server ring and marker
+* Mark subproject as dirty to indicate uncommitted changes
+* Debounce the friend search and cache the block list
+* Copy the username from the member menu, not the user id
+
+### Other changes
+
+* Note Calls & Data as a rail destination
+* Add workbench ui redesign implementation plan
+* Add workbench ui redesign design specification
+* Add brag skill and lockfile entry
+* Update readme with high-resolution screenshots and 9:16 showcase video
+* Add brag plan and composition brief for 9:16 vertical video
+* Generate voice, moments, and remote desktop screenshots
+* Generate native android compose mobile showcase screenshot
+* Generate high-resolution desktop workbench hero screenshot
+* Add implementation plan for 9:16 vertical video and screenshots
+* Add 9:16 vertical video and professional screenshot suite design
+
+### Artifacts
+
+| Platform | This release |
+| --- | --- |
+| Server images | Built here |
+| Desktop | Built here |
+| Android | Built here |
+
 ## [1.0.3](https://github.com/aiyu-ayaan/BetweenUs/compare/v1.0.2...v1.0.3) (2026-09-17)
 
 ### Features
