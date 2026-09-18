@@ -1603,6 +1603,15 @@ class VoiceEngine(private val context: Context) {
         private val shareLadder = ShareQuality.Ladder()
 
         /**
+         * Whether ICE has settled this link on a relay. The desktop's own
+         * `relayed`: a relayed pair costs the relay twice its bitrate, and
+         * `tune` holds the share to [ShareQuality.RELAY_MAX_BITRATE] while
+         * this is true. Read and set from [poll], which already walks the
+         * candidate pairs for the stats panel.
+         */
+        private var relayed = false
+
+        /**
          * What this client wants to be sending, held for the answering side: it
          * has no senders until the offer arrives, and a camera turned on before
          * that would otherwise never reach anybody.
@@ -1853,14 +1862,15 @@ class VoiceEngine(private val context: Context) {
                 for (encoding in encodings) {
                     encoding.maxBitrateBps =
                         if (screen) {
-                            ShareQuality.screenBitrate(shareSize)
+                            ShareQuality.ceilingFor(ShareQuality.screenBitrate(shareSize), relayed)
                         } else {
                             ShareQuality.cameraBitrate(cameraSize)
                         }
-                    // The profile's rate throughout. The ladder spends
-                    // resolution, never frames: frames are what a share is for.
+                    // The ceiling throughout. The ladder spends it down only
+                    // when the encoder itself cannot keep up - see
+                    // [ShareQuality.Ladder.frameRate].
                     encoding.maxFramerate =
-                        if (screen) ShareQuality.SCREEN_FRAME_RATE else ShareQuality.CAMERA_FRAME_RATE
+                        if (screen) shareLadder.frameRate else ShareQuality.CAMERA_FRAME_RATE
                     // Full size unless the encoder has reported it cannot carry
                     // the picture - see `ShareQuality.isStarved`.
                     encoding.scaleResolutionDownBy = if (screen) shareLadder.scale else 1.0
@@ -1907,6 +1917,20 @@ class VoiceEngine(private val context: Context) {
         private fun applyLadder(reading: ShareQuality.Reading) {
             if (screenTrack == null) return
             if (shareLadder.step(reading)) tune(Slot.SCREEN)
+        }
+
+        /**
+         * Holds the share to what a relay can carry, the moment ICE settles on
+         * one. The desktop's `applyRelayCeiling`. `null` says nothing walked -
+         * a report with an unresolved candidate pair - and the previous
+         * reading is left standing rather than guessed at.
+         */
+        private fun applyRelayCeiling(transport: String?) {
+            if (transport == null) return
+            val nowRelayed = transport == "relay"
+            if (nowRelayed == relayed) return
+            relayed = nowRelayed
+            if (screenTrack != null) tune(Slot.SCREEN)
         }
 
         /**
@@ -2476,7 +2500,14 @@ class VoiceEngine(private val context: Context) {
 
                 val pair = CallStats.selectedPair(pairs, selectedPairId)
                 val roundTrip = (pair?.get("currentRoundTripTime") as? Number)?.toDouble()
+                val transport = pair?.let { selected ->
+                    CallUsage.transportOf(
+                        candidateTypes[selected["localCandidateId"] as? String ?: ""],
+                        candidateTypes[selected["remoteCandidateId"] as? String ?: ""],
+                    )
+                }
 
+                applyRelayCeiling(transport)
                 applyLadder(ShareQuality.Reading(limitedBy, sendFps))
 
                 val sample = LinkSample(
@@ -2496,12 +2527,7 @@ class VoiceEngine(private val context: Context) {
                     frameWidth = picture.first,
                     frameHeight = picture.second,
                     framesPerSecond = picture.third,
-                    transport = pair?.let { selected ->
-                        CallUsage.transportOf(
-                            candidateTypes[selected["localCandidateId"] as? String ?: ""],
-                            candidateTypes[selected["remoteCandidateId"] as? String ?: ""],
-                        )
-                    },
+                    transport = transport,
                 )
                 val link = CallStats.toStats(peer.peerId, peer.username, sample, lastSample)
                 lastSample = sample

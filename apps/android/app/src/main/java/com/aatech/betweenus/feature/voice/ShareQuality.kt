@@ -118,22 +118,42 @@ object ShareQuality {
     }
 
     /**
+     * Whether a reading is evidence that the *encoder*, not the link, cannot
+     * keep up - a software codec asked for more pixels than the CPU can turn
+     * into frames sixty times a second. The desktop's `isCpuStarved`: the
+     * opposite fix from [isStarved], because a share holds its pixels and
+     * gives up frames instead - see [Ladder].
+     */
+    fun isCpuStarved(reading: Reading): Boolean {
+        if (reading.limitedBy != "cpu") return false
+        val fps = reading.framesPerSecond ?: return false
+        return fps < COLLAPSED_FPS
+    }
+
+    /**
      * One link's position on the ladder, over time. The desktop's `ShareLadder`.
      *
-     * Holds an index into [SCALE_STEPS] rather than a computed number, so the
-     * only things that can happen are one step down, one step up, or nothing.
-     * The frame rate is the profile's throughout: resolution is what gets
-     * spent, and `MAINTAIN_RESOLUTION` is what keeps WebRTC's own adapter from
-     * spending it too - two scalers on one picture is how a share already
-     * halved to 960x540 arrived at 660x350.
+     * Two independent axes. [SCALE_STEPS] is spent only on `bandwidth`
+     * evidence, [FRAME_TIERS] only on `cpu` evidence - `MAINTAIN_RESOLUTION`
+     * is what keeps WebRTC's own adapter off resolution, and the frame rate is
+     * this ladder's own to spend, not WebRTC's. A reading only ever reports one
+     * `limitedBy` at a time, so the two axes never move on the same tick for
+     * the same reason - it is not the two-scalers-on-one-picture bug, because
+     * each scaler owns a resource the other never touches.
      */
     class Ladder {
         private var step = 0
+        private var frameStep = 0
         private var starved = 0
         private var healthy = 0
+        private var cpuStarved = 0
+        private var cpuHealthy = 0
 
         /** The scale to publish at. 1.0 while nothing has gone wrong. */
         val scale: Double get() = SCALE_STEPS[step]
+
+        /** The frame rate to publish at. [SCREEN_FRAME_RATE] while nothing has gone wrong. */
+        val frameRate: Int get() = FRAME_TIERS[frameStep]
 
         /** True when the share should be re-published, which is only on a real move. */
         fun step(reading: Reading): Boolean {
@@ -146,25 +166,57 @@ object ShareQuality {
                 return true
             }
 
+            if (isCpuStarved(reading)) {
+                cpuHealthy = 0
+                if (++cpuStarved < SHRINK_TICKS) return false
+                cpuStarved = 0
+                if (frameStep >= FRAME_TIERS.size - 1) return false
+                frameStep += 1
+                return true
+            }
+
             starved = 0
+            cpuStarved = 0
+
+            var moved = false
+
             // Nothing to climb back from, which is the ordinary case: the ladder
             // spends almost every call at the top doing nothing.
-            if (step == 0) return false
+            if (step != 0) {
+                // A quiet share is not a recovered one, but it is not a reason
+                // to stay shrunk either - there is no evidence left that the
+                // link is the problem, and the only way to find out is a
+                // bigger picture.
+                if (++healthy >= CLIMB_TICKS) {
+                    healthy = 0
+                    step -= 1
+                    moved = true
+                }
+            } else {
+                healthy = 0
+            }
 
-            // A quiet share is not a recovered one, but it is not a reason to
-            // stay shrunk either - there is no evidence left that the link is
-            // the problem, and the only way to find out is a bigger picture.
-            if (++healthy < CLIMB_TICKS) return false
-            healthy = 0
-            step -= 1
-            return true
+            if (frameStep != 0) {
+                if (++cpuHealthy >= CLIMB_TICKS) {
+                    cpuHealthy = 0
+                    frameStep -= 1
+                    moved = true
+                }
+            } else {
+                cpuHealthy = 0
+            }
+
+            return moved
         }
 
         /** A new capture starts at the top; nothing is known about it yet. */
         fun reset() {
             step = 0
+            frameStep = 0
             starved = 0
             healthy = 0
+            cpuStarved = 0
+            cpuHealthy = 0
         }
     }
 
@@ -204,6 +256,18 @@ object ShareQuality {
         val scaled = ((pixels.toDouble() / REFERENCE_PIXELS) * REFERENCE_BITRATE).roundToInt()
         return min(MAX_BITRATE, max(MIN_BITRATE, scaled))
     }
+
+    /**
+     * The most a share may ask for when TURN is in the path. The desktop's
+     * `RELAY_MAX_BITRATE`: a relayed pair costs the relay twice its bitrate,
+     * and a relay is a small VM rather than a fabric - pointing this phone's
+     * full 50 Mbps ceiling at one produces loss, not 50 Mbps.
+     */
+    const val RELAY_MAX_BITRATE = 8_000_000
+
+    /** Never raises anything: a manual ceiling below the relay limit stays put. */
+    fun ceilingFor(bitrate: Int, relayed: Boolean): Int =
+        if (relayed) min(bitrate, RELAY_MAX_BITRATE) else bitrate
 
     /**
      * A camera ceiling proportional to the pixels actually being sent.

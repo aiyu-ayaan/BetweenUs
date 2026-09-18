@@ -64,6 +64,22 @@ class ShareQualityTest {
         assertEquals(50_000_000, huge)
     }
 
+    @Test
+    fun `a relay holds the share to what a small VM can carry`() {
+        // The desktop's `ceilingFor` / `RELAY_MAX_BITRATE`: a relayed pair
+        // costs the relay twice its bitrate, so the full pixel-scaled ceiling
+        // is never handed to one.
+        val full = ShareQuality.screenBitrate(ShareQuality.Size(1920, 1080))
+        assertTrue(full > ShareQuality.RELAY_MAX_BITRATE)
+        assertEquals(ShareQuality.RELAY_MAX_BITRATE, ShareQuality.ceilingFor(full, relayed = true))
+        assertEquals(full, ShareQuality.ceilingFor(full, relayed = false))
+
+        // Never raises anything: a ceiling already below the relay limit
+        // stays where it was.
+        val small = ShareQuality.screenBitrate(ShareQuality.Size(640, 360))
+        assertEquals(small, ShareQuality.ceilingFor(small, relayed = true))
+    }
+
     // --- Which codec, and which H.264 ---------------------------------------
 
     @Test
@@ -140,6 +156,59 @@ class ShareQualityTest {
     fun `both together is the encoder saying it could not send more`() {
         assertTrue(ShareQuality.isStarved(reading("bandwidth", 3.0)))
         assertTrue(ShareQuality.isStarved(reading("bandwidth", 12.0)))
+    }
+
+    // --- The frame ladder: cpu pressure, not bandwidth --------------------
+    //
+    // A software encoder that cannot keep up reports `cpu`, never
+    // `bandwidth`, and wants the opposite fix - fewer frames, not fewer
+    // pixels. `share-quality.check.ts` asserts the same answers on the desktop.
+
+    @Test
+    fun `cpu pressure is read from its own reason, not bandwidth's`() {
+        assertFalse(ShareQuality.isCpuStarved(reading(null, 4.0)))
+        assertFalse(ShareQuality.isCpuStarved(reading("bandwidth", 2.0)))
+        assertFalse(ShareQuality.isCpuStarved(reading("cpu", 30.0)))
+        assertTrue(ShareQuality.isCpuStarved(reading("cpu", 12.0)))
+        assertFalse(ShareQuality.isCpuStarved(reading("cpu", null)))
+    }
+
+    @Test
+    fun `cpu pressure spends frame tiers, never resolution`() {
+        val ladder = ShareQuality.Ladder()
+        assertEquals(60, ladder.frameRate)
+
+        val cpuStarved = reading("cpu", 3.0)
+        assertFalse("one reading is a hiccup", ladder.step(cpuStarved))
+        assertTrue(ladder.step(cpuStarved))
+        assertEquals(30, ladder.frameRate)
+        assertEquals("resolution is a different axis", 1.0, ladder.scale, 0.001)
+
+        assertFalse(ladder.step(cpuStarved))
+        assertTrue(ladder.step(cpuStarved))
+        assertEquals("the floor - below this motion stops reading as motion", 24, ladder.frameRate)
+
+        repeat(20) { ladder.step(cpuStarved) }
+        assertEquals(24, ladder.frameRate)
+
+        val cpuHealthy = reading(null, 58.0)
+        for (tick in 1 until 6) assertFalse("climbed on reading $tick", ladder.step(cpuHealthy))
+        assertTrue(ladder.step(cpuHealthy))
+        assertEquals(30, ladder.frameRate)
+    }
+
+    @Test
+    fun `bandwidth and cpu pressure move independent axes`() {
+        // A reading only ever reports one `limitedBy` at a time, so the two
+        // axes never fight over the same tick - each spends the resource the
+        // other never touches.
+        val ladder = ShareQuality.Ladder()
+        ladder.step(reading("bandwidth", 3.0))
+        ladder.step(reading("bandwidth", 3.0))
+        ladder.step(reading("cpu", 3.0))
+        ladder.step(reading("cpu", 3.0))
+        assertEquals(1.5, ladder.scale, 0.001)
+        assertEquals(30, ladder.frameRate)
     }
 
     @Test
@@ -220,8 +289,12 @@ class ShareQualityTest {
         val ladder = ShareQuality.Ladder()
         ladder.step(reading("bandwidth", 3.0))
         ladder.step(reading("bandwidth", 3.0))
+        ladder.step(reading("cpu", 3.0))
+        ladder.step(reading("cpu", 3.0))
         assertEquals(1.5, ladder.scale, 0.001)
+        assertEquals(30, ladder.frameRate)
         ladder.reset()
         assertEquals(1.0, ladder.scale, 0.001)
+        assertEquals(60, ladder.frameRate)
     }
 }

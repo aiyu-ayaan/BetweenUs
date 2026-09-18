@@ -392,13 +392,15 @@ screen cannot fake.
 | | |
 | --- | --- |
 | **`isStarved`** | `qualityLimitationReason === 'bandwidth'` **and** an outbound frame rate under 20. Both halves are required: `bandwidth` alone is reported transiently on shares that are completely fine, and a low frame rate alone is the normal state of a screen nobody is touching — a capturer only emits a frame when pixels change, so 4 fps at 5 kbps is a correct answer, not a fault. |
-| **`SCALE_STEPS`** | `[1, 1.5, 2, 3]` — discrete and coarse on purpose. A continuous scale recomputed per tick is a keyframe per tick; the steps make a struggling share settle on one of four answers instead of hunting. On 1080p: 1080p, 720p, 540p, 360p. |
-| **`ShareLadder`** | Holds an index into those steps, so the only things that can happen are one step down, one step up, or nothing. The frame rate stays the profile's throughout — frames are what a share is *for*. |
+| **`isCpuStarved`** | The same shape, for `qualityLimitationReason === 'cpu'` — a software encoder (no hardware H.264 path, or a codec sort that landed on one without an encoder behind it) that cannot turn pixels into frames fast enough. Added in phase 48; before it, a CPU-bound share sat under 20 fps indefinitely, on any connection, because nothing was watching for the reason. |
+| **`SCALE_STEPS`** | `[1, 1.5, 2, 3]` — discrete and coarse on purpose. A continuous scale recomputed per tick is a keyframe per tick; the steps make a struggling share settle on one of four answers instead of hunting. On 1080p: 1080p, 720p, 540p, 360p. Spent only by `isStarved`. |
+| **`FRAME_TIERS`** | `[60, 30, 24]` — 24 is the floor because it is the rate film has used for a century; below it motion reads as a slideshow rather than motion. Spent only by `isCpuStarved`. |
+| **`ShareLadder`** | Holds *two* independent indices, one into each list — one step down, one step up, or nothing, on each axis separately. A reading's `qualityLimitationReason` is one value at a time, so the two axes never move together for the same reason: this is not the two-scalers-on-one-picture bug from earlier in this document, because pixels and frames are different resources and each trigger owns exactly one of them. |
 
-Down takes 2 consecutive starved readings; up takes 6 healthy ones. A collapsed
-share is already unwatchable so waiting is more of the bug, while a recovered one
-has to prove it, because the estimate rises by probing and the first good reading
-is the probe rather than the link.
+Down takes 2 consecutive starved readings; up takes 6 healthy ones — on
+whichever axis moved. A collapsed share is already unwatchable so waiting is
+more of the bug, while a recovered one has to prove it, because the estimate
+rises by probing and the first good reading is the probe rather than the link.
 
 **A quiet share counts toward the climb**, which is the exact opposite of the
 broken version. There is no evidence left that the link is the problem, and the
@@ -407,11 +409,12 @@ only way to find out is to try a bigger picture.
 On a healthy share, and on a quiet one, the ladder does nothing at all and the
 share is exactly what the profile asked for. It is driven from the `getStats`
 poll that already runs every second whether or not the connection panel is open,
-and acted on by `applyShare` / `tune`. Both clients carry the same thresholds and
-steps; `share-quality.check.ts` and `ShareQualityTest.kt` assert the same answers
-on both sides.
+and acted on by `applyShare` / `tune`, which publish
+`min(profile frame rate, ShareLadder.frameRate)` alongside the resolution scale.
+Both clients carry the same thresholds and steps; `share-quality.check.ts` and
+`ShareQualityTest.kt` assert the same answers on both sides.
 
-A new capture resets the ladder to the top.
+A new capture resets the ladder to the top, on both axes.
 
 ### Which candidate pair is answering
 
@@ -495,7 +498,10 @@ what 1080p60 H.264 needs to look clean, well inside what a modest VM forwards).
 Per link, because in a mesh one peer may be direct and the next relayed; and
 watched rather than decided once, because ICE is usually still choosing a pair
 when a share starts and a pair can change mid-call. A manual ceiling already
-below the relay limit is never raised.
+below the relay limit is never raised. **Both clients**, since phase 48 —
+Android's `poll` already computed direct-or-relay for the connection panel and
+simply never acted on it; `PeerLink.applyRelayCeiling` on Android is the port of
+`applyRelayCeiling` on the desktop.
 
 **Why a share went soft.** `qualityLimitationReason` on the outbound stream is
 the one reading that separates *the link cannot carry it* from *this machine
@@ -503,7 +509,9 @@ cannot encode it* from *nothing is holding it back and it still looks like
 that*. It is sampled alongside the outbound frame size and shown in the
 connection panel as `Held by`, next to the inbound size that was already there —
 because a soft picture shrunk before it left and one damaged on the way are
-identical from the far end, and `bandwidth` and `cpu` want opposite fixes.
+identical from the far end, and `bandwidth` and `cpu` want opposite fixes: the
+resolution ladder answers the first, the frame ladder the second, and each
+reads only the reason it owns.
 
 ## What decides a camera's picture
 

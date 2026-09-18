@@ -708,9 +708,10 @@ class PeerLink {
       'screen',
       {
         maxBitrate: ceilingFor(this.sharePublish, this.relayed),
-        // The profile's rate throughout. The ladder spends resolution, never
-        // frames: frames are what the share is for.
-        maxFramerate: this.sharePublish.maxFramerate,
+        // The profile's rate is the ceiling. The ladder spends it down only
+        // when the *encoder* cannot keep up - `ShareLadder.frameRate` - which
+        // is a different failure from a link that cannot carry the picture.
+        maxFramerate: Math.min(this.sharePublish.maxFramerate, this.shareLadder.frameRate),
         scaleResolutionDownBy: this.shareLadder.scale,
         priority: this.sharePublish.priority,
       },

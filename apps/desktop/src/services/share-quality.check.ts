@@ -15,6 +15,7 @@ import {
   RELAY_MAX_BITRATE,
   ShareLadder,
   isStarved,
+  isCpuStarved,
   bitrateFor,
   cappedSize,
   captureConstraints,
@@ -252,6 +253,18 @@ assert.equal(isStarved({ limitedBy: 'bandwidth', framesPerSecond: 12 }), true);
 // No frame rate reported at all is not evidence of anything.
 assert.equal(isStarved({ limitedBy: 'bandwidth', framesPerSecond: null }), false);
 
+// --- What counts as CPU-starved: the same shape, a different reason ---
+//
+// A software encoder that cannot keep up reports `cpu`, never `bandwidth`, and
+// wants the opposite fix - fewer frames, not fewer pixels. Reusing `bandwidth`
+// evidence for this would spend the ladder's other axis on the wrong problem.
+
+assert.equal(isCpuStarved({ limitedBy: null, framesPerSecond: 4 }), false);
+assert.equal(isCpuStarved({ limitedBy: 'bandwidth', framesPerSecond: 2 }), false, 'bandwidth is isStarved\'s reading, not this one');
+assert.equal(isCpuStarved({ limitedBy: 'cpu', framesPerSecond: 30 }), false, 'the encoder is keeping up');
+assert.equal(isCpuStarved({ limitedBy: 'cpu', framesPerSecond: 12 }), true);
+assert.equal(isCpuStarved({ limitedBy: 'cpu', framesPerSecond: null }), false);
+
 // --- Where the ladder sits ---
 
 const STARVED = { limitedBy: 'bandwidth', framesPerSecond: 3 } as const;
@@ -318,7 +331,46 @@ assert.ok(flapping.step(HEALTHY), 'a whole run must still climb');
 // A new capture starts at the top: nothing is known about it yet.
 ladder.reset();
 assert.equal(ladder.scale, 1);
+assert.equal(ladder.frameRate, 60);
 assert.equal(ladder.position, null);
+
+// --- The frame ladder: the same shape, spending the other axis ---
+
+const CPU_STARVED = { limitedBy: 'cpu', framesPerSecond: 3 } as const;
+const CPU_HEALTHY = { limitedBy: null, framesPerSecond: 58 } as const;
+
+const frames = new ShareLadder();
+assert.equal(frames.frameRate, 60);
+assert.equal(frames.step(CPU_STARVED), false, 'one reading is a hiccup');
+assert.equal(frames.step(CPU_STARVED), true);
+assert.equal(frames.frameRate, 30, 'cpu pressure spends frame tiers, not resolution');
+assert.equal(frames.scale, 1, 'resolution is a different axis and must be untouched');
+
+assert.equal(frames.step(CPU_STARVED), false);
+assert.equal(frames.step(CPU_STARVED), true);
+assert.equal(frames.frameRate, 24, 'the floor - below this motion stops reading as motion');
+
+// It has a bottom, the same as the resolution ladder does.
+for (let tick = 0; tick < 20; tick += 1) frames.step(CPU_STARVED);
+assert.equal(frames.frameRate, 24);
+
+for (let tick = 1; tick < 6; tick += 1) {
+  assert.equal(frames.step(CPU_HEALTHY), false, `climbed on reading ${tick}`);
+}
+assert.equal(frames.step(CPU_HEALTHY), true);
+assert.equal(frames.frameRate, 30);
+
+// A bandwidth-starved share and a cpu-starved share are different failures on
+// different axes, and a reading can only ever report one reason at a time -
+// so a real run never has to fight itself the way `maintain-framerate` and the
+// ladder once did over the same pixels.
+const both = new ShareLadder();
+both.step(STARVED);
+both.step(STARVED);
+both.step(CPU_STARVED);
+both.step(CPU_STARVED);
+assert.equal(both.scale, 1.5, 'the bandwidth axis moved on bandwidth evidence');
+assert.equal(both.frameRate, 30, 'the cpu axis moved on cpu evidence, independently');
 
 
 // Whoever is driving must not be watching the past.

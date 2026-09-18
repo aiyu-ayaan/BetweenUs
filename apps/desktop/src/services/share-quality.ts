@@ -542,27 +542,54 @@ export function isStarved(reading: ShareReading): boolean {
 }
 
 /**
+ * Whether a reading is evidence that the *encoder*, not the link, cannot keep
+ * up - a software codec on a hot laptop asked for more pixels than its CPU can
+ * turn into frames sixty times a second. This wants the opposite fix from
+ * `isStarved`: a share holds its pixels because that is what makes it worth
+ * reading, so a CPU-bound share gives up frames instead, walking `FRAME_TIERS`
+ * down rather than `SCALE_STEPS`. Smaller pixels would help too, but spending
+ * the same axis `isStarved` already owns is the two-scalers mistake again, one
+ * level up.
+ */
+export function isCpuStarved(reading: ShareReading): boolean {
+  if (reading.limitedBy !== 'cpu') return false;
+  if (reading.framesPerSecond === null) return false;
+  return reading.framesPerSecond < COLLAPSED_FPS;
+}
+
+/**
  * One link's position on the ladder, over time.
  *
- * Holds an index into [SCALE_STEPS] rather than a computed number, so the only
- * things that can ever happen are one step down, one step up, or nothing. The
- * frame rate is the profile's throughout: the resolution is what gets spent,
- * because `maintain-resolution` is what keeps WebRTC's own adapter from
- * spending it too - two scalers on one picture is how 960x540 became 660x350.
+ * Two independent axes, each with its own index and its own reason to move.
+ * `SCALE_STEPS` is spent only by `isStarved` (bandwidth); `FRAME_TIERS` is
+ * spent only by `isCpuStarved` (cpu). They cannot both move on the same
+ * reading - `limitedBy` is one value at a time - so this is not the
+ * two-scalers-on-one-picture bug: it is two scalers, each owning a resource
+ * the other never touches.
  */
 export class ShareLadder {
   private step_ = 0;
+  private frameStep_ = 0;
   private starved = 0;
   private healthy = 0;
+  private cpuStarved = 0;
+  private cpuHealthy = 0;
 
   /** Where the ladder is, or null while it is at the top and has never moved. */
   get position(): ShareAdaptation | null {
-    return this.step_ === 0 ? null : { frameRate: 0, scaleResolutionDownBy: SCALE_STEPS[this.step_]! };
+    return this.step_ === 0 && this.frameStep_ === 0
+      ? null
+      : { frameRate: FRAME_TIERS[this.frameStep_]!, scaleResolutionDownBy: SCALE_STEPS[this.step_]! };
   }
 
   /** The scale to publish at. 1 while nothing has gone wrong. */
   get scale(): number {
     return SCALE_STEPS[this.step_]!;
+  }
+
+  /** The frame rate to publish at. The profile's own rate while nothing has gone wrong. */
+  get frameRate(): number {
+    return FRAME_TIERS[this.frameStep_]!;
   }
 
   /**
@@ -579,25 +606,56 @@ export class ShareLadder {
       return true;
     }
 
+    if (isCpuStarved(reading)) {
+      this.cpuHealthy = 0;
+      if (++this.cpuStarved < SHRINK_TICKS) return false;
+      this.cpuStarved = 0;
+      if (this.frameStep_ >= FRAME_TIERS.length - 1) return false;
+      this.frameStep_ += 1;
+      return true;
+    }
+
     this.starved = 0;
+    this.cpuStarved = 0;
+
+    let moved = false;
+
     // Nothing to climb back from, which is the ordinary case: the ladder spends
     // almost every call at the top doing nothing.
-    if (this.step_ === 0) return false;
+    if (this.step_ !== 0) {
+      // A quiet share is not a recovered one, but it is not a reason to stay
+      // shrunk either - there is no evidence left that the link is the
+      // problem, and the only way to find out is to try a bigger picture.
+      if (++this.healthy >= CLIMB_TICKS) {
+        this.healthy = 0;
+        this.step_ -= 1;
+        moved = true;
+      }
+    } else {
+      this.healthy = 0;
+    }
 
-    // A quiet share is not a recovered one, but it is not a reason to stay
-    // shrunk either - there is no evidence left that the link is the problem,
-    // and the only way to find out is to try a bigger picture.
-    if (++this.healthy < CLIMB_TICKS) return false;
-    this.healthy = 0;
-    this.step_ -= 1;
-    return true;
+    if (this.frameStep_ !== 0) {
+      if (++this.cpuHealthy >= CLIMB_TICKS) {
+        this.cpuHealthy = 0;
+        this.frameStep_ -= 1;
+        moved = true;
+      }
+    } else {
+      this.cpuHealthy = 0;
+    }
+
+    return moved;
   }
 
   /** A new capture starts at the top; nothing is known about it yet. */
   reset(): void {
     this.step_ = 0;
+    this.frameStep_ = 0;
     this.starved = 0;
     this.healthy = 0;
+    this.cpuStarved = 0;
+    this.cpuHealthy = 0;
   }
 }
 
