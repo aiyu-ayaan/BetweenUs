@@ -72,6 +72,7 @@ fun WorkspaceDrawer(
     onServerSettings: () -> Unit,
     onStatus: () -> Unit,
     onRemote: () -> Unit,
+    onActivities: () -> Unit,
 ) {
     var addingServer by remember { mutableStateOf(false) }
     var addingChannel by remember { mutableStateOf(false) }
@@ -155,6 +156,15 @@ fun WorkspaceDrawer(
                     Badge(count = unwatched, modifier = Modifier.align(Alignment.TopEnd))
                 }
             }
+            // Activities (Calls & Data) used to be three taps deep in
+            // Settings. It sits beside Moments now for the same reason
+            // Moments is here rather than in a menu: both are places you go,
+            // not settings you set.
+            IconAction(
+                icon = BetweenUsIcons.Phone,
+                contentDescription = "Calls & Data",
+                onClick = onActivities,
+            )
             IconAction(
                 icon = BetweenUsIcons.Monitor,
                 contentDescription = "Remote machines",
@@ -233,11 +243,26 @@ fun WorkspaceDrawer(
                         // which is the one thing you can already see.
                         val inRoom = voiceRooms[channel.id].orEmpty()
                         val roster = members[channel.serverId].orEmpty()
-                        val names = inRoom.map { id ->
-                            roster.firstOrNull { it.userId == id }?.label ?: "Someone"
-                        }
+                        val occupants = inRoom.map { id -> id to roster.firstOrNull { it.userId == id } }
+                        val occupied = occupants.isNotEmpty()
 
-                        Column {
+                        // A card, tinted, only while somebody is actually
+                        // here - an empty channel stays a plain row. The
+                        // tint is what makes "something is happening in
+                        // here" readable at a glance down a list of channels.
+                        Column(
+                            modifier = if (occupied) {
+                                Modifier
+                                    .padding(horizontal = 4.dp, vertical = 2.dp)
+                                    .background(
+                                        MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.35f),
+                                        RoundedCornerShape(12.dp),
+                                    )
+                                    .padding(vertical = 2.dp)
+                            } else {
+                                Modifier
+                            },
+                        ) {
                             ChannelRow(
                                 channel = channel,
                                 selected = channel.id == selectedChannelId,
@@ -245,7 +270,7 @@ fun WorkspaceDrawer(
                                 subtitle = if (inRoom.isEmpty()) null else "${inRoom.size} in the room",
                             ) { onSelectChannel(channel) }
 
-                            for (name in names) VoiceMember(name)
+                            for ((id, member) in occupants) VoiceMember(id, member)
                         }
                     }
                 }
@@ -295,13 +320,20 @@ fun WorkspaceDrawer(
  * the channel icon, so the list reads as belonging to the channel above it.
  */
 @Composable
-private fun VoiceMember(name: String) {
+private fun VoiceMember(userId: String, member: com.aatech.betweenus.core.data.ServerMember?) {
+    val name = member?.label ?: "Someone"
     Row(
         modifier = Modifier.fillMaxWidth().padding(start = 44.dp, end = 12.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Avatar(id = name, label = name, url = null, size = 20.dp, viewable = false)
+        Avatar(
+            id = userId,
+            label = name,
+            url = member?.avatarUrl?.let { com.aatech.betweenus.core.data.Endpoint.absolute(it) },
+            size = 20.dp,
+            viewable = false,
+        )
         Text(
             text = name,
             style = MaterialTheme.typography.bodySmall,

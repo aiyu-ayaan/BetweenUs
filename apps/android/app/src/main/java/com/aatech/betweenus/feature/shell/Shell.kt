@@ -447,6 +447,10 @@ fun Shell(user: PublicUser) {
                 scope.launch { drawer.close() }
                 navigation.navigate(Route.Remote)
             },
+            onActivities = {
+                scope.launch { drawer.close() }
+                navigation.navigate(Route.CallUsage)
+            },
         )
     }
 
