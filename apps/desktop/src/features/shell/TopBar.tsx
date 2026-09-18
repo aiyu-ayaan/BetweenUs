@@ -7,7 +7,6 @@ import {
   SearchIcon,
   SettingsIcon,
 } from '../../components/icons';
-import { useVoiceStore } from '../../stores/voice';
 import { runsOf, useStatusStore } from '../../stores/status';
 
 const isMac = typeof window !== 'undefined' && window.betweenus?.platform === 'darwin';
@@ -46,7 +45,6 @@ export function TopBar({
   topTab,
   onChangeTopTab,
 }: TopBarProps): JSX.Element {
-  const voiceStatus = useVoiceStore((state) => state.status);
   // How many people have something unwatched - the same count the Moments
   // tray itself uses to decide "Recent" from "Viewed". `HomeSidebar` used to
   // carry this badge; it belongs here now, since this is the only Moments
@@ -103,8 +101,11 @@ export function TopBar({
         </div>
       </nav>
 
-      {/* Right: search, live voice status (only if connected), settings &
-          Windows window controls safe zone */}
+      {/* Right: search, settings & the Windows window controls safe zone.
+          No voice indicator here: `VoicePanel` above the account footer says
+          the same thing with the controls beside it, and a second badge in the
+          title bar was the same fact twice, further from anything that acts
+          on it. */}
       <div className="flex items-center gap-1.5 shrink-0">
         <button
           type="button"
@@ -115,16 +116,6 @@ export function TopBar({
         >
           <SearchIcon className="h-4 w-4" />
         </button>
-
-        {voiceStatus === 'connected' && (
-          <div className="flex items-center gap-1.5 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-400 select-none shadow-sm">
-            <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
-            </span>
-            <span className="tracking-tight">Voice Connected</span>
-          </div>
-        )}
 
         {onOpenSettings && (
           <button
