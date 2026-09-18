@@ -39,6 +39,29 @@ class ShareQualityTest {
     }
 
     @Test
+    fun `a lower quality ceiling scales the long edge down further, never up`() {
+        // ShareQuality.ScreenQuality's ceilings, applied the same way
+        // captureSize does via the internal edge parameter.
+        val p1080 = ShareQuality.scaleToFit(1080, 1920, edge = 1080)
+        assertEquals(1080, p1080.height)
+        assertEquals(608, p1080.width)
+
+        val p720 = ShareQuality.scaleToFit(1080, 1920, edge = 720)
+        assertEquals(720, p720.height)
+        assertEquals(404, p720.width)
+
+        // A display already under the ceiling is captured at its own size -
+        // never enlarged to meet one.
+        val small = ShareQuality.scaleToFit(480, 800, edge = 1080)
+        assertEquals(800, small.height)
+        assertEquals(480, small.width)
+
+        // The default edge is unchanged: AUTO behaves exactly as before this
+        // parameter existed.
+        assertEquals(ShareQuality.scaleToFit(1440, 3120), ShareQuality.scaleToFit(1440, 3120, edge = 1920))
+    }
+
+    @Test
     fun `capture sizes are always even`() {
         // An odd dimension is a size no H264 encoder will take, and the failure
         // is a share that produces no frames at all rather than a warning.

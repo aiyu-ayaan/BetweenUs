@@ -233,20 +233,47 @@ object ShareQuality {
     data class Size(val width: Int, val height: Int)
 
     /**
+     * What somebody has decided the default capture is too much for - a
+     * struggling connection, a weak encoder, or just a preference for
+     * reliable over sharp. The desktop's `maxHeight` override, as a picker
+     * rather than a number: three answers cover it, and the display's own
+     * shape means a "1080p" choice on a phone is a ceiling on the long edge,
+     * the same as it is on a monitor.
+     *
+     * This spends bits *before* the encoder ever sees a frame, which is a
+     * cheaper and more reliable fix for a choppy share than anything the
+     * ladder can do after the fact: fewer pixels is less to encode every
+     * frame and less to fit down the link, so the ladder finds less to
+     * struggle with in the first place. The receiving end draws whatever
+     * arrives stretched to fill its own view - the same free upscale a
+     * smaller video file already gets when played larger than it was
+     * recorded - so a smaller capture is not a smaller picture for whoever
+     * is watching, only a lighter one to produce and carry.
+     */
+    enum class ScreenQuality { AUTO, P1080, P720 }
+
+    /** The long-edge ceiling for one choice. `AUTO` is today's [MAX_CAPTURE_EDGE]. */
+    private fun captureEdgeFor(quality: ScreenQuality): Int = when (quality) {
+        ScreenQuality.AUTO -> MAX_CAPTURE_EDGE
+        ScreenQuality.P1080 -> 1080
+        ScreenQuality.P720 -> 720
+    }
+
+    /**
      * What to hand `ScreenCapturerAndroid`: the display, in its own shape,
-     * with the long edge brought down to [MAX_CAPTURE_EDGE] if it is over.
+     * with the long edge brought down to [quality]'s ceiling if it is over.
      *
      * Both dimensions are made even. An odd width is a size no H.264 encoder
      * will take, and the failure is a share that produces no frames at all.
      */
-    fun captureSize(context: Context): Size {
+    fun captureSize(context: Context, quality: ScreenQuality = ScreenQuality.AUTO): Size {
         val metrics = displayMetrics(context)
-        return scaleToFit(metrics.widthPixels, metrics.heightPixels)
+        return scaleToFit(metrics.widthPixels, metrics.heightPixels, captureEdgeFor(quality))
     }
 
-    internal fun scaleToFit(width: Int, height: Int): Size {
+    internal fun scaleToFit(width: Int, height: Int, edge: Int = MAX_CAPTURE_EDGE): Size {
         val longest = max(width, height)
-        val factor = if (longest > MAX_CAPTURE_EDGE) MAX_CAPTURE_EDGE.toDouble() / longest else 1.0
+        val factor = if (longest > edge) edge.toDouble() / longest else 1.0
         return Size(even((width * factor).roundToInt()), even((height * factor).roundToInt()))
     }
 

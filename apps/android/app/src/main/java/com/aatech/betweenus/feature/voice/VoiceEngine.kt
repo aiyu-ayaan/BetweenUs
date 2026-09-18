@@ -1198,11 +1198,13 @@ class VoiceEngine(private val context: Context) {
     }
 
     private fun beginScreenCapture(permission: Intent) {
-        // The display's own shape and size, not a fixed 720p box: capturing
-        // small and stretching on the far end is what "very low quality" looks
-        // like, and it saves nothing, because the scaling happens after the
-        // pixels have already been read.
-        val size = ShareQuality.captureSize(context)
+        // The display's own shape, held to whatever ceiling Settings has set -
+        // see [AudioPrefs.screenShareQuality]. A ceiling only, never an
+        // enlargement, and never scaled after capture: a smaller picture is
+        // one the far end stretches to fit its own view, the same as any
+        // undersized video does, so nothing is lost by choosing this before
+        // the encoder ever sees a frame.
+        val size = ShareQuality.captureSize(context, AudioPrefs.screenShareQuality)
         shareSize = size
         // Every rung of every link's ladder was arithmetic on the size that has
         // just changed, so a rung held over from the last share is a budget for

@@ -476,6 +476,20 @@ then quoted against the capped size, so the pipe is sized for the picture that i
 actually sent. Settings → Voice & Video offers *this display*, 2160p, 1440p,
 1080p and 720p; the first is for a LAN that can carry it.
 
+**Android has the same lever, since phase 49.** `ShareQuality.ScreenQuality`
+(`AUTO` / `P1080` / `P720`) caps the long edge `captureSize` hands
+`ScreenCapturerAndroid`, the same way `maxHeight` caps `cappedSize` on the
+desktop — set once in Settings → Voice & Audio → Screen Share Resolution
+(`AudioPrefs.screenShareQuality`), read at the start of every capture. A
+smaller capture is fewer pixels for the phone to encode every frame and fewer
+bits for the link to carry, both spent *before* the encoder or the ladder ever
+sees a frame — the cheapest and most reliable fix a choppy share has, because
+it removes the problem rather than reacting to it after the fact. Nothing is
+lost visually on the watching end: a receiver's video surface stretches
+whatever arrives to fill its own view regardless of the source resolution,
+the same free upscale any undersized video already gets played back larger
+than it was recorded.
+
 The ceiling reaches `getDisplayMedia` through `captureConstraints` as a **`max`,
 never an `ideal`**. `ideal` is a preference Chromium scores and is free to miss,
 so the old constraint — `ideal` at the real size beside `max: Math.max(3840, …)`

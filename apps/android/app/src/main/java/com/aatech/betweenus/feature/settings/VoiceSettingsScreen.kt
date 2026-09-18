@@ -84,6 +84,7 @@ fun VoiceSettingsScreen(
     val devices by rememberCallDevices()
 
     var cameraQuality by remember { mutableStateOf(AudioPrefs.cameraQuality) }
+    var screenShareQuality by remember { mutableStateOf(AudioPrefs.screenShareQuality) }
     var cameraFilter by remember { mutableStateOf(AudioPrefs.cameraFilter) }
     var cameraDevice by remember { mutableStateOf(AudioPrefs.cameraDeviceName) }
     val enumerator = remember {
@@ -368,6 +369,24 @@ fun VoiceSettingsScreen(
                 },
             )
 
+            ListRow(
+                title = "Screen Share Resolution",
+                subtitle = screenQualityLabel(screenShareQuality),
+                leading = { BetweenUsIcon(BetweenUsIcons.Video) },
+                trailing = {
+                    Chip(
+                        text = "Change",
+                        onClick = {
+                            val qualities = ShareQuality.ScreenQuality.entries
+                            val nextIndex = (qualities.indexOf(screenShareQuality) + 1).mod(qualities.size)
+                            val next = qualities[nextIndex]
+                            screenShareQuality = next
+                            AudioPrefs.screenShareQuality = next
+                        },
+                    )
+                },
+            )
+
             // --- Call Sounds & Analytics ---
             SectionLabel("Call Sounds & Data")
 
@@ -486,6 +505,19 @@ private fun cameraQualityLabel(quality: ShareQuality.CameraQuality): String = wh
     ShareQuality.CameraQuality.P360 -> "360p"
     ShareQuality.CameraQuality.P720 -> "720p"
     ShareQuality.CameraQuality.P1080 -> "1080p"
+}
+
+/**
+ * A ceiling only, never an enlargement - see [ShareQuality.ScreenQuality]. The
+ * receiving side stretches whatever arrives to fill its own view, so a lower
+ * choice here is a lighter share to produce and carry, not a smaller picture
+ * for whoever is watching. Worth changing when a share goes choppy on a
+ * connection that otherwise looks fine.
+ */
+private fun screenQualityLabel(quality: ShareQuality.ScreenQuality): String = when (quality) {
+    ShareQuality.ScreenQuality.AUTO -> "Auto (this display)"
+    ShareQuality.ScreenQuality.P1080 -> "1080p"
+    ShareQuality.ScreenQuality.P720 -> "720p - most reliable"
 }
 
 private fun cameraLabel(name: String?, cameraNames: List<String>, enumerator: CameraEnumerator): String {

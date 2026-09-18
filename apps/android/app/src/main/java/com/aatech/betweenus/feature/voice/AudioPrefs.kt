@@ -113,6 +113,19 @@ object AudioPrefs {
         set(value) = prefs.edit().putString("camera.quality", value.name).apply()
 
     /**
+     * The ceiling on a screen share's capture, before anything is encoded -
+     * see [ShareQuality.ScreenQuality]. `AUTO` is today's behaviour: the
+     * display's own size, held to [ShareQuality.captureSize]'s existing cap.
+     */
+    var screenShareQuality: ShareQuality.ScreenQuality
+        get() = runCatching {
+            ShareQuality.ScreenQuality.valueOf(
+                prefs.getString("screen.quality", null) ?: "AUTO",
+            )
+        }.getOrDefault(ShareQuality.ScreenQuality.AUTO)
+        set(value) = prefs.edit().putString("screen.quality", value.name).apply()
+
+    /**
      * The colour filter on the camera, by name - see [CameraLook.FILTERS].
      *
      * A name rather than the matrix, for the same reason the desktop stores a
