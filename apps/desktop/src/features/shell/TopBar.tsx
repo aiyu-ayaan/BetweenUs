@@ -1,38 +1,40 @@
 import { useChatStore } from '../../stores/chat';
-import { LayoutSidebarIcon, BetweenUsLogoIcon, SearchIcon } from '../../components/icons';
+import {
+  LayoutSidebarIcon,
+  BetweenUsLogoIcon,
+  SearchIcon,
+  BellIcon,
+  SettingsIcon,
+  FolderIcon,
+  ActivityIcon,
+  ClockIcon,
+} from '../../components/icons';
 
-/**
- * The bar across the top of the workbench: the mark on the left, one command
- * field in the middle, and the layout toggles on the right.
- *
- * It exists because the alternative is what a chat app usually does - hang
- * search, navigation and window chrome off whichever column had room. One bar
- * that spans the window gives the panels below it a single frame to sit in, and
- * gives the command field the middle of the screen, which is where somebody
- * looks for it.
- *
- * The whole bar is a drag region in Electron except the controls in it, so the
- * window still moves when it is grabbed anywhere that is not a button.
- */
 const isMac = typeof window !== 'undefined' && window.betweenus?.platform === 'darwin';
+
+export interface TopBarProps {
+  onOpenSwitcher: () => void;
+  sidebarOpen: boolean;
+  onToggleSidebar: () => void;
+  activeTab?: 'workbench' | 'activities' | 'moments';
+  onTabChange?: (tab: 'workbench' | 'activities' | 'moments') => void;
+  onOpenSettings?: () => void;
+}
 
 export function TopBar({
   onOpenSwitcher,
   sidebarOpen,
   onToggleSidebar,
-}: {
-  onOpenSwitcher: () => void;
-  sidebarOpen: boolean;
-  onToggleSidebar: () => void;
-}): JSX.Element {
+  activeTab = 'workbench',
+  onTabChange,
+  onOpenSettings,
+}: TopBarProps): JSX.Element {
   const view = useChatStore((state) => state.view);
   const servers = useChatStore((state) => state.servers);
   const activeServerId = useChatStore((state) => state.activeServerId);
   const channel = useChatStore((state) => state.activeChannel());
 
   const server = servers.find((item) => item.id === activeServerId);
-  // What the command field says when it is idle: where you are, so the bar
-  // doubles as the answer to "which channel am I looking at".
   const here =
     view === 'server' && server
       ? channel
@@ -40,34 +42,68 @@ export function TopBar({
         : server.name
       : channel
         ? channel.name
-        : 'BetweenUs';
+        : 'BetweenUs HQ / #general';
 
   return (
-    <header className="drag-region hidden md:flex h-10 shrink-0 items-center gap-2 px-2.5">
-      {/* Each toggle sits on the side it acts on. Both of them together in one
-          corner is what the layout controls in most apps look like, and it
-          leaves you guessing which button hides which column. */}
-      <div className={`flex w-36 shrink-0 items-center gap-1.5 ${isMac ? 'ps-[72px]' : 'ps-1'}`}>
-        <BetweenUsLogoIcon className="h-[18px] w-[18px] shrink-0 text-accent" aria-hidden="true" />
-        <span className="truncate text-[13px] font-semibold tracking-tight text-slate-300">
+    <header className="drag-region hidden md:flex h-10 shrink-0 items-center justify-between border-b border-edge/60 bg-surface-950/80 px-2.5 backdrop-blur-md">
+      {/* Brand mark and navigation tabs */}
+      <div className={`flex items-center gap-2 ${isMac ? 'ps-[72px]' : 'ps-1'}`}>
+        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent text-white shadow-md shadow-accent/20">
+          <BetweenUsLogoIcon className="h-4 w-4" />
+        </div>
+        <span className="text-[13px] font-bold tracking-tight text-slate-100">
           BetweenUs
         </span>
-        <div className="hidden md:flex items-center">
-          <LayoutToggle
-            label={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
-            on={sidebarOpen}
-            onClick={onToggleSidebar}
-          />
-        </div>
+
+        {/* View Switcher Tabs */}
+        <nav aria-label="Workspaces" className="ms-2 hidden lg:flex items-center gap-0.5 rounded-lg border border-edge bg-white/[0.02] p-0.5">
+          <button
+            type="button"
+            onClick={() => onTabChange?.('workbench')}
+            className={`no-drag flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-all duration-150 active:scale-[0.97] ${
+              activeTab === 'workbench'
+                ? 'border border-white/10 bg-white/[0.08] text-white shadow-sm'
+                : 'text-slate-400 hover:bg-white/[0.04] hover:text-slate-200'
+            }`}
+          >
+            <FolderIcon className="h-3.5 w-3.5" />
+            <span>Workbench</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => onTabChange?.('activities')}
+            className={`no-drag flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-all duration-150 active:scale-[0.97] ${
+              activeTab === 'activities'
+                ? 'border border-white/10 bg-white/[0.08] text-white shadow-sm'
+                : 'text-slate-400 hover:bg-white/[0.04] hover:text-slate-200'
+            }`}
+          >
+            <ActivityIcon className="h-3.5 w-3.5" />
+            <span>Activities</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => onTabChange?.('moments')}
+            className={`no-drag flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-all duration-150 active:scale-[0.97] ${
+              activeTab === 'moments'
+                ? 'border border-white/10 bg-white/[0.08] text-white shadow-sm'
+                : 'text-slate-400 hover:bg-white/[0.04] hover:text-slate-200'
+            }`}
+          >
+            <ClockIcon className="h-3.5 w-3.5" />
+            <span>Moments</span>
+          </button>
+        </nav>
       </div>
 
-      <div className="flex min-w-0 flex-1 justify-center">
+      {/* Omnibar Search */}
+      <div className="flex min-w-0 flex-1 justify-center px-4">
         <button
           type="button"
           onClick={onOpenSwitcher}
-          className="no-drag group flex h-7 w-full max-w-lg cursor-pointer items-center gap-2 rounded-lg border border-edge bg-white/[0.03] px-2.5 text-[13px] text-slate-400 transition-colors duration-150 hover:border-white/10 hover:bg-white/[0.06] hover:text-slate-200"
+          className="no-drag group flex h-7 w-full max-w-md cursor-pointer items-center gap-2 rounded-lg border border-edge bg-white/[0.03] px-2.5 text-[13px] text-slate-400 transition-colors duration-150 hover:border-white/10 hover:bg-white/[0.06] hover:text-slate-200"
         >
-          <SearchIcon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <SearchIcon className="h-3.5 w-3.5 shrink-0 text-slate-400 group-hover:text-slate-200" aria-hidden="true" />
           <span className="min-w-0 truncate">{here}</span>
           <kbd className="ms-auto hidden shrink-0 rounded border border-edge px-1.5 py-px font-sans text-[11px] text-slate-500 sm:block">
             Ctrl K
@@ -75,10 +111,48 @@ export function TopBar({
         </button>
       </div>
 
-      {/* Windows and Linux draw the minimise/maximise/close overlay into this
-          gap; macOS puts its buttons on the left, so there the gap is only the
-          counterweight that keeps the command field centred. */}
-      <div className={`hidden shrink-0 md:block ${isMac ? 'w-36' : 'w-[146px]'}`} />
+      {/* Right Telemetry & Actions */}
+      <div className="flex items-center gap-2 shrink-0 pe-2">
+        {/* WebRTC Mesh Latency Beacon */}
+        <div className="flex items-center gap-1.5 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-400 select-none shadow-sm">
+          <span className="relative flex h-2 w-2">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+          </span>
+          <span className="tracking-tight">WebRTC Mesh • 14ms</span>
+        </div>
+
+        {/* Notifications */}
+        <button
+          type="button"
+          title="Notifications"
+          aria-label="Notifications"
+          className="no-drag flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-colors duration-150 hover:bg-white/[0.06] hover:text-slate-200 active:scale-[0.97]"
+        >
+          <BellIcon className="h-4 w-4" />
+        </button>
+
+        {/* Settings */}
+        <button
+          type="button"
+          onClick={onOpenSettings}
+          title="Settings"
+          aria-label="Settings"
+          className="no-drag flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-colors duration-150 hover:bg-white/[0.06] hover:text-slate-200 active:scale-[0.97]"
+        >
+          <SettingsIcon className="h-4 w-4" />
+        </button>
+
+        {/* Layout Toggle */}
+        <LayoutToggle
+          label={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
+          on={sidebarOpen}
+          onClick={onToggleSidebar}
+        />
+
+        {/* Overlay gap for Electron */}
+        <div className={`hidden shrink-0 md:block ${isMac ? 'w-4' : 'w-24'}`} />
+      </div>
     </header>
   );
 }

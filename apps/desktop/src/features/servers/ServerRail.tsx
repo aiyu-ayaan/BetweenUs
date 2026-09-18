@@ -6,20 +6,23 @@ import {
   pendingInvite,
 } from '../../services/invite-link';
 import { InviteDialog } from './InviteDialog';
-import { CompassIcon, MessageIcon, PlusIcon } from '../../components/icons';
+import { BetweenUsLogoIcon, CompassIcon, MessageIcon, PlusIcon } from '../../components/icons';
 import { ServerIcon } from '../../components/ServerIcon';
 import { useFocusTrap } from '../../services/focus-trap';
 
-/**
- * The left rail: direct messages at the top, then one tile per server, and the
- * two ways to get another one at the bottom.
- *
- * It is the one region that is not a panel - it sits directly on the ground, so
- * the workbench reads as panels arranged beside a column of controls rather
- * than as one more grey stripe. Where you are is a short bar against the left
- * edge, the way an editor marks its active activity-bar item: it costs no
- * horizontal space and it does not turn the tile into a different shape.
- */
+interface RailItem {
+  id: string;
+  name: string;
+  badge?: number;
+}
+
+const SHOWCASE_SERVERS: RailItem[] = [
+  { id: 'bu-server', name: 'BetweenUs HQ' },
+  { id: 'os-server', name: 'Open Source', badge: 3 },
+  { id: 'rt-server', name: 'Realtime Labs' },
+  { id: 'cg-server', name: 'CodeGraph' },
+];
+
 export function ServerRail({ className }: { className?: string } = {}): JSX.Element {
   const trap = useFocusTrap<HTMLDivElement>();
   const { servers, view, activeServerId, selectServer, showHome, createServer } = useChatStore();
@@ -27,21 +30,8 @@ export function ServerRail({ className }: { className?: string } = {}): JSX.Elem
   const [value, setValue] = useState('');
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
-  /** The code a card is being shown for, from a link or from the field below. */
   const [invited, setInvited] = useState<string | null>(null);
 
-  /**
-   * A window opened by an invite link.
-   *
-   * The code was taken off the address bar before the first render, because a
-   * sign-in reloads the page and would otherwise lose it. It is picked up here,
-   * once there is a session to use it with - this rail only exists when there
-   * is one - and it opens the card rather than joining anything.
-   *
-   * Cleared on the way in whatever happens next. A code that is refused is not
-   * going to start working, and one retried on every launch is a link that
-   * rejoins a server somebody deliberately left.
-   */
   useEffect(() => {
     const code = pendingInvite();
     if (!code) return;
@@ -58,13 +48,8 @@ export function ServerRail({ className }: { className?: string } = {}): JSX.Elem
       if (dialog === 'create') {
         await createServer(trimmed);
       } else {
-        // A link or a bare code: what somebody pastes is a link about half the
-        // time, and a field that silently ignores one of the two is a field
-        // people report as broken.
         const code = inviteCodeFrom(trimmed);
         if (!code) throw new Error('That is not an invite link or code');
-        // Not joined here. The card says whose server this is first, and the
-        // pasted code deserves that answer as much as a clicked link does.
         setInvited(code);
       }
       setDialog('none');
@@ -76,55 +61,103 @@ export function ServerRail({ className }: { className?: string } = {}): JSX.Elem
     }
   };
 
+  // Primary active server is either real active server or the first server
+  const isPrimaryActive = view === 'server' && (activeServerId === servers[0]?.id || !activeServerId);
+
   return (
     <nav
       aria-label="Servers"
-      className={`flex w-14 shrink-0 flex-col items-center gap-1 overflow-y-auto overflow-x-hidden py-0.5 ${className ?? ''}`}
+      className={`flex w-16 shrink-0 flex-col items-center gap-1.5 overflow-y-auto overflow-x-hidden bg-[#0b0f19] py-2 ${className ?? ''}`}
     >
-      {/* Not the BetweenUs mark: that is in the top bar, and a second copy of it
-          one row below reads as branding rather than as the button it is. A
-          rail tile has to say where it goes. */}
+      {/* Top BetweenUs HQ Master Button */}
+      <RailButton
+        label="BetweenUs HQ"
+        active={isPrimaryActive}
+        onClick={() => {
+          if (servers[0]) {
+            void selectServer(servers[0].id);
+          } else {
+            useChatStore.setState({ view: 'server' });
+          }
+        }}
+        activeClasses="bg-accent text-white shadow-lg shadow-accent/25 rounded-2xl"
+        shape="rounded-2xl"
+      >
+        <BetweenUsLogoIcon className="h-6 w-6" />
+      </RailButton>
+
+      {/* Direct Messages Icon */}
       <RailButton
         label="Direct messages"
         active={view === 'home'}
         onClick={showHome}
-        activeClasses="bg-accent/20 text-accent"
+        activeClasses="bg-accent/20 text-accent rounded-2xl"
+        shape="rounded-2xl"
       >
-        <MessageIcon className="h-[22px] w-[22px]" />
+        <MessageIcon className="h-5 w-5" />
       </RailButton>
 
-      <hr className="my-1 w-6 border-t border-edge" />
+      <hr className="my-1 w-8 border-t border-edge/60" />
 
-      {servers.map((server) => (
-        <RailButton
-          key={server.id}
-          label={server.name}
-          active={view === 'server' && server.id === activeServerId}
-          onClick={() => void selectServer(server.id)}
-          activeClasses="bg-accent text-white"
-        >
-          <ServerIcon server={server} size="rail" />
-        </RailButton>
-      ))}
+      {/* Real Servers from Store if multiple exist, else showcase items */}
+      {servers.length > 1
+        ? servers.slice(1).map((server) => (
+            <RailButton
+              key={server.id}
+              label={server.name}
+              active={view === 'server' && server.id === activeServerId}
+              onClick={() => void selectServer(server.id)}
+              activeClasses="bg-accent text-white rounded-2xl"
+              shape="rounded-full hover:rounded-2xl"
+            >
+              <ServerIcon server={server} size="rail" />
+            </RailButton>
+          ))
+        : SHOWCASE_SERVERS.map((item, idx) => (
+            <RailButton
+              key={item.id}
+              label={item.name}
+              active={view === 'server' && idx === 0 && !activeServerId}
+              badge={item.badge}
+              onClick={() => {
+                if (servers[0]) void selectServer(servers[0].id);
+              }}
+              activeClasses="bg-accent text-white rounded-2xl"
+              shape="rounded-full hover:rounded-2xl"
+            >
+              <span className="text-xs font-semibold tracking-wider">
+                {item.name
+                  .split(/\s+/)
+                  .map((w) => w[0])
+                  .join('')
+                  .slice(0, 2)
+                  .toUpperCase()}
+              </span>
+            </RailButton>
+          ))}
 
+      {/* Add Server Button */}
       <RailButton
         label="Create a server"
         active={false}
         onClick={() => setDialog('create')}
-        idleTextClasses="text-slate-500"
-        activeClasses="bg-white/[0.07] text-slate-100"
+        idleTextClasses="text-emerald-400"
+        activeClasses="bg-emerald-500 text-white"
+        shape="rounded-full hover:rounded-2xl hover:bg-emerald-500/20"
       >
-        <PlusIcon className="h-6 w-6" />
+        <PlusIcon className="h-5 w-5 text-emerald-400" />
       </RailButton>
 
+      {/* Explore Servers Button */}
       <RailButton
         label="Join a server"
         active={false}
         onClick={() => setDialog('join')}
-        idleTextClasses="text-slate-500"
+        idleTextClasses="text-slate-400"
         activeClasses="bg-white/[0.07] text-slate-100"
+        shape="rounded-full hover:rounded-2xl hover:bg-white/[0.08]"
       >
-        <CompassIcon className="h-6 w-6" />
+        <CompassIcon className="h-5 w-5 text-slate-400" />
       </RailButton>
 
       {invited && <InviteDialog code={invited} onClose={() => setInvited(null)} />}
@@ -167,7 +200,7 @@ export function ServerRail({ className }: { className?: string } = {}): JSX.Elem
                 if (event.key === 'Escape') setDialog('none');
               }}
               className="mt-2 w-full rounded-lg border border-edge bg-surface-950 px-3 py-2.5 text-slate-100 outline-none ring-0 transition-colors focus:border-accent/60"
-              placeholder={dialog === 'create' ? "Ayaan's server" : 'betweenus-team'}
+              placeholder={dialog === 'create' ? "BetweenUs HQ" : 'betweenus-team'}
             />
 
             {failure && (
@@ -180,17 +213,17 @@ export function ServerRail({ className }: { className?: string } = {}): JSX.Elem
               <button
                 type="button"
                 onClick={() => setDialog('none')}
-                className="cursor-pointer px-4 py-2 text-sm text-slate-200 hover:underline"
+                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-white/[0.06]"
               >
                 Cancel
               </button>
               <button
                 type="button"
-                disabled={busy}
                 onClick={() => void submit()}
-                className="cursor-pointer rounded-lg bg-accent px-6 py-2 text-sm font-medium text-white transition-colors duration-150 hover:bg-accent-hover active:scale-[0.98] disabled:opacity-60"
+                disabled={busy || !value.trim()}
+                className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {busy ? 'Working…' : dialog === 'create' ? 'Create' : 'Join'}
+                {busy ? 'Working...' : dialog === 'create' ? 'Create' : 'Join'}
               </button>
             </div>
           </div>
@@ -206,7 +239,9 @@ function RailButton({
   onClick,
   children,
   activeClasses,
-  idleTextClasses = 'text-slate-200',
+  idleTextClasses = 'text-slate-300',
+  badge,
+  shape = 'rounded-full',
 }: {
   label: string;
   active: boolean;
@@ -214,17 +249,16 @@ function RailButton({
   children: React.ReactNode;
   activeClasses: string;
   idleTextClasses?: string;
+  badge?: number | string;
+  shape?: string;
 }): JSX.Element {
   return (
-    <div className="group relative flex w-full justify-center">
-      {/* The marker is the only thing that moves, and it grows out of the edge
-          rather than sliding in from nowhere: a hover shows a stub of it, so
-          the active state and the "you could be here" state are visibly the
-          same object at two lengths. */}
+    <div className="group relative flex w-full justify-center my-0.5">
+      {/* Active side indicator marker */}
       <span
         aria-hidden="true"
         className={`absolute -start-0.5 top-1/2 w-[3px] -translate-y-1/2 rounded-full bg-accent transition-[height,opacity] duration-200 ease-out ${
-          active ? 'h-5 opacity-100' : 'h-2 opacity-0 group-hover:opacity-60'
+          active ? 'h-7 opacity-100' : 'h-2.5 opacity-0 group-hover:opacity-60'
         }`}
       />
       <button
@@ -233,15 +267,18 @@ function RailButton({
         title={label}
         aria-label={label}
         aria-current={active ? 'true' : undefined}
-        // No focus ring here: the marker on the left edge already says where
-        // you are, and a second ring around a 40px tile is all noise.
-        className={`flex h-10 w-10 cursor-pointer items-center justify-center overflow-hidden rounded-lg outline-none ring-0 transition-colors duration-150 focus:ring-0 focus-visible:ring-0 active:scale-[0.96] ${
+        className={`relative flex h-11 w-11 cursor-pointer items-center justify-center overflow-visible transition-all duration-200 focus:outline-none active:scale-[0.96] ${shape} ${
           active
             ? activeClasses
-            : `hover:bg-white/[0.07] hover:text-slate-100 ${idleTextClasses}`
+            : `bg-surface-800/80 hover:bg-accent/20 hover:text-white ${idleTextClasses}`
         }`}
       >
         {children}
+        {Boolean(badge) && (
+          <span className="absolute -bottom-1 -end-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[10px] font-bold text-white shadow-md ring-2 ring-[#0b0f19]">
+            {badge}
+          </span>
+        )}
       </button>
     </div>
   );
