@@ -1,5 +1,6 @@
 package com.aatech.betweenus.feature.chat
 
+import com.aatech.betweenus.core.data.ServerCustomRole
 import com.aatech.betweenus.core.data.ServerMember
 import com.aatech.betweenus.core.data.ServerRole
 import org.junit.Assert.assertEquals
@@ -164,6 +165,83 @@ class MentionSuggestTest {
         assertEquals(12, result.size)
         assertTrue(result[0] is MentionOption.Broadcast)
         assertTrue(result[1] is MentionOption.Broadcast)
+    }
+
+    private fun createRole(
+        id: String,
+        name: String,
+        colour: String? = null,
+        memberCount: Int = 2,
+    ) = ServerCustomRole(
+        id = id,
+        serverId = "s1",
+        name = name,
+        colour = colour,
+        rank = 0,
+        permissions = emptyList(),
+        memberCount = memberCount,
+    )
+
+    @Test
+    fun `roles sit between the broadcasts and the members`() {
+        val members = listOf(createMember("1", "alice", "Alice Wonder"))
+        val roles = listOf(createRole("r1", "designers"), createRole("r2", "Core Team"))
+
+        val result = filterMentions(term = "", members = members, isDirect = false, roles = roles)
+
+        // 2 broadcasts + 2 roles + 1 member
+        assertEquals(5, result.size)
+        assertTrue(result[0] is MentionOption.Broadcast)
+        assertTrue(result[1] is MentionOption.Broadcast)
+        assertTrue(result[2] is MentionOption.Role)
+        assertTrue(result[3] is MentionOption.Role)
+        assertTrue(result[4] is MentionOption.Member)
+        // Sorted by name rather than by rank, as the members are.
+        assertEquals("Core Team", result[2].username)
+        assertEquals("designers", result[3].username)
+    }
+
+    @Test
+    fun `a role is matched on its name, case insensitively`() {
+        val roles = listOf(createRole("r1", "designers"))
+
+        val result = filterMentions(term = "DESIGN", members = emptyList(), isDirect = false, roles = roles)
+
+        assertEquals(1, result.size)
+        assertTrue(result[0] is MentionOption.Role)
+        // What is written into the composer is the name itself, spaces and all.
+        assertEquals("designers", result[0].username)
+        assertEquals("@designers", result[0].displayName)
+    }
+
+    @Test
+    fun `a role name with a space is offered whole`() {
+        val roles = listOf(createRole("r1", "Core Team"))
+
+        val result = filterMentions(term = "core", members = emptyList(), isDirect = false, roles = roles)
+
+        assertEquals("Core Team", result[0].username)
+    }
+
+    @Test
+    fun `a conversation offers neither a broadcast nor a role`() {
+        val members = listOf(createMember("1", "alice", "Alice Wonder"))
+        val roles = listOf(createRole("r1", "designers"))
+
+        val result = filterMentions(term = "", members = members, isDirect = true, roles = roles)
+
+        assertEquals(1, result.size)
+        assertTrue(result[0] is MentionOption.Member)
+    }
+
+    @Test
+    fun `omitting the roles is the behaviour as it stood`() {
+        val members = listOf(createMember("1", "alice", "Alice Wonder"))
+
+        assertEquals(
+            filterMentions(term = "", members = members, isDirect = false),
+            filterMentions(term = "", members = members, isDirect = false, roles = emptyList()),
+        )
     }
 
     @Test

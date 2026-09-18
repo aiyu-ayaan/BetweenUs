@@ -23,13 +23,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.graphics.toColorInt
 import coil.compose.AsyncImage
 import com.aatech.betweenus.core.data.Endpoint
+import com.aatech.betweenus.core.data.ServerCustomRole
 import com.aatech.betweenus.core.data.ServerMember
 import com.aatech.betweenus.ui.components.BetweenUsIcon
 import com.aatech.betweenus.ui.components.BetweenUsIcons
@@ -49,6 +52,23 @@ sealed interface MentionOption {
         val description: String,
     ) : MentionOption
 
+    /**
+     * A custom role of this server.
+     *
+     * [username] is the role's own name, spaces and all: it is what gets
+     * written into the composer, and `PushGate.mentions` matches a role name
+     * exactly as it matches a display name. Deliberately not an id - an id in
+     * the body would be unreadable on a client that had not fetched the roles,
+     * and a message whose meaning needs a second fetch reads as gibberish
+     * offline.
+     */
+    data class Role(
+        val role: ServerCustomRole,
+    ) : MentionOption {
+        override val username: String get() = role.name
+        override val displayName: String get() = "@${role.name}"
+    }
+
     data class Member(
         val member: ServerMember,
     ) : MentionOption {
@@ -58,6 +78,16 @@ sealed interface MentionOption {
 }
 
 private val ServerMember.id: String get() = userId
+
+private fun rankRole(option: MentionOption.Role, needle: String): Int {
+    if (needle.isEmpty()) return 0
+    val name = option.role.name.lowercase()
+    return when {
+        name == needle -> 0
+        name.startsWith(needle) -> 1
+        else -> 2
+    }
+}
 
 private fun rankMember(option: MentionOption.Member, needle: String): Int {
     if (needle.isEmpty()) return 0
@@ -70,10 +100,18 @@ private fun rankMember(option: MentionOption.Member, needle: String): Int {
     }
 }
 
+/**
+ * Broadcasts first, then this server's roles, then its members.
+ *
+ * Roles sit above the members because a role is the rarer and more deliberate
+ * choice, and typing four letters should not bury it under everybody whose name
+ * happens to contain them. A conversation has neither a broadcast nor a role.
+ */
 fun filterMentions(
     term: String,
     members: List<ServerMember>,
     isDirect: Boolean,
+    roles: List<ServerCustomRole> = emptyList(),
 ): List<MentionOption> {
     val needle = term.trim().trimStart('@').lowercase()
 
@@ -84,6 +122,18 @@ fun filterMentions(
             MentionOption.Broadcast("everyone", "@everyone", "Notify everyone in this channel"),
             MentionOption.Broadcast("here", "@here", "Notify active members"),
         ).filter { it.username.contains(needle) || needle.isEmpty() }
+    }
+
+    val roleOptions = if (isDirect) {
+        emptyList()
+    } else {
+        roles
+            .map { MentionOption.Role(it) }
+            .filter { needle.isEmpty() || it.role.name.lowercase().contains(needle) }
+            .sortedWith(
+                compareBy<MentionOption.Role> { rankRole(it, needle) }
+                    .thenBy(String.CASE_INSENSITIVE_ORDER) { it.role.name }
+            )
     }
 
     val memberOptions = members
@@ -99,7 +149,7 @@ fun filterMentions(
                 .thenBy(String.CASE_INSENSITIVE_ORDER) { it.username }
         )
 
-    return (broadcasts + memberOptions).take(12)
+    return (broadcasts + roleOptions + memberOptions).take(12)
 }
 
 @Composable
@@ -109,9 +159,10 @@ fun MentionSuggestPopup(
     isDirect: Boolean,
     onPick: (String) -> Unit,
     modifier: Modifier = Modifier,
+    roles: List<ServerCustomRole> = emptyList(),
 ) {
-    val filtered = remember(query.term, members, isDirect) {
-        filterMentions(query.term, members, isDirect)
+    val filtered = remember(query.term, members, isDirect, roles) {
+        filterMentions(query.term, members, isDirect, roles)
     }
 
     if (filtered.isEmpty()) return
@@ -134,6 +185,7 @@ fun MentionSuggestPopup(
                 key = { option ->
                     when (option) {
                         is MentionOption.Broadcast -> "b:${option.username}"
+                        is MentionOption.Role -> "r:${option.role.id}"
                         is MentionOption.Member -> "m:${option.member.id.ifBlank { option.member.userId }}"
                     }
                 },
@@ -157,6 +209,28 @@ fun MentionSuggestPopup(
                                 BetweenUsIcon(
                                     icon = BetweenUsIcons.Users,
                                     tint = Accent,
+                                    size = 20.dp,
+                                    contentDescription = option.displayName,
+                                )
+                            }
+                        }
+
+                        // The role's own colour, so the menu reads the way the
+                        // member list does; a role with none falls back to the
+                        // accent rather than to nothing.
+                        is MentionOption.Role -> {
+                            val tint = option.role.colour?.let { runCatching { Color(it.toColorInt()) }.getOrNull() }
+                                ?: Accent
+                            Box(
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .clip(CircleShape)
+                                    .background(tint.copy(alpha = 0.2f)),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                BetweenUsIcon(
+                                    icon = BetweenUsIcons.Users,
+                                    tint = tint,
                                     size = 20.dp,
                                     contentDescription = option.displayName,
                                 )
@@ -206,6 +280,9 @@ fun MentionSuggestPopup(
                         Text(
                             text = when (option) {
                                 is MentionOption.Broadcast -> option.description
+                                is MentionOption.Role ->
+                                    if (option.role.memberCount == 1) "Role · 1 member"
+                                    else "Role · ${option.role.memberCount} members"
                                 is MentionOption.Member -> "@${option.username}"
                             },
                             style = MaterialTheme.typography.bodySmall,
