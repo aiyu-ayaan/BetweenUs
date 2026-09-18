@@ -39,13 +39,13 @@ export function ConnectionPanel({ onClose }: { onClose: () => void }): JSX.Eleme
   );
 
   return (
-    <div className="absolute bottom-full left-1/2 z-40 mb-2 w-[320px] -translate-x-1/2 animate-pop rounded-xl border border-edge bg-surface-900 p-3 shadow-pop">
+    <div className="absolute bottom-full left-1/2 z-40 mb-2 w-[320px] -translate-x-1/2 animate-pop rounded-xl border border-edge bg-surface-900/90 p-3 shadow-pop backdrop-blur-md">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold text-slate-100">Connection</h2>
         <button
           type="button"
           onClick={onClose}
-          className="cursor-pointer rounded px-2 py-0.5 text-xs text-slate-400 transition-colors duration-150 hover:bg-white/[0.07] hover:text-slate-100"
+          className="spring-press cursor-pointer rounded px-2 py-0.5 text-xs text-slate-400 hover:bg-white/[0.07] hover:text-slate-100"
         >
           Close
         </button>

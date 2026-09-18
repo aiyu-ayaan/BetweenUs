@@ -60,9 +60,9 @@ export function MemberList({
   return (
     <aside
       aria-label="Members"
-      className={`panel flex flex-col bg-surface-800 ${className}`}
+      className={`panel flex flex-col bg-surface-900 border-s border-edge/60 ${className}`}
     >
-      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-edge px-3">
+      <header className="flex h-14 shrink-0 items-center gap-2 border-b border-edge/60 px-4">
         <UsersIcon className="h-4 w-4 text-slate-400" />
         <h2 className="flex-1 text-sm font-semibold text-slate-100">
           {state === 'loading' ? 'Members' : `Members — ${members.length}`}
@@ -173,7 +173,7 @@ function Group({
               onClick={(event) =>
                 onOpen({ member, at: { x: event.clientX, y: event.clientY } })
               }
-              className={`flex min-h-[44px] sm:min-h-0 cursor-pointer items-center gap-3 rounded-md px-2 py-1.5 transition-colors duration-200 hover:bg-white/[0.05] ${
+              className={`flex min-h-[44px] sm:min-h-0 cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 transition-all duration-150 hover:bg-white/[0.05] active:scale-[0.98] ${
                 muted ? 'opacity-40' : ''
               }`}
             >
@@ -182,7 +182,7 @@ function Group({
                 avatarUrl={member.avatarUrl}
                 status={statusOf(member.userId)}
                 size="sm"
-                ringColour="border-surface-800"
+                ringColour="border-surface-900"
               />
               <span className="min-w-0 flex-1">
                 <span

@@ -18,48 +18,6 @@ import {
   XIcon,
 } from '../../components/icons';
 
-interface ShowcaseDirect {
-  name: string;
-  activity: string;
-  bg: string;
-  statusDot: string;
-}
-
-const SHOWCASE_DMS: ShowcaseDirect[] = [
-  {
-    name: 'aiyu',
-    activity: 'Listening to Lofi Beats',
-    bg: 'bg-indigo-600',
-    statusDot: 'bg-emerald-400',
-  },
-  {
-    name: 'alex',
-    activity: 'In Lounge • Carrom match',
-    bg: 'bg-emerald-600',
-    statusDot: 'bg-emerald-400',
-  },
-  {
-    name: 'sophia',
-    activity: 'Reviewing benchmarks',
-    bg: 'bg-amber-600',
-    statusDot: 'bg-amber-400',
-  },
-  {
-    name: 'marcus',
-    activity: 'Testing WebRTC mesh',
-    bg: 'bg-purple-600',
-    statusDot: 'bg-purple-400',
-  },
-];
-
-const DEFAULT_TEXT_CHANNELS = [
-  { id: 'general', name: 'general', isPrivate: true, unread: 0 },
-  { id: 'releases', name: 'releases', isPrivate: false, unread: 1 },
-  { id: 'engineering', name: 'engineering', isPrivate: false, unread: 4 },
-  { id: 'architecture', name: 'architecture', isPrivate: false, unread: 0 },
-  { id: 'security-audits', name: 'security-audits', isPrivate: false, unread: 0 },
-];
-
 export function ChannelSidebar({
   onOpenUserSettings,
   onOpenServerSettings,
@@ -81,25 +39,10 @@ export function ChannelSidebar({
   const textChannels = channels.filter((channel) => channel.type === 'TEXT');
   const voiceChannels = channels.filter((channel) => channel.type === 'VOICE');
 
-  // Display text channels from store or default list
-  const displayedTextChannels =
-    textChannels.length > 0
-      ? textChannels
-      : DEFAULT_TEXT_CHANNELS.map((item) => ({
-          id: item.id,
-          name: item.name,
-          serverId: server?.id ?? 'betweenus-hq',
-          type: 'TEXT' as const,
-          position: 0,
-          isPrivate: item.isPrivate,
-          createdAt: '2026-09-18T00:00:00.000Z',
-          updatedAt: '2026-09-18T00:00:00.000Z',
-        }));
-
   return (
     <aside className={`panel flex shrink-0 flex-col bg-surface-900 border-e border-edge/60 ${className}`}>
       <ServerHeader
-        name={server?.name ?? 'BetweenUs HQ'}
+        name={server?.name ?? 'Server'}
         open={menuOpen}
         onToggle={() => setMenuOpen((value) => !value)}
         onOpenSettings={() => {
@@ -117,9 +60,9 @@ export function ChannelSidebar({
         />
 
         <div className="space-y-0.5">
-          {displayedTextChannels.map((channel) => {
-            const isActive = activeChannelId === channel.id || (!activeChannelId && channel.name === 'general');
-            const unreadCount = unread[channel.id] ?? (channel.name === 'releases' ? 1 : channel.name === 'engineering' ? 4 : 0);
+          {textChannels.map((channel) => {
+            const isActive = activeChannelId === channel.id;
+            const unreadCount = unread[channel.id] ?? 0;
 
             return (
               <button
@@ -148,6 +91,10 @@ export function ChannelSidebar({
               </button>
             );
           })}
+
+          {textChannels.length === 0 && (
+            <p className="px-2.5 py-2 text-xs text-slate-500">No text channels yet</p>
+          )}
         </div>
 
         {/* Voice Channels Section */}
@@ -158,87 +105,15 @@ export function ChannelSidebar({
         />
 
         <div className="space-y-0.5">
-          {/* Lounge Channel Row */}
-          <div className="group">
-            <button
-              type="button"
-              className="flex w-full cursor-pointer items-center justify-between rounded-lg px-2.5 py-1.5 text-start text-[13px] font-medium text-emerald-400 transition-colors duration-150 hover:bg-white/[0.05]"
-            >
-              <span className="flex items-center gap-2 min-w-0">
-                <SpeakerIcon className="h-4 w-4 shrink-0 text-emerald-400" />
-                <span className="truncate">Lounge</span>
-              </span>
-              <span className="font-mono text-[11px] text-emerald-400/80">[3/8]</span>
-            </button>
-
-            {/* Speaking Participants in Lounge */}
-            <div className="space-y-0.5 ps-7 pt-0.5 pb-1">
-              <div className="flex items-center gap-2 py-0.5 text-xs font-medium text-slate-200">
-                <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
-                <span className="truncate">aiyu (speaking)</span>
-              </div>
-              <div className="flex items-center gap-2 py-0.5 text-xs font-medium text-slate-200">
-                <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
-                <span className="truncate">alex (speaking)</span>
-              </div>
-              <div className="flex items-center gap-2 py-0.5 text-xs text-slate-400">
-                <span className="h-2 w-2 shrink-0 rounded-full bg-slate-500" />
-                <span className="truncate">sophia</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Other Voice Rooms */}
-          <button
-            type="button"
-            className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-start text-[13px] text-slate-400 transition-colors duration-150 hover:bg-white/[0.05] hover:text-slate-200"
-          >
-            <SpeakerIcon className="h-4 w-4 shrink-0 text-slate-500" />
-            <span className="truncate">Stage & Pair Prog</span>
-          </button>
-          <button
-            type="button"
-            className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-start text-[13px] text-slate-400 transition-colors duration-150 hover:bg-white/[0.05] hover:text-slate-200"
-          >
-            <SpeakerIcon className="h-4 w-4 shrink-0 text-slate-500" />
-            <span className="truncate">Daily Standup</span>
-          </button>
-
-          {voiceChannels.filter((c) => c.name !== 'Lounge').map((channel) => (
+          {voiceChannels.map((channel) => (
             <VoiceChannelRow key={channel.id} channel={channel} />
           ))}
+
+          {voiceChannels.length === 0 && (
+            <p className="px-2.5 py-2 text-xs text-slate-500">No voice channels yet</p>
+          )}
+
           <VoiceError />
-        </div>
-
-        {/* Direct Messages Section */}
-        <SectionHeading label="DIRECT MESSAGES" />
-
-        <div className="space-y-0.5 pt-0.5">
-          {SHOWCASE_DMS.map((dm) => (
-            <div
-              key={dm.name}
-              className="group flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors duration-150 hover:bg-white/[0.05] active:scale-[0.98]"
-            >
-              <div className="relative shrink-0">
-                <div
-                  className={`flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-bold text-white shadow-sm ${dm.bg}`}
-                >
-                  {dm.name[0]?.toUpperCase()}
-                </div>
-                <span
-                  className={`absolute -bottom-0.5 -end-0.5 h-2.5 w-2.5 rounded-full border-2 border-surface-900 ${dm.statusDot}`}
-                />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-xs font-semibold text-slate-200 group-hover:text-white">
-                  {dm.name}
-                </p>
-                <p className="truncate text-[11px] text-slate-400">
-                  {dm.activity}
-                </p>
-              </div>
-            </div>
-          ))}
         </div>
       </nav>
 
@@ -265,9 +140,17 @@ function ServerHeader({
 }): JSX.Element {
   const activeServerId = useChatStore((state) => state.activeServerId);
   const servers = useChatStore((state) => state.servers);
+  const members = useChatStore((state) => state.members);
+  const online = usePresenceStore((state) => state.online);
   const leaveServer = useChatStore((state) => state.leaveServer);
   const server = servers.find((item) => item.id === activeServerId);
   const isOwner = server?.role === 'OWNER';
+
+  const onlineCount = members.filter((m) => online.has(m.userId)).length;
+  const subtitle =
+    members.length > 0
+      ? `${onlineCount} Online • ${members.length} Members`
+      : 'End-to-End Encrypted';
 
   return (
     <div className="relative">
@@ -289,7 +172,7 @@ function ServerHeader({
             </span>
           </div>
           <p className="truncate text-[11px] font-medium text-slate-400">
-            24 Online • E2EE Mesh
+            {subtitle}
           </p>
         </div>
         {open ? (
@@ -375,32 +258,44 @@ function VoiceChannelRow({ channel }: { channel: Channel }): JSX.Element {
   };
 
   return (
-    <div>
+    <div className="group">
       <button
         type="button"
         onClick={open}
         aria-current={viewing ? 'page' : undefined}
-        className={`flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-start text-[13px] transition-colors duration-150 ${
-          here || connectingHere || viewing ? 'bg-accent/20 text-white font-medium' : 'text-slate-400 hover:bg-white/[0.05] hover:text-slate-200'
+        className={`flex w-full cursor-pointer items-center justify-between rounded-lg px-2.5 py-1.5 text-start text-[13px] font-medium transition-colors duration-150 ${
+          here || connectingHere || viewing
+            ? 'bg-accent/20 text-white shadow-sm'
+            : 'text-slate-400 hover:bg-white/[0.05] hover:text-slate-200'
         }`}
       >
-        <SpeakerIcon className="h-4 w-4 shrink-0 text-slate-500" />
-        <span className="truncate">{channel.name}</span>
+        <span className="flex items-center gap-2 min-w-0">
+          <SpeakerIcon
+            className={`h-4 w-4 shrink-0 ${here ? 'text-emerald-400' : 'text-slate-500'}`}
+          />
+          <span className="truncate">{channel.name}</span>
+        </span>
         {connectingHere && (
           <span className="animate-pulse text-xs text-status-online">connecting…</span>
         )}
         {occupants.length > 0 && (
-          <span className="ms-auto text-xs text-slate-500">{occupants.length}</span>
+          <span className="font-mono text-xs text-slate-400">
+            [{occupants.length}]
+          </span>
         )}
       </button>
 
       {occupants.length > 0 && (
-        <ul className="space-y-0.5 ps-7">
+        <ul className="space-y-0.5 ps-7 pt-0.5 pb-1">
           {occupants.map((userId) => {
             const member = members.find((item) => item.userId === userId);
             return (
-              <li key={userId} className="truncate py-0.5 text-xs text-slate-400">
-                {member?.displayName ?? 'Someone'}
+              <li
+                key={userId}
+                className="flex items-center gap-2 py-0.5 text-xs text-slate-300"
+              >
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400" />
+                <span className="truncate">{member?.displayName ?? 'Someone'}</span>
               </li>
             );
           })}

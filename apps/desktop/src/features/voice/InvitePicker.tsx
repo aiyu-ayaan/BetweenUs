@@ -76,7 +76,7 @@ export function InvitePicker({ onClose }: { onClose: () => void }): JSX.Element 
   return (
     <div
       ref={panel}
-      className="absolute bottom-full start-0 z-30 mb-2 w-72 rounded-lg bg-surface-800 p-3 shadow-lg"
+      className="absolute bottom-full start-0 z-30 mb-2 w-72 animate-pop rounded-xl border border-edge bg-surface-900/90 p-3 shadow-pop backdrop-blur-md"
     >
       <p className="text-sm font-semibold text-slate-100">Add to the call</p>
       <p className="mt-0.5 text-xs text-slate-400">
@@ -98,7 +98,7 @@ export function InvitePicker({ onClose }: { onClose: () => void }): JSX.Element 
                   // rather than a second ring.
                   disabled={state !== undefined}
                   onClick={() => ring(member.userId)}
-                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-start transition-colors hover:bg-white/[0.06] disabled:cursor-default disabled:hover:bg-transparent"
+                  className="spring-press flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-start hover:bg-white/[0.06] disabled:cursor-default disabled:hover:bg-transparent disabled:active:scale-100"
                 >
                   <Avatar
                     name={member.displayName || member.username}

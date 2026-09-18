@@ -74,7 +74,7 @@ export function UserPanel({ onOpenSettings }: { onOpenSettings: () => void }): J
         </a>
       )}
 
-    <div ref={panel} className="relative flex shrink-0 items-center gap-2 border-t border-edge bg-black/20 px-2 py-1.5">
+    <div ref={panel} className="relative flex shrink-0 items-center gap-2 border-t border-edge bg-black/20 p-2">
       {open && (
         <div
           role="menu"
@@ -116,13 +116,13 @@ export function UserPanel({ onOpenSettings }: { onOpenSettings: () => void }): J
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label="Set your status"
-        className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded px-1 py-1 text-start transition-colors duration-200 hover:bg-white/[0.06]"
+        className="spring-press flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-lg px-1.5 py-1 text-start hover:bg-white/[0.06]"
       >
         <Avatar
           name={user?.displayName ?? 'aiyu'}
           avatarUrl={user?.avatarUrl}
           status={selfStatus}
-          size="sm"
+          size="md"
           ringColour="border-surface-850"
           viewable={false}
         />
@@ -131,7 +131,7 @@ export function UserPanel({ onOpenSettings }: { onOpenSettings: () => void }): J
             {user?.displayName ?? 'aiyu'}
           </span>
           <span className="flex items-center gap-1 truncate text-xs text-slate-400">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400" />
             Founder • Online
           </span>
         </span>
@@ -142,7 +142,7 @@ export function UserPanel({ onOpenSettings }: { onOpenSettings: () => void }): J
         onClick={() => void toggleMic()}
         aria-label={micEnabled ? 'Mute microphone' : 'Unmute microphone'}
         title="Microphone"
-        className="shrink-0 cursor-pointer rounded-md p-1.5 text-slate-300 transition-colors duration-150 hover:bg-white/[0.06] active:scale-[0.95]"
+        className="spring-press shrink-0 cursor-pointer rounded-lg p-2 text-slate-300 hover:bg-white/[0.06]"
       >
         {micEnabled ? <MicIcon className="h-4 w-4" /> : <MicOffIcon className="h-4 w-4 text-danger" />}
       </button>
@@ -152,7 +152,7 @@ export function UserPanel({ onOpenSettings }: { onOpenSettings: () => void }): J
         onClick={() => setDeafened((d) => !d)}
         aria-label={deafened ? 'Undeafen' : 'Deafen'}
         title="Deafen"
-        className={`shrink-0 cursor-pointer rounded-md p-1.5 transition-colors duration-150 hover:bg-white/[0.06] active:scale-[0.95] ${
+        className={`spring-press shrink-0 cursor-pointer rounded-lg p-2 hover:bg-white/[0.06] ${
           deafened ? 'text-danger' : 'text-slate-300'
         }`}
       >
@@ -164,7 +164,7 @@ export function UserPanel({ onOpenSettings }: { onOpenSettings: () => void }): J
         onClick={onOpenSettings}
         aria-label="User settings"
         title="User settings"
-        className="shrink-0 cursor-pointer rounded-md p-1.5 text-slate-300 transition-colors duration-150 hover:bg-white/[0.06] active:scale-[0.95]"
+        className="spring-press shrink-0 cursor-pointer rounded-lg p-2 text-slate-300 hover:bg-white/[0.06]"
       >
         <SettingsIcon className="h-4 w-4" />
       </button>

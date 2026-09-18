@@ -144,7 +144,7 @@ function Participant({ tile }: { tile: VoiceTile }): JSX.Element {
             aria-expanded={open}
             aria-label={`Volume for ${tile.name}`}
             title={setting.muted ? `${tile.name} is silenced for you` : `Volume for ${tile.name}`}
-            className={`${tile.micEnabled ? 'ms-auto' : ''} cursor-pointer rounded p-1 transition-colors duration-150 hover:bg-white/[0.07] ${
+            className={`spring-press ${tile.micEnabled ? 'ms-auto' : ''} cursor-pointer rounded p-1 hover:bg-white/[0.07] ${
               adjusted ? 'text-accent' : 'text-slate-500 hover:text-slate-200'
             }`}
           >

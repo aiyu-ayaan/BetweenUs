@@ -227,7 +227,7 @@ export function ScreenSharePicker({ onClose }: { onClose: () => void }): JSX.Ele
           <button
             type="button"
             onClick={onClose}
-            className="ms-auto cursor-pointer rounded-md px-4 py-2 text-sm text-slate-300 transition-colors duration-200 hover:bg-white/[0.06]"
+            className="spring-press ms-auto cursor-pointer rounded-md px-4 py-2 text-sm text-slate-300 hover:bg-white/[0.06]"
           >
             Cancel
           </button>
@@ -235,7 +235,7 @@ export function ScreenSharePicker({ onClose }: { onClose: () => void }): JSX.Ele
             type="button"
             onClick={start}
             disabled={sources !== null && sources.length > 0 && !selected}
-            className="cursor-pointer rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white transition-colors duration-200 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+            className="spring-press cursor-pointer rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100"
           >
             Go live
           </button>

@@ -275,7 +275,7 @@ export function VoiceChannelView({
               type="button"
               disabled={connecting}
               onClick={() => void join(channel.id)}
-              className="cursor-pointer rounded-full bg-slate-100 px-6 py-2.5 font-semibold text-slate-900 transition-colors duration-200 hover:bg-white disabled:cursor-wait disabled:opacity-60"
+              className="spring-press cursor-pointer rounded-full bg-slate-100 px-6 py-2.5 font-semibold text-slate-900 hover:bg-white disabled:cursor-wait disabled:opacity-60 disabled:active:scale-100"
             >
               {connecting ? 'Connecting…' : 'Join Voice'}
             </button>
@@ -1145,7 +1145,7 @@ function PagerButton({
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
-      className="cursor-pointer rounded-lg bg-surface-800 p-2 text-slate-300 transition-all duration-200 hover:bg-white/[0.08] hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+      className="spring-press cursor-pointer rounded-lg bg-surface-800 p-2 text-slate-300 hover:bg-white/[0.08] hover:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100"
     >
       {children}
     </button>

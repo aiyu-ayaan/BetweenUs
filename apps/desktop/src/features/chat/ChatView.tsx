@@ -724,6 +724,42 @@ function MessageList({
   const oldest = messages[0]?.id ?? null;
 
   /**
+   * Bubbles that should play the iMessage-style arrival pop: one sent or
+   * received just now, never a page of history scrolling into view. A
+   * message's own `<li>` only mounts once per id, so the CSS animation this
+   * drives (`animate-message-in`) plays exactly once regardless of how many
+   * times the list re-renders afterwards.
+   */
+  const [justArrived, setJustArrived] = useState<Set<string>>(() => new Set());
+  const seenNewest = useRef<string | null>(null);
+
+  // Switching channels is not an arrival - reset first, in the same commit as
+  // the effect below, so its "nothing seen yet" branch fires instead of the
+  // "something new landed" one.
+  useEffect(() => {
+    seenNewest.current = null;
+  }, [channel.id]);
+
+  useEffect(() => {
+    if (seenNewest.current === null) {
+      seenNewest.current = newest;
+      return;
+    }
+    if (!newest || newest === seenNewest.current) return;
+    seenNewest.current = newest;
+    setJustArrived((current) => new Set(current).add(newest));
+    const timer = window.setTimeout(() => {
+      setJustArrived((current) => {
+        if (!current.has(newest)) return current;
+        const next = new Set(current);
+        next.delete(newest);
+        return next;
+      });
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [newest]);
+
+  /**
    * An older page landed: put the reader back where they were reading rather
    * than fifty messages further down.
    */
@@ -958,7 +994,9 @@ function MessageList({
                 id={`message-${message.id}`}
                 className={`flex items-start ${spacing.gutter} ${spacing.inset} ${
                   grouped ? spacing.grouped : spacing.separate
-                } ${isSelf ? 'justify-end' : 'justify-start'}`}
+                } ${isSelf ? 'justify-end' : 'justify-start'} ${
+                  justArrived.has(message.id) ? 'animate-message-in' : ''
+                }`}
               >
                 {showAvatar &&
                   (grouped ? (
@@ -2549,7 +2587,7 @@ function MessageComposer({
               type="submit"
               disabled={sending || !hasSomethingToSend}
               aria-label="Send message"
-              className="flex h-9 w-9 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:h-auto sm:w-auto cursor-pointer items-center justify-center rounded-md p-1.5 text-slate-300 transition-colors duration-200 hover:text-accent disabled:cursor-not-allowed disabled:text-slate-600"
+              className="spring-press flex h-9 w-9 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:h-auto sm:w-auto cursor-pointer items-center justify-center rounded-md p-1.5 text-slate-300 hover:text-accent disabled:cursor-not-allowed disabled:text-slate-600"
             >
               <SendIcon className="h-5 w-5" />
             </button>

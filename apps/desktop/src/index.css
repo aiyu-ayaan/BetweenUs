@@ -644,6 +644,43 @@
   .spring-press:active {
     transform: scale(0.97);
   }
+
+  /**
+   * A message bubble arriving, the way iMessage's does: it rises off the
+   * composer with a slight overshoot rather than just fading in. Applied only
+   * to a bubble that was just sent or just received - see `ChatView`'s
+   * `justArrived` set - never to a page of history scrolling into view, which
+   * plays once per bubble because it fires on mount, not on re-render.
+   */
+  .animate-message-in {
+    animation: message-in 320ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    transform-origin: bottom;
+  }
+
+  /**
+   * The sidebar collapsing into the rail rather than vanishing. `width` is
+   * layout-affecting, not compositor-friendly, but this toggle is a rare,
+   * deliberate click rather than a per-frame drag - the case §11 of
+   * apple-design excuses from the transform/opacity-only rule.
+   */
+  .sidebar-collapse {
+    transition: width 220ms cubic-bezier(0.32, 0.72, 0, 1), opacity 160ms ease-out;
+  }
+}
+
+@keyframes message-in {
+  from {
+    opacity: 0;
+    transform: scale(0.75) translateY(10px);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.02) translateY(-1px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 @keyframes typing-bounce {

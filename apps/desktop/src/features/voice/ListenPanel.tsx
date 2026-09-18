@@ -84,7 +84,7 @@ export function ListenPanel(): JSX.Element {
           }}
           aria-label="Back to apps"
           title="Apps"
-          className="-ms-1 cursor-pointer rounded p-1 text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-slate-200"
+          className="spring-press -ms-1 cursor-pointer rounded p-1 text-slate-400 hover:bg-white/[0.06] hover:text-slate-200"
         >
           <ChevronLeftIcon className="h-4 w-4" />
         </button>
@@ -126,7 +126,7 @@ export function ListenPanel(): JSX.Element {
           onClick={() => useListenStore.getState().setOpen(false)}
           aria-label="Close listen together"
           title="Close - the music keeps playing"
-          className="ms-auto cursor-pointer rounded p-1 text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-slate-200"
+          className="spring-press ms-auto cursor-pointer rounded p-1 text-slate-400 hover:bg-white/[0.06] hover:text-slate-200"
         >
           <XIcon className="h-4 w-4" />
         </button>
@@ -230,7 +230,7 @@ function Empty(): JSX.Element {
       <button
         type="button"
         onClick={() => useListenStore.getState().setTab('browse')}
-        className="flex cursor-pointer items-center gap-2 rounded-md bg-amber-500/15 px-3 py-2 text-xs font-medium text-amber-200 transition-colors hover:bg-amber-500/25"
+        className="spring-press flex cursor-pointer items-center gap-2 rounded-md bg-amber-500/15 px-3 py-2 text-xs font-medium text-amber-200 hover:bg-amber-500/25"
       >
         <CompassIcon className="h-4 w-4" />
         Browse YouTube
@@ -274,7 +274,7 @@ function Queue(): JSX.Element {
           onClick={submit}
           disabled={!input.trim()}
           aria-label="Add to the queue"
-          className="flex cursor-pointer items-center justify-center rounded-md bg-surface-800 px-2 text-slate-300 transition-colors hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-40"
+          className="spring-press flex cursor-pointer items-center justify-center rounded-md bg-surface-800 px-2 text-slate-300 hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100"
         >
           <PlusIcon className="h-4 w-4" />
         </button>
@@ -311,7 +311,7 @@ function Queue(): JSX.Element {
                 type="button"
                 onClick={() => useListenStore.getState().remove(entry.id)}
                 aria-label={`Remove ${entry.title || entry.ref}`}
-                className="cursor-pointer rounded p-1 text-slate-600 opacity-0 transition-opacity hover:text-slate-300 group-hover:opacity-100"
+                className="spring-press cursor-pointer rounded p-1 text-slate-600 opacity-0 transition-opacity hover:text-slate-300 group-hover:opacity-100"
               >
                 <TrashIcon className="h-3.5 w-3.5" />
               </button>
@@ -422,7 +422,7 @@ export function Transport({ compact = false }: { compact?: boolean }): JSX.Eleme
         onClick={() => useListenStore.getState().skip(-1)}
         aria-label="Previous"
         title="Previous"
-        className="cursor-pointer rounded p-1.5 text-slate-300 transition-colors hover:bg-white/[0.06] hover:text-slate-100"
+        className="spring-press cursor-pointer rounded p-1.5 text-slate-300 hover:bg-white/[0.06] hover:text-slate-100"
       >
         <SkipBackIcon className="h-4 w-4" />
       </button>
@@ -445,7 +445,7 @@ export function Transport({ compact = false }: { compact?: boolean }): JSX.Eleme
               ? 'Play for everyone'
               : 'Pause for everyone'
         }
-        className={`cursor-pointer rounded p-1.5 transition-colors hover:bg-white/[0.06] ${
+        className={`spring-press cursor-pointer rounded p-1.5 hover:bg-white/[0.06] ${
           blocked ? 'text-amber-300' : 'text-slate-100'
         }`}
       >
@@ -460,7 +460,7 @@ export function Transport({ compact = false }: { compact?: boolean }): JSX.Eleme
         onClick={() => useListenStore.getState().skip(1)}
         aria-label="Next"
         title="Next"
-        className="cursor-pointer rounded p-1.5 text-slate-300 transition-colors hover:bg-white/[0.06] hover:text-slate-100"
+        className="spring-press cursor-pointer rounded p-1.5 text-slate-300 hover:bg-white/[0.06] hover:text-slate-100"
       >
         <SkipForwardIcon className="h-4 w-4" />
       </button>
@@ -535,7 +535,7 @@ export function Transport({ compact = false }: { compact?: boolean }): JSX.Eleme
           <button
             type="button"
             onClick={toggleMute}
-            className="ms-1 cursor-pointer rounded p-1 text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-slate-200"
+            className="spring-press ms-1 cursor-pointer rounded p-1 text-slate-400 hover:bg-white/[0.06] hover:text-slate-200"
             title={volume === 0 ? 'Unmute music' : 'Mute music'}
             aria-label={volume === 0 ? 'Unmute music' : 'Mute music'}
           >
@@ -563,7 +563,7 @@ export function Transport({ compact = false }: { compact?: boolean }): JSX.Eleme
             <button
               type="button"
               onClick={() => useListenStore.getState().setOpen(true)}
-              className="shrink-0 cursor-pointer rounded bg-amber-500/15 px-2 py-1 text-[11px] font-medium text-amber-200 transition-colors hover:bg-amber-500/25"
+              className="spring-press shrink-0 cursor-pointer rounded bg-amber-500/15 px-2 py-1 text-[11px] font-medium text-amber-200 hover:bg-amber-500/25"
               title="Open the Listen Together stage"
             >
               Open
@@ -572,7 +572,7 @@ export function Transport({ compact = false }: { compact?: boolean }): JSX.Eleme
           <button
             type="button"
             onClick={() => useListenStore.getState().stop()}
-            className="shrink-0 cursor-pointer rounded px-2 py-1 text-[11px] text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-slate-200"
+            className="spring-press shrink-0 cursor-pointer rounded px-2 py-1 text-[11px] text-slate-400 hover:bg-white/[0.06] hover:text-slate-200"
           >
             Stop
           </button>
@@ -617,10 +617,10 @@ function Tab({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`flex cursor-pointer items-center gap-1.5 rounded px-2.5 py-1 text-xs transition-colors ${
+      className={`spring-press flex cursor-pointer items-center gap-1.5 rounded px-2.5 py-1 text-xs ${
         active
           ? 'bg-surface-700 text-slate-100'
-          : 'text-slate-400 hover:text-slate-200 disabled:cursor-not-allowed disabled:text-slate-700'
+          : 'text-slate-400 hover:text-slate-200 disabled:cursor-not-allowed disabled:text-slate-700 disabled:active:scale-100'
       }`}
     >
       {children}

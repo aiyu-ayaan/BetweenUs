@@ -6,32 +6,19 @@ import {
   pendingInvite,
 } from '../../services/invite-link';
 import { InviteDialog } from './InviteDialog';
-import { BetweenUsLogoIcon, CompassIcon, MessageIcon, PlusIcon } from '../../components/icons';
+import { CompassIcon, MessageIcon, PlusIcon } from '../../components/icons';
 import { ServerIcon } from '../../components/ServerIcon';
 import { useFocusTrap } from '../../services/focus-trap';
 
-interface RailItem {
-  id: string;
-  name: string;
-  badge?: number;
-}
-
-const SHOWCASE_SERVERS: RailItem[] = [
-  { id: 'server-bu', name: 'BU' },
-  { id: 'server-os', name: 'OS', badge: 3 },
-  { id: 'server-rt', name: 'RT' },
-  { id: 'server-cg', name: 'CG' },
-];
-
 export function ServerRail({ className }: { className?: string } = {}): JSX.Element {
   const trap = useFocusTrap<HTMLDivElement>();
-  const { servers, view, activeServerId, selectServer, showHome, createServer } = useChatStore();
+  const { servers, channels, unread, view, activeServerId, selectServer, showHome, createServer } =
+    useChatStore();
   const [dialog, setDialog] = useState<'none' | 'create' | 'join'>('none');
   const [value, setValue] = useState('');
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const [invited, setInvited] = useState<string | null>(null);
-  const [selectedRailId, setSelectedRailId] = useState<string>('betweenus-hq');
 
   useEffect(() => {
     const code = pendingInvite();
@@ -62,86 +49,44 @@ export function ServerRail({ className }: { className?: string } = {}): JSX.Elem
     }
   };
 
-  // BetweenUs HQ is active when in server view and either it is selected or primary
-  const isPrimaryActive = view === 'server' && (selectedRailId === 'betweenus-hq' || !activeServerId);
-
   return (
     <nav
       aria-label="Servers"
       className={`relative flex w-16 shrink-0 flex-col items-center gap-1.5 overflow-y-auto bg-[#0b0f19] py-2.5 ${className ?? ''}`}
     >
-      {/* Top BetweenUs HQ Master Button with Active Ring & Marker */}
-      <RailButton
-        label="BetweenUs HQ"
-        active={isPrimaryActive}
-        onClick={() => {
-          setSelectedRailId('betweenus-hq');
-          useChatStore.setState({ view: 'server' });
-          if (servers[0]) void selectServer(servers[0].id);
-        }}
-        activeClasses="bg-accent text-white shadow-lg shadow-accent/30 rounded-2xl ring-2 ring-accent ring-offset-2 ring-offset-[#0b0f19]"
-        shape="rounded-2xl"
-      >
-        <BetweenUsLogoIcon className="h-6 w-6 text-white" />
-      </RailButton>
-
-      {/* Direct Messages Icon */}
+      {/* Direct Messages Icon Button */}
       <RailButton
         label="Direct messages"
-        active={view === 'home' || selectedRailId === 'home'}
-        onClick={() => {
-          setSelectedRailId('home');
-          showHome();
-        }}
+        active={view === 'home'}
+        onClick={showHome}
         activeClasses="bg-accent text-white shadow-lg shadow-accent/25 rounded-2xl ring-2 ring-accent ring-offset-2 ring-offset-[#0b0f19]"
-        shape="rounded-2xl"
+        shape={view === 'home' ? 'rounded-2xl' : 'rounded-full hover:rounded-2xl'}
       >
         <MessageIcon className="h-5 w-5" />
       </RailButton>
 
       <hr className="my-1 w-8 border-t border-edge/60" />
 
-      {/* Real Servers or Showcase Servers (BU, OS, RT, CG) */}
-      {servers.length > 1
-        ? servers.slice(1).map((server) => {
-            const isActive = view === 'server' && (activeServerId === server.id || selectedRailId === server.id);
-            return (
-              <RailButton
-                key={server.id}
-                label={server.name}
-                active={isActive}
-                onClick={() => {
-                  setSelectedRailId(server.id);
-                  void selectServer(server.id);
-                }}
-                activeClasses="bg-accent text-white rounded-2xl ring-2 ring-accent ring-offset-2 ring-offset-[#0b0f19]"
-                shape="rounded-full hover:rounded-2xl"
-              >
-                <ServerIcon server={server} size="rail" />
-              </RailButton>
-            );
-          })
-        : SHOWCASE_SERVERS.map((item) => {
-            const isActive = view === 'server' && selectedRailId === item.id;
-            return (
-              <RailButton
-                key={item.id}
-                label={item.name}
-                active={isActive}
-                badge={item.badge}
-                onClick={() => {
-                  setSelectedRailId(item.id);
-                  useChatStore.setState({ view: 'server' });
-                }}
-                activeClasses="bg-accent text-white rounded-2xl ring-2 ring-accent ring-offset-2 ring-offset-[#0b0f19]"
-                shape="rounded-full hover:rounded-2xl"
-              >
-                <span className="text-xs font-bold tracking-wider text-inherit">
-                  {item.name}
-                </span>
-              </RailButton>
-            );
-          })}
+      {/* Real Servers from store */}
+      {servers.map((server) => {
+        const isActive = view === 'server' && activeServerId === server.id;
+        const serverChannels = channels.filter((c) => c.serverId === server.id);
+        const serverUnread = serverChannels.reduce((sum, c) => sum + (unread[c.id] ?? 0), 0);
+
+        return (
+          <RailButton
+            key={server.id}
+            label={server.name}
+            active={isActive}
+            badge={serverUnread > 0 ? serverUnread : undefined}
+            onClick={() => void selectServer(server.id)}
+            activeClasses="bg-accent text-white shadow-lg shadow-accent/30 rounded-2xl ring-2 ring-accent ring-offset-2 ring-offset-[#0b0f19]"
+            shape={isActive ? 'rounded-2xl' : 'rounded-full hover:rounded-2xl'}
+          >
+            <ServerIcon server={server} size="rail" />
+          </RailButton>
+        );
+      })}
 
       {/* Add Server Button */}
       <RailButton
@@ -155,7 +100,7 @@ export function ServerRail({ className }: { className?: string } = {}): JSX.Elem
         <PlusIcon className="h-5 w-5 text-emerald-400" />
       </RailButton>
 
-      {/* Explore Servers Button */}
+      {/* Explore / Join Servers Button */}
       <RailButton
         label="Join a server"
         active={false}
@@ -207,7 +152,7 @@ export function ServerRail({ className }: { className?: string } = {}): JSX.Elem
                 if (event.key === 'Escape') setDialog('none');
               }}
               className="mt-2 w-full rounded-lg border border-edge bg-surface-950 px-3 py-2.5 text-slate-100 outline-none ring-0 transition-colors focus:border-accent/60"
-              placeholder={dialog === 'create' ? "BetweenUs HQ" : 'betweenus-team'}
+              placeholder={dialog === 'create' ? "My community" : 'betweenus-team'}
             />
 
             {failure && (
@@ -265,7 +210,9 @@ function RailButton({
       <span
         aria-hidden="true"
         className={`absolute left-0 top-1/2 w-1.5 -translate-y-1/2 rounded-r-full bg-white shadow-[0_0_8px_rgba(255,255,255,0.9)] transition-all duration-200 ease-out ${
-          active ? 'h-8 opacity-100 scale-100' : 'h-2 opacity-0 scale-75 group-hover:h-4 group-hover:opacity-60 group-hover:scale-100'
+          active
+            ? 'h-8 opacity-100 scale-100'
+            : 'h-2 opacity-0 scale-75 group-hover:h-4 group-hover:opacity-60 group-hover:scale-100'
         }`}
       />
       <button

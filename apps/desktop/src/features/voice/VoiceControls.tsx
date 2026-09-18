@@ -222,7 +222,7 @@ export function VoiceControls({ size = 'sm' }: { size?: 'sm' | 'lg' }): JSX.Elem
         onClick={() => void leave()}
         aria-label="Disconnect from voice"
         title="Disconnect"
-        className={`${size === 'lg' ? '' : 'ms-auto'} flex items-center justify-center cursor-pointer rounded-md bg-red-600 ${pad} text-white transition-colors duration-200 hover:bg-red-500 active:bg-red-700`}
+        className={`spring-press ${size === 'lg' ? '' : 'ms-auto'} flex items-center justify-center cursor-pointer rounded-lg bg-red-600 ${pad} text-white hover:bg-red-500 active:bg-red-700`}
       >
         <PhoneOffIcon className={icon} />
       </button>
@@ -252,9 +252,9 @@ function ControlButton({
       disabled={disabled}
       aria-label={label}
       aria-pressed={active}
-      className={`flex items-center justify-center rounded-md ${pad} transition-colors duration-200 ${
+      className={`spring-press flex items-center justify-center rounded-lg ${pad} ${
         disabled
-          ? 'cursor-not-allowed bg-surface-800 text-slate-600 opacity-50'
+          ? 'cursor-not-allowed bg-surface-800 text-slate-600 opacity-50 active:scale-100'
           : active
           ? 'cursor-pointer bg-surface-700 text-slate-100 hover:bg-white/[0.06]'
           : 'cursor-pointer bg-surface-800 text-slate-400 hover:bg-white/[0.06]'

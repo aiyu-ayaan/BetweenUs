@@ -525,8 +525,20 @@ function Workbench(): JSX.Element {
       <div className="flex min-h-0 flex-1 gap-1.5 px-1.5 pb-1.5">
         <ServerRail className="hidden md:flex" />
 
-        {sidebarOpen &&
-          (view === 'home' ? (
+        {/* Collapsing the toolbar slides the panel into the rail rather than
+            popping it out of existence - the outer clip animates width while
+            the panel inside keeps its resting width, so its contents never
+            reflow mid-collapse. Left mounted at every width: both sidebars
+            already assume this (`VoicePanel`'s own comment is what a server
+            switch does to it), and unmounting mid-animation is what would
+            cut the collapse short. */}
+        <div
+          aria-hidden={!sidebarOpen}
+          className={`sidebar-collapse hidden md:block shrink-0 overflow-hidden ${
+            sidebarOpen ? 'w-60 opacity-100' : 'w-0 opacity-0'
+          }`}
+        >
+          {view === 'home' ? (
             <HomeSidebar
               showingFriends={homeScreen === 'friends'}
               onShowFriends={() => setHomeScreen('friends')}
@@ -535,15 +547,16 @@ function Workbench(): JSX.Element {
               showingRemote={homeScreen === 'remote'}
               onShowRemote={() => setHomeScreen('remote')}
               onOpenUserSettings={() => setSettings('user')}
-              className="hidden md:flex w-60"
+              className="flex h-full w-60"
             />
           ) : (
             <ChannelSidebar
               onOpenUserSettings={() => setSettings('user')}
               onOpenServerSettings={() => setSettings('server')}
-              className="hidden md:flex w-60"
+              className="flex h-full w-60"
             />
-          ))}
+          )}
+        </div>
 
         {view === 'home' && homeScreen === 'remote' ? (
           <RemoteView onOpenMenu={() => setShowDrawer(true)} />

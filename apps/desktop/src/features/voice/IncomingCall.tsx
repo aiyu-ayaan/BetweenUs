@@ -104,7 +104,7 @@ function CallButton({
         type="button"
         aria-label={label}
         onClick={onClick}
-        className={`flex h-14 w-14 items-center justify-center rounded-full text-white transition-transform duration-150 hover:scale-105 ${className}`}
+        className={`spring-press flex h-14 w-14 items-center justify-center rounded-full text-white hover:scale-105 ${className}`}
       >
         {icon}
       </button>
