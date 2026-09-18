@@ -350,6 +350,8 @@ object Workspace {
 
     fun channelsOf(serverId: String): List<Channel> = _channels.value[serverId].orEmpty()
 
+    fun membersOf(serverId: String): List<ServerMember> = _members.value[serverId].orEmpty()
+
     fun channel(channelId: String): Channel? =
         _channels.value.values.flatten().firstOrNull { it.id == channelId }
 

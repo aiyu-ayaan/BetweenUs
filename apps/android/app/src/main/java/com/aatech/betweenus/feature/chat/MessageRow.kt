@@ -118,6 +118,7 @@ import com.aatech.betweenus.ui.theme.Slate100
 import com.aatech.betweenus.ui.theme.Slate300
 import com.aatech.betweenus.ui.theme.Slate400
 import com.aatech.betweenus.ui.theme.Slate50
+import com.aatech.betweenus.feature.notifications.PushGate
 import com.aatech.betweenus.feature.status.MomentQuote
 import com.aatech.betweenus.ui.theme.Slate500
 import com.aatech.betweenus.ui.theme.Surface700
@@ -210,6 +211,9 @@ fun MessageRow(
     // something you said, so it gets neither your side of the screen nor your
     // bubble colour.
     val isSelf = hook == null && message.author.id == self.id
+    val isMentioned = !isSelf && !message.deleted && remember(readable.text, self) {
+        PushGate.mentions(readable.text, self)
+    }
 
     /**
      * Whether this message needs a face beside it.
@@ -520,9 +524,14 @@ fun MessageRow(
                         .background(
                             when {
                                 message.deleted -> MaterialTheme.colorScheme.surfaceContainer
+                                isMentioned -> Accent.copy(alpha = 0.16f)
                                 isSelf -> MaterialTheme.colorScheme.primaryContainer
                                 else -> MaterialTheme.colorScheme.surfaceContainerHigh
                             },
+                        )
+                        .then(
+                            if (isMentioned) Modifier.border(1.dp, Accent.copy(alpha = 0.45f), bubble)
+                            else Modifier
                         )
                         .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 6.dp),
                 ) {
@@ -695,7 +704,7 @@ fun MessageRow(
 
                             else -> {
                                 if (readable.text.isNotBlank()) {
-                                    MessageText(readable)
+                                    MessageText(readable, channelId = channelId, onOpenProfile = onOpenProfile)
                                     val urls = remember(readable.text) { extractUrls(readable.text) }
                                     urls.forEach { url ->
                                         LinkPreviewCard(url)
@@ -1360,8 +1369,45 @@ private fun withinFiveMinutes(earlier: String, later: String): Boolean = runCatc
  * it for free.
  */
 private val URL_REGEX = Pattern.compile("(https?://[^\\s<>\"]+)", Pattern.CASE_INSENSITIVE)
+internal val MENTION_REGEX = Pattern.compile("(?<![a-zA-Z0-9_.-])@([a-zA-Z0-9_]+(?:[.-][a-zA-Z0-9_]+)*)")
 
-private fun AnnotatedString.Builder.appendWithLinks(text: String) {
+internal fun extractMentionRanges(text: String): List<Pair<IntRange, String>> {
+    val urlMatcher = URL_REGEX.matcher(text)
+    var lastIndex = 0
+    val list = mutableListOf<Pair<IntRange, String>>()
+
+    while (urlMatcher.find()) {
+        val start = urlMatcher.start()
+        val end = urlMatcher.end()
+        if (start > lastIndex) {
+            val segment = text.substring(lastIndex, start)
+            val matcher = MENTION_REGEX.matcher(segment)
+            while (matcher.find()) {
+                val matchStart = lastIndex + matcher.start()
+                val matchEnd = lastIndex + matcher.end()
+                list.add(matchStart until matchEnd to matcher.group())
+            }
+        }
+        lastIndex = end
+    }
+
+    if (lastIndex < text.length) {
+        val segment = text.substring(lastIndex)
+        val matcher = MENTION_REGEX.matcher(segment)
+        while (matcher.find()) {
+            val matchStart = lastIndex + matcher.start()
+            val matchEnd = lastIndex + matcher.end()
+            list.add(matchStart until matchEnd to matcher.group())
+        }
+    }
+
+    return list
+}
+
+internal fun extractMentions(text: String): List<String> =
+    extractMentionRanges(text).map { it.second }
+
+internal fun AnnotatedString.Builder.appendWithMentionsAndLinks(text: String) {
     val matcher = URL_REGEX.matcher(text)
     var lastIndex = 0
     while (matcher.find()) {
@@ -1370,7 +1416,7 @@ private fun AnnotatedString.Builder.appendWithLinks(text: String) {
         val url = matcher.group()
 
         if (start > lastIndex) {
-            append(text.substring(lastIndex, start))
+            appendNonUrlWithMentions(text.substring(lastIndex, start))
         }
 
         pushStringAnnotation(tag = "URL", annotation = url)
@@ -1388,9 +1434,43 @@ private fun AnnotatedString.Builder.appendWithLinks(text: String) {
         lastIndex = end
     }
     if (lastIndex < text.length) {
+        appendNonUrlWithMentions(text.substring(lastIndex))
+    }
+}
+
+private fun AnnotatedString.Builder.appendNonUrlWithMentions(text: String) {
+    val matcher = MENTION_REGEX.matcher(text)
+    var lastIndex = 0
+    while (matcher.find()) {
+        val start = matcher.start()
+        val end = matcher.end()
+        val mentionText = matcher.group()
+        val handle = matcher.group(1) ?: mentionText.removePrefix("@")
+
+        if (start > lastIndex) {
+            append(text.substring(lastIndex, start))
+        }
+
+        pushStringAnnotation(tag = "MENTION", annotation = handle)
+        pushStyle(
+            SpanStyle(
+                color = Accent,
+                fontWeight = FontWeight.SemiBold,
+                background = Accent.copy(alpha = 0.15f),
+            ),
+        )
+        append(mentionText)
+        pop()
+        pop()
+
+        lastIndex = end
+    }
+    if (lastIndex < text.length) {
         append(text.substring(lastIndex))
     }
 }
+
+private fun AnnotatedString.Builder.appendWithLinks(text: String) = appendWithMentionsAndLinks(text)
 
 private fun extractUrls(text: String): List<String> {
     val matcher = URL_REGEX.matcher(text)
@@ -1528,12 +1608,56 @@ private fun LinkPreviewCard(url: String) {
  * alternate text, which is the same length as the source - so the offsets
  * still line up when the styles are laid over the finished string.
  */
+internal fun resolveMentionUser(handle: String, channelId: String): UserSummary? = runCatching {
+    if (handle.isBlank() || handle.equals("everyone", ignoreCase = true) || handle.equals("here", ignoreCase = true)) {
+        return null
+    }
+    val clean = handle.removePrefix("@")
+    val direct = Workspace.directChannel(channelId)
+    if (direct != null) {
+        val directUsers = if (direct.participants.isNotEmpty()) direct.participants else listOf(direct.participant)
+        val matched = directUsers.firstOrNull { u ->
+            u.username.equals(clean, ignoreCase = true) ||
+                u.displayName.equals(clean, ignoreCase = true) ||
+                u.label.equals(clean, ignoreCase = true)
+        }
+        if (matched != null) return matched
+    }
+    val serverId = Workspace.channel(channelId)?.serverId
+    if (serverId != null) {
+        val members = Workspace.membersOf(serverId)
+        val matched = members.firstOrNull { m ->
+            m.username.equals(clean, ignoreCase = true) ||
+                m.displayName.equals(clean, ignoreCase = true) ||
+                m.label.equals(clean, ignoreCase = true)
+        }
+        if (matched != null) return matched.summary
+    }
+    val globalMember = Workspace.members.value.values.flatten().firstOrNull { m ->
+        m.username.equals(clean, ignoreCase = true) ||
+            m.displayName.equals(clean, ignoreCase = true) ||
+            m.label.equals(clean, ignoreCase = true)
+    }
+    if (globalMember != null) return globalMember.summary
+
+    val friend = Workspace.friends.value.firstOrNull { f ->
+        f.user.username.equals(clean, ignoreCase = true) ||
+            f.user.displayName.equals(clean, ignoreCase = true) ||
+            f.user.label.equals(clean, ignoreCase = true)
+    }
+    friend?.user
+}.getOrNull()
+
 @Composable
-private fun MessageText(readable: ReadableMessage) {
+private fun MessageText(
+    readable: ReadableMessage,
+    channelId: String = "",
+    onOpenProfile: (UserSummary) -> Unit = {},
+) {
     val blocks = remember(readable.id, readable.text) { Markup.parse(readable.text) }
 
     if (blocks.size == 1 && blocks[0].kind == Markup.Kind.Body) {
-        MarkupBody(blocks[0], readable.body.emoji)
+        MarkupBody(blocks[0], readable.body.emoji, channelId = channelId, onOpenProfile = onOpenProfile)
         return
     }
 
@@ -1545,7 +1669,7 @@ private fun MessageText(readable: ReadableMessage) {
                 // this branch exists for the compiler rather than for a
                 // message, and drawing it as words is the honest answer if one
                 // ever arrives.
-                Markup.Kind.Body, Markup.Kind.Heading -> MarkupBody(block, readable.body.emoji)
+                Markup.Kind.Body, Markup.Kind.Heading -> MarkupBody(block, readable.body.emoji, channelId = channelId, onOpenProfile = onOpenProfile)
                 Markup.Kind.Quote -> Row(modifier = Modifier.height(IntrinsicSize.Min)) {
                     Box(
                         modifier = Modifier
@@ -1555,7 +1679,7 @@ private fun MessageText(readable: ReadableMessage) {
                             .background(Edge),
                     )
                     Spacer(Modifier.width(8.dp))
-                    MarkupBody(block, readable.body.emoji, dim = true)
+                    MarkupBody(block, readable.body.emoji, dim = true, channelId = channelId, onOpenProfile = onOpenProfile)
                 }
                 Markup.Kind.Code -> Text(
                     text = block.text,
@@ -1573,8 +1697,8 @@ private fun MessageText(readable: ReadableMessage) {
                 // lines up under its own first word rather than under the
                 // bullet - which is the only thing that makes a list of long
                 // items readable as a list.
-                Markup.Kind.Bullet -> MarkupItem("•", block, readable.body.emoji)
-                Markup.Kind.Number -> MarkupItem("${block.ordinal}.", block, readable.body.emoji)
+                Markup.Kind.Bullet -> MarkupItem("•", block, readable.body.emoji, channelId = channelId, onOpenProfile = onOpenProfile)
+                Markup.Kind.Number -> MarkupItem("${block.ordinal}.", block, readable.body.emoji, channelId = channelId, onOpenProfile = onOpenProfile)
             }
         }
     }
@@ -1586,6 +1710,8 @@ private fun MarkupItem(
     marker: String,
     block: Markup.Block,
     emoji: List<MessageCustomEmoji>,
+    channelId: String = "",
+    onOpenProfile: (UserSummary) -> Unit = {},
 ) {
     Row(modifier = Modifier.fillMaxWidth()) {
         Text(
@@ -1597,7 +1723,7 @@ private fun MarkupItem(
                 .widthIn(min = 20.dp)
                 .padding(end = 8.dp),
         )
-        MarkupBody(block, emoji)
+        MarkupBody(block, emoji, channelId = channelId, onOpenProfile = onOpenProfile)
     }
 }
 
@@ -1613,6 +1739,8 @@ private fun MarkupBody(
     block: Markup.Block,
     emoji: List<MessageCustomEmoji>,
     dim: Boolean = false,
+    channelId: String = "",
+    onOpenProfile: (UserSummary) -> Unit = {},
 ) {
     val uriHandler = LocalUriHandler.current
     val pieces = remember(block.text, emoji) { CustomEmoji.split(block.text, emoji) }
@@ -1624,7 +1752,7 @@ private fun MarkupBody(
     val annotated = buildAnnotatedString {
         pieces.forEachIndexed { index, piece ->
             when (piece) {
-                is CustomEmoji.Piece.Text -> appendWithLinks(piece.text)
+                is CustomEmoji.Piece.Text -> appendWithMentionsAndLinks(piece.text)
                 is CustomEmoji.Piece.Emoji -> {
                     val id = "emoji-$index"
                     inline[id] = InlineTextContent(
@@ -1669,6 +1797,14 @@ private fun MarkupBody(
                     annotated.getStringAnnotations(tag = "URL", start = offset, end = offset)
                         .firstOrNull()?.let { annotation ->
                             runCatching { uriHandler.openUri(annotation.item) }
+                            return@detectTapGestures
+                        }
+                    annotated.getStringAnnotations(tag = "MENTION", start = offset, end = offset)
+                        .firstOrNull()?.let { annotation ->
+                            val user = resolveMentionUser(annotation.item, channelId)
+                            if (user != null) {
+                                onOpenProfile(user)
+                            }
                         }
                 }
             }
