@@ -350,15 +350,49 @@ assert.equal(frames.step(CPU_STARVED), false);
 assert.equal(frames.step(CPU_STARVED), true);
 assert.equal(frames.frameRate, 24, 'the floor - below this motion stops reading as motion');
 
+// Frames alone were not enough: a machine that cannot encode 1080p at 24 fps
+// sat at the floor with the encoder still handed 1080p, and dropped frames down
+// to 1 fps. Once the frame tiers are spent, cpu pressure spends pixels.
+assert.equal(frames.step(CPU_STARVED), false);
+assert.equal(frames.step(CPU_STARVED), true, 'at the frame floor, cpu pressure still has somewhere to go');
+assert.equal(frames.frameRate, 24);
+assert.equal(frames.scale, 1.5);
+
 // It has a bottom, the same as the resolution ladder does.
 for (let tick = 0; tick < 20; tick += 1) frames.step(CPU_STARVED);
 assert.equal(frames.frameRate, 24);
+assert.equal(frames.scale, 3);
+assert.equal(frames.step(CPU_STARVED), false, 'nothing left to spend');
 
+// Recovered but still cpu-limited is where it should stay: climbing on it is a
+// keyframe every few seconds as it falls straight back down.
+for (let tick = 0; tick < 20; tick += 1) {
+  assert.equal(frames.step({ limitedBy: 'cpu', framesPerSecond: 24 }), false);
+}
+
+// The climb is the fall in reverse: pixels come back first, frames last.
 for (let tick = 1; tick < 6; tick += 1) {
   assert.equal(frames.step(CPU_HEALTHY), false, `climbed on reading ${tick}`);
 }
 assert.equal(frames.step(CPU_HEALTHY), true);
+assert.equal(frames.scale, 2);
+assert.equal(frames.frameRate, 24, 'frames wait until the pixels are back');
+for (let tick = 0; tick < 12; tick += 1) frames.step(CPU_HEALTHY);
+assert.equal(frames.scale, 1);
+assert.equal(frames.frameRate, 24);
+for (let tick = 0; tick < 6; tick += 1) frames.step(CPU_HEALTHY);
 assert.equal(frames.frameRate, 30);
+
+// The two axes share one picture, and the further-down one wins, so neither
+// undoes the other's step.
+const shared = new ShareLadder();
+for (let tick = 0; tick < 6; tick += 1) shared.step(CPU_STARVED); // frames 24, cpu scale 1.5
+for (let tick = 0; tick < 4; tick += 1) shared.step(STARVED); // bandwidth scale 2
+assert.equal(shared.scale, 2, 'the further-down axis is what gets published');
+shared.reset();
+assert.equal(shared.scale, 1);
+assert.equal(shared.frameRate, 60);
+assert.equal(shared.position, null);
 
 // A bandwidth-starved share and a cpu-starved share are different failures on
 // different axes, and a reading can only ever report one reason at a time -

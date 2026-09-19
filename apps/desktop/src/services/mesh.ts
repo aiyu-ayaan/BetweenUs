@@ -1229,6 +1229,11 @@ class PeerLink {
     let selectedPairId: string | null = null;
     const candidates = new Map<string, string>();
     const reading: ShareReading = { limitedBy: null, framesPerSecond: null };
+    // The share's sender by its m-line, and nothing else. The camera is an
+    // outbound video stream on the same connection, and read alongside it a
+    // camera at 30 fps hid a share at 1 fps - the ladder saw a healthy frame
+    // rate and never moved.
+    const screenMid = this.transceivers.get('screen')?.mid ?? null;
 
     (await this.pc.getStats()).forEach((report) => {
       const entry = report as RTCStats & Record<string, unknown>;
@@ -1240,6 +1245,7 @@ class PeerLink {
       // is being held back and why. `bandwidth` next to a collapsed frame rate
       // is the ladder's entire trigger - see `isStarved`.
       if (entry.type === 'outbound-rtp' && entry.kind === 'video') {
+        if (screenMid === null || String(entry.mid ?? '') !== screenMid) return;
         const reason = entry.qualityLimitationReason;
         if (reason === 'bandwidth' || reason === 'cpu' || reason === 'other') {
           reading.limitedBy = reason;

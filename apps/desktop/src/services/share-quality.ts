@@ -546,10 +546,16 @@ export function isStarved(reading: ShareReading): boolean {
  * up - a software codec on a hot laptop asked for more pixels than its CPU can
  * turn into frames sixty times a second. This wants the opposite fix from
  * `isStarved`: a share holds its pixels because that is what makes it worth
- * reading, so a CPU-bound share gives up frames instead, walking `FRAME_TIERS`
- * down rather than `SCALE_STEPS`. Smaller pixels would help too, but spending
- * the same axis `isStarved` already owns is the two-scalers mistake again, one
- * level up.
+ * reading, so a CPU-bound share gives up frames first, walking `FRAME_TIERS`
+ * down.
+ *
+ * Frames alone are not always enough. A machine that cannot encode 1080p at 24
+ * fps - a software encoder on a laptop that is also decoding an 8K video, the
+ * very thing being shared - is left at the floor with the encoder still handed
+ * 1080p, and `maintain-resolution` answers that by dropping frames as far as it
+ * takes: 1080p at 1 fps, with the ladder stopped because it had nothing left
+ * to spend. So once the frame tiers are gone, the cpu axis spends pixels too,
+ * on an index of its own; see `ShareLadder`.
  */
 export function isCpuStarved(reading: ShareReading): boolean {
   if (reading.limitedBy !== 'cpu') return false;
@@ -560,16 +566,24 @@ export function isCpuStarved(reading: ShareReading): boolean {
 /**
  * One link's position on the ladder, over time.
  *
- * Two independent axes, each with its own index and its own reason to move.
- * `SCALE_STEPS` is spent only by `isStarved` (bandwidth); `FRAME_TIERS` is
- * spent only by `isCpuStarved` (cpu). They cannot both move on the same
- * reading - `limitedBy` is one value at a time - so this is not the
- * two-scalers-on-one-picture bug: it is two scalers, each owning a resource
- * the other never touches.
+ * Independent axes, each with its own index and its own reason to move.
+ * `isStarved` (bandwidth) owns one index into `SCALE_STEPS`; `isCpuStarved`
+ * (cpu) owns `FRAME_TIERS` and, once those are spent, a second index into
+ * `SCALE_STEPS`. The picture is published at whichever scale index is further
+ * down, so neither axis ever undoes the other's step: that is what keeps this
+ * from being the two-scalers-on-one-picture bug, where two controllers fought
+ * over one number.
+ *
+ * The cpu axis climbs back in the reverse of the order it fell - pixels first,
+ * because they were spent last - and only on a reading where the encoder has
+ * stopped saying `cpu` at all. A share that recovered to 25 fps at 540p while
+ * still cpu-limited is exactly where it should be; climbing on it is a keyframe
+ * every few seconds as it falls straight back down.
  */
 export class ShareLadder {
   private step_ = 0;
   private frameStep_ = 0;
+  private cpuScaleStep_ = 0;
   private starved = 0;
   private healthy = 0;
   private cpuStarved = 0;
@@ -577,14 +591,14 @@ export class ShareLadder {
 
   /** Where the ladder is, or null while it is at the top and has never moved. */
   get position(): ShareAdaptation | null {
-    return this.step_ === 0 && this.frameStep_ === 0
+    return this.step_ === 0 && this.frameStep_ === 0 && this.cpuScaleStep_ === 0
       ? null
-      : { frameRate: FRAME_TIERS[this.frameStep_]!, scaleResolutionDownBy: SCALE_STEPS[this.step_]! };
+      : { frameRate: this.frameRate, scaleResolutionDownBy: this.scale };
   }
 
-  /** The scale to publish at. 1 while nothing has gone wrong. */
+  /** The scale to publish at: the further down of the two axes. 1 while nothing has gone wrong. */
   get scale(): number {
-    return SCALE_STEPS[this.step_]!;
+    return SCALE_STEPS[Math.max(this.step_, this.cpuScaleStep_)]!;
   }
 
   /** The frame rate to publish at. The profile's own rate while nothing has gone wrong. */
@@ -610,9 +624,15 @@ export class ShareLadder {
       this.cpuHealthy = 0;
       if (++this.cpuStarved < SHRINK_TICKS) return false;
       this.cpuStarved = 0;
-      if (this.frameStep_ >= FRAME_TIERS.length - 1) return false;
-      this.frameStep_ += 1;
-      return true;
+      if (this.frameStep_ < FRAME_TIERS.length - 1) {
+        this.frameStep_ += 1;
+        return true;
+      }
+      if (this.cpuScaleStep_ < SCALE_STEPS.length - 1) {
+        this.cpuScaleStep_ += 1;
+        return true;
+      }
+      return false;
     }
 
     this.starved = 0;
@@ -635,10 +655,11 @@ export class ShareLadder {
       this.healthy = 0;
     }
 
-    if (this.frameStep_ !== 0) {
+    if ((this.frameStep_ !== 0 || this.cpuScaleStep_ !== 0) && reading.limitedBy !== 'cpu') {
       if (++this.cpuHealthy >= CLIMB_TICKS) {
         this.cpuHealthy = 0;
-        this.frameStep_ -= 1;
+        if (this.cpuScaleStep_ !== 0) this.cpuScaleStep_ -= 1;
+        else this.frameStep_ -= 1;
         moved = true;
       }
     } else {
@@ -652,6 +673,7 @@ export class ShareLadder {
   reset(): void {
     this.step_ = 0;
     this.frameStep_ = 0;
+    this.cpuScaleStep_ = 0;
     this.starved = 0;
     this.healthy = 0;
     this.cpuStarved = 0;
