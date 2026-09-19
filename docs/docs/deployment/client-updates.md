@@ -14,7 +14,8 @@ same release list; what differs is what it can do with what it finds.
 
 | Client | What an update is | Who installs it |
 | --- | --- | --- |
-| Desktop | `BetweenUs-<version>-Setup.exe` | the NSIS installer, silently |
+| Desktop (Windows) | `BetweenUs-<version>-Setup.exe` | the NSIS installer, silently |
+| Desktop (Linux) | `BetweenUs-<version>.AppImage` | the app, writing it over its own file |
 | Android | `BetweenUs-<version>-<abi>.apk` | Android's package installer |
 | Web | a reload | nobody — the deployment was already updated |
 
@@ -84,8 +85,9 @@ flowchart TD
     class DevRun neutral;
 ```
 
-A release that built the other platforms only offers Windows nothing, rather
-than something it cannot apply.
+A release that built the other platforms only offers this one nothing, rather
+than something it cannot apply: Windows is only ever handed the setup exe and
+Linux only ever the AppImage.
 
 ### The installer
 
@@ -126,6 +128,74 @@ from. `apps/desktop/nsis/installer.nsh` replaces both with a plain
 `customFinishPage`, the silent update through `customInstall`. A machine where
 the old call worked now starts the app twice; the second copy sees the
 single-instance lock, hands the window to the first and quits.
+
+### Linux: one AppImage, replaced in place
+
+Linux ships one build too, an AppImage, for the same reason Windows ships an
+installer: it is the one format that can update itself. There is no installer
+to run. The update is writing the new AppImage over the file the app was
+started from, which the AppImage runtime names in `APPIMAGE`. Replacing a
+*running* AppImage is safe, because the FUSE mount holds the old inode open.
+The file is copied beside the target and renamed over it, so a failure leaves
+the old build runnable, and the app relaunches from the same path.
+
+That only works when the file is somewhere the user can write, which is what
+the installer script is for:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/aiyu-ayaan/BetweenUs/master/scripts/install-linux.sh | sh
+```
+
+| | |
+| --- | --- |
+| Where it goes | `~/.local/share/betweenus/BetweenUs.AppImage`, so the updater can write over it |
+| Elevation | none: per user, and it refuses to run as root |
+| Shortcuts | a menu entry and icon, plus a `betweenus` command in `~/.local/bin` |
+| Integrity | the download is checked against the sha256 GitHub records for the asset |
+| Channels | `--channel beta` / `--channel alpha`, the same cumulative rules as the app |
+| Uninstall | `--uninstall`, which leaves `~/.config/@betweenus/desktop`, so keys survive a reinstall |
+
+Re-running it is always safe and is the manual update path. `--version` pins a
+release and `--from-file` installs a local AppImage.
+
+An AppImage run from anywhere else still works. It updates itself as long as
+its own directory is writable. A `linux-unpacked` tree has no single file to
+replace, so it reports itself as `unpacked` and is never offered an update.
+
+**Why it starts in about a second.** `compression: maximum` is right for the
+NSIS installer, which is unpacked once. The legacy AppImage toolset turned it
+into xz with 1 MB blocks, and an AppImage is read page by page through FUSE
+for as long as it runs: a cold start took 90 seconds. The builder now uses the
+static AppImage runtime (`toolsets.appimage` in `electron-builder.yml`). It
+compresses with zstd, starts in about 1.5 s on the same machine, and carries
+its own FUSE client, so it runs without `libfuse2`, which Ubuntu 22.04 and
+later do not install. Every release boots the AppImage in CI before
+publishing it (`.github/scripts/smoke-appimage.sh`).
+
+**Sandbox.** An AppImage cannot ship a setuid `chrome-sandbox`, so Chromium
+relies on unprivileged user namespaces. Where the kernel refuses them (Ubuntu
+24.04's AppArmor policy), the AppImage's own launcher detects that and passes
+`--no-sandbox`. That holds for a relaunch after an update and a start from
+the session too, because both go through the AppImage file.
+
+### Start with the system
+
+On by default on both platforms, and switched in Settings → Notifications →
+This computer.
+
+| | Windows | Linux |
+| --- | --- | --- |
+| Mechanism | `app.setLoginItemSettings` (the Run key) | an XDG autostart entry, `~/.config/autostart/betweenus.desktop` |
+| Started as | `--hidden`, straight to the tray | the same |
+| Dev channel | its own entry, per app name | `betweenus-dev.desktop` |
+
+`setLoginItemSettings` does nothing on Linux: no error and no effect. So
+`electron/autostart.ts` writes the entry that GNOME, KDE, Cinnamon, XFCE and
+MATE all honour. It is rewritten on every launch while the switch is on,
+because an AppImage can be moved and the entry has to follow it. `Exec` is
+quoted the way the Desktop Entry spec asks, so an install path with a space
+still starts. A development window never registers itself on either
+platform.
 
 ### When it downloads
 
@@ -226,7 +296,8 @@ nobody has opened, the per-ABI APK rather than the universal one, and
 ## The asset names are the contract
 
 ```text
-BetweenUs-<version>-Setup.exe        desktop, installed
+BetweenUs-<version>-Setup.exe        desktop (Windows), installed
+BetweenUs-<version>.AppImage         desktop (Linux, x86_64)
 BetweenUs-<version>-<abi>.apk        Android, per ABI
 BetweenUs-<version>-universal.apk    Android, fallback
 ```
@@ -234,7 +305,8 @@ BetweenUs-<version>-universal.apk    Android, fallback
 Renaming any of these silently stops that client being offered updates: the
 check still runs, finds the release, and finds nothing in it it can apply. They
 are set in `apps/desktop/electron-builder.yml` and in the `android` job of
-`.github/workflows/release.yml`.
+`.github/workflows/release.yml`. The Linux installer script matches the same
+AppImage name, so it depends on this contract too.
 
 Carried-forward artifacts keep the version they were built for in their file
 name, which is correct — the version a client compares against comes from the

@@ -68,6 +68,19 @@ The desktop client is an Electron application, so roughly 204 MiB of that
 installed footprint is Chromium itself and is the same for every Electron app
 ever shipped. The part this project writes is the last row.
 
+### Desktop (Linux)
+
+| | Size | Budget |
+| :--- | ---: | ---: |
+| **AppImage** (`BetweenUs-<version>.AppImage`) | **97.1 MiB** | 105 MiB |
+
+About 12 MiB larger than the Windows installer, on purpose. An AppImage is
+never unpacked: it is read through FUSE for as long as it runs, so its
+compression is paid on every start. xz at `compression: maximum` made it
+85 MiB and 90 seconds to open. zstd, through the static AppImage runtime,
+makes it 97 MiB and about 1.5 seconds. See
+[Client Updates](./client-updates.md#linux-one-appimage-replaced-in-place).
+
 ## Why the desktop installer is the size it is
 
 Two settings in `electron-builder.yml` do the work that can be done:

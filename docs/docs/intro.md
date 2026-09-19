@@ -17,8 +17,9 @@ today, with web and Android planned in the same backend.
 </p>
 
 :::tip Download BetweenUs
-Production binaries for Windows (Electron NSIS installer) and Android (Native APK) are published on GitHub Releases:
-- 🚀 **[Download Latest Release (Windows & Android)](https://github.com/aiyu-ayaan/BetweenUs/releases)**
+Production binaries for Windows (Electron NSIS installer), Linux (AppImage) and Android (Native APK) are published on GitHub Releases:
+- 🚀 **[Download Latest Release (Windows, Linux & Android)](https://github.com/aiyu-ayaan/BetweenUs/releases)**
+- 🐧 **Linux, in one line:** `curl -fsSL https://raw.githubusercontent.com/aiyu-ayaan/BetweenUs/master/scripts/install-linux.sh | sh`
 :::
 
 ## What's in these docs

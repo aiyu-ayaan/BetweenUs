@@ -22,6 +22,7 @@
     "docs:install": "npm --prefix docs install",
     "desktop:package": "pnpm --filter @betweenus/desktop package",
     "desktop:package:win": "pnpm --filter @betweenus/desktop package:win",
+    "desktop:package:linux": "pnpm --filter @betweenus/desktop package:linux",
     "desktop:package:win-packaged": "pnpm --filter @betweenus/desktop package:win-packaged",
     "desktop:package:dev": "pnpm --filter @betweenus/desktop package:dev",
     "android": "node scripts/android.mjs",
