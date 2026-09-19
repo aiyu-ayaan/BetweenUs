@@ -131,6 +131,23 @@ const api = {
    */
   releaseScreenCapture: (): Promise<void> => ipcRenderer.invoke('screen:release'),
   /**
+   * A share's system audio with this app's own output left out, so the call
+   * is not sent back to the people in it. Windows only; `startShareAudio`
+   * resolves false anywhere it could not start, and the share then falls back
+   * to the whole-mix loopback. PCM arrives through `onShareAudio` as 48 kHz
+   * stereo 16-bit little-endian, interleaved.
+   */
+  shareAudioSupported: process.platform === 'win32',
+  startShareAudio: (): Promise<boolean> => ipcRenderer.invoke('share-audio:start'),
+  stopShareAudio: (): void => {
+    ipcRenderer.send('share-audio:stop');
+  },
+  onShareAudio: (handler: (pcm: Uint8Array) => void): (() => void) => {
+    const listener = (_event: unknown, pcm: Uint8Array): void => handler(pcm);
+    ipcRenderer.on('share-audio:pcm', listener);
+    return () => ipcRenderer.removeListener('share-audio:pcm', listener);
+  },
+  /**
    * Opens `startUrl` in the user's browser and resolves with the one-time code
    * the finished sign-in redirects back to a temporary loopback server.
    */

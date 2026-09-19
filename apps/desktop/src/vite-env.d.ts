@@ -103,6 +103,15 @@ interface Window {
     selectScreenSource: (id: string, audio: boolean) => Promise<void>;
     /** One call per capture that started, when its track stops. */
     releaseScreenCapture: () => Promise<void>;
+    /**
+     * System audio for a share, minus this app's own output. Windows only;
+     * optional so an older preload is read as "not available".
+     */
+    shareAudioSupported?: boolean;
+    startShareAudio?: () => Promise<boolean>;
+    stopShareAudio?: () => void;
+    /** 48 kHz stereo 16-bit PCM, interleaved. Returns an unsubscribe function. */
+    onShareAudio?: (handler: (pcm: Uint8Array) => void) => () => void;
     startOAuth: (startUrl: string) => Promise<string | null>;
     /** Remote desktop, agent side. Input injection is Windows-only for now. */
     remoteInputSupported: () => Promise<boolean>;

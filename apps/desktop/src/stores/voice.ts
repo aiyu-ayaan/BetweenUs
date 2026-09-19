@@ -29,6 +29,7 @@ import { startPushToTalk, stopPushToTalk } from '../services/push-to-talk';
 import { notBeingHeard, type LinkStats } from '../services/call-stats';
 import { visibleVideo } from '../services/media-presence';
 import { NoiseGate } from '../services/mic-gate';
+import { startShareAudio, type ShareAudio } from '../services/share-audio';
 import {
   captureIsStale,
   chosenIsMissing,
@@ -236,6 +237,13 @@ const localTracks: Partial<Record<Slot, MediaStreamTrack | null>> = {};
  */
 let cameraSource: MediaStreamTrack | null = null;
 let cameraPipeline: CameraPipeline | null = null;
+
+/**
+ * The capture behind `localTracks.screenAudio` when it came from the main
+ * process rather than `getDisplayMedia`. Stopping the track does not stop the
+ * helper feeding it, so it is ended alongside it in `stopLocal`.
+ */
+let shareAudio: ShareAudio | null = null;
 
 /**
  * Identity -> when they last spoke. Kept outside the store because it is a
@@ -608,9 +616,12 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
    * Sharing system audio captures the machine's whole output mix, and that mix
    * includes the call itself coming out of the speakers - so without asking for
    * anything else, a share re-broadcasts everyone in the room back at them and
-   * they hear themselves. `restrictOwnAudio` is the constraint that leaves this
-   * app's own output out of the capture, which is exactly the difference wanted:
-   * the film's soundtrack travels, the voices in the call do not.
+   * they hear themselves. On Windows the audio therefore comes from the main
+   * process instead (`services/share-audio.ts`), which captures everything
+   * except this app: the film's soundtrack travels, the voices in the call do
+   * not. `restrictOwnAudio` asks for the same thing and is still sent, but the
+   * Electron handler picks the loopback device before it is read, so it is
+   * only the fallback when that capture cannot start.
    *
    * Everything about how it is *encoded* lives in `share-quality.ts`, including
    * why the defaults were never going to be watchable.
@@ -625,8 +636,12 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     // moment somebody's private window is on somebody else's screen.
     mesh.claimScreen();
 
+    let ownAudio: ShareAudio | null = null;
     try {
-      await window.betweenus?.selectScreenSource(source?.id ?? '', withAudio);
+      // Started first, because it decides what `getDisplayMedia` is asked
+      // for: when it runs, the display capture takes the picture alone.
+      if (withAudio) ownAudio = await startShareAudio();
+      await window.betweenus?.selectScreenSource(source?.id ?? '', withAudio && !ownAudio);
       const options = shareOptions(
         intent,
         await captureSize(source),
@@ -638,7 +653,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         },
         useAudioSettings.getState().settings.share,
       );
-      if (!withAudio) options.capture.audio = false;
+      if (!withAudio || ownAudio) options.capture.audio = false;
 
       const stream = await navigator.mediaDevices.getDisplayMedia({
         video: captureConstraints(options.capture),
@@ -646,7 +661,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       } as DisplayMediaStreamOptions);
 
       const video = stream.getVideoTracks()[0] ?? null;
-      const audio = stream.getAudioTracks()[0] ?? null;
+      const audio = ownAudio?.track ?? stream.getAudioTracks()[0] ?? null;
       // The encoder is told what it is looking at: a text profile keeps edges
       // sharp and drops frames, a motion one does the opposite.
       if (video) {
@@ -665,6 +680,8 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
 
       localTracks.screen = video;
       localTracks.screenAudio = audio;
+      shareAudio = ownAudio;
+      ownAudio = null;
       await mesh.setSharePublish(options.publish);
       await mesh.setTrack('screen', video);
       await mesh.setTrack('screenAudio', audio);
@@ -687,6 +704,9 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       publishMediaState();
       refresh();
     } catch (error) {
+      // Cancelled at the picker, or refused: the audio capture started for it
+      // has nothing to go with.
+      ownAudio?.stop();
       set({ error: `Screen share: ${messageOf(error)}` });
       refresh();
     }
@@ -1127,6 +1147,10 @@ function stopLocal(slot: Slot): void {
   // leaving the call - so this is the one place that can tell the main process
   // the desktop no longer has to be held in composed flip for it.
   if (slot === 'screen' && track) void window.betweenus?.releaseScreenCapture();
+  if (slot === 'screenAudio') {
+    shareAudio?.stop();
+    shareAudio = null;
+  }
   // Every path out of the camera comes through here - the button, a device
   // change, leaving the call - so the effect and the real capture are torn down
   // here too rather than at each caller. `track.stop()` above stopped the

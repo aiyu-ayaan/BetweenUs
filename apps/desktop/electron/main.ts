@@ -27,6 +27,7 @@ import {
   setInputDisplay,
   stopInputBackend,
 } from './remote-input';
+import { startShareAudio, stopShareAudio } from './share-audio';
 import { spawn } from 'node:child_process';
 import {
   closeYouTubeView,
@@ -1014,6 +1015,11 @@ ipcMain.handle('screen:select', (_event, id: unknown, audio: unknown): void => {
   pendingShare = typeof id === 'string' ? { id, audio: audio === true } : null;
 });
 
+// A share's system audio without this app's own output in it - see
+// `share-audio.ts` for why the display-media handler cannot do this itself.
+ipcMain.handle('share-audio:start', (event): Promise<boolean> => startShareAudio(event.sender));
+ipcMain.on('share-audio:stop', (): void => stopShareAudio());
+
 // --- Keeping the desktop composited while a capture runs ---------------------
 //
 // Windows sends a window's frames straight to the display and skips DWM when
@@ -1617,7 +1623,10 @@ void app.whenReady().then(() => {
       pinDesktopComposition();
 
       // Loopback system audio is a Windows-only capability in Electron, and
-      // handing back a track the page never asked for fails the request.
+      // handing back a track the page never asked for fails the request. It is
+      // the whole output mix, call included, so it is only the fallback: a
+      // share normally takes its audio from `share-audio.ts` and asks for none
+      // here.
       const withAudio =
         request.audioRequested && (chosen?.audio ?? true) && process.platform === 'win32';
       callback(withAudio ? { video: source, audio: 'loopback' } : { video: source });
@@ -1825,6 +1834,7 @@ ipcMain.handle('update:install', (): { started: boolean; reason?: string } => {
 app.on('before-quit', () => {
   quitting = true;
   stopInputBackend();
+  stopShareAudio();
   closePipWindow();
   releaseDesktopComposition(true);
 });
