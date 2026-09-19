@@ -61,6 +61,7 @@ import {
   type UpdateOffer,
 } from './updates';
 import { DEV_PRODUCT_NAME, appUserModelIdFor, flavorOf, type AppFlavor } from './flavor';
+import { applyLinuxAutoStart } from './autostart';
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 const rendererDevUrl = process.env.VITE_DEV_SERVER_URL;
@@ -213,6 +214,21 @@ const managesAutoStart = !rendererDevUrl && !profile;
 
 function applyAutoStart(enabled: boolean): void {
   if (!managesAutoStart) return;
+  // `setLoginItemSettings` is a silent no-op on Linux; there it is an XDG
+  // autostart entry instead - see electron/autostart.ts. The AppImage path, not
+  // `execPath`, which is inside a FUSE mount that is gone once this exits.
+  if (process.platform === 'linux') {
+    try {
+      applyLinuxAutoStart(enabled, flavor, {
+        name: app.getName() === '@betweenus/desktop' ? 'BetweenUs' : app.getName(),
+        executable: process.env.APPIMAGE ?? process.execPath,
+        icon: flavor === 'dev' ? undefined : 'betweenus',
+      });
+    } catch (error) {
+      console.warn('[autostart] could not update the autostart entry:', (error as Error).message);
+    }
+    return;
+  }
   app.setLoginItemSettings({
     openAtLogin: enabled,
     // Started by the session manager, BetweenUs goes straight to the tray rather
