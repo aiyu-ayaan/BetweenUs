@@ -181,11 +181,12 @@ to be framed, so no browser tab can ever show it.
 | Tiles shaped to the picture (portrait and landscape) | ✅ | ✅ | ✅ |
 | Ask to drive somebody's shared screen | ✅ | ✅ | ✅ on the share stage |
 | Be driven while sharing your screen | ✅ | — | — |
+| Share system audio without the call echoing back | ✅ Windows | — | — |
 | Manual quality override | ✅ | ✅ | ⚠️ automatic |
 | Connection panel: bitrate, loss, round trip, frame size | ✅ | ✅ | ✅ |
 | Reconnects a dropped link, and ends a call it cannot recover | ✅ | ✅ | ✅ |
 | Push to talk | ✅ a held key | ✅ a held key | ✅ a held button |
-| Picture-in-picture while minimised | ✅ | — | — |
+| Picture-in-picture while minimised | ✅ kept out of your own share on Windows and macOS | — | — |
 | Join and leave tones | ✅ | ✅ | ✅ |
 | **Listen together** | | | |
 | Shared queue in a call, in step, video on screen | ✅ | ✅ | ✅ |

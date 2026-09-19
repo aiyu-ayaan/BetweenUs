@@ -881,6 +881,31 @@ on the other end. This is the same mechanism as the one-time message viewer
 sets its sharing type to none, and on Linux it does nothing, so the overlay is
 still captured there.
 
+**The call's own audio is left out of a share's system audio.** Electron's
+display-media handler offers only `loopback` and `loopbackWithMute`, and both
+are the machine's whole output mix. That mix includes the call coming out of
+the speakers, so a share with audio sent everyone's voice back to them a beat
+late. The renderer's `restrictOwnAudio` constraint cannot fix this: the handler
+chooses the loopback device before Chromium reads the constraint, so it is
+accepted and ignored.
+
+On Windows the audio therefore comes from WASAPI **process loopback**, set to
+capture everything except this app's own process tree
+(`PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE`, targeting the main
+process, which is the parent of the renderer and of Chromium's audio service).
+
+| Step | Where |
+| :--- | :--- |
+| A PowerShell helper compiles the interop with `Add-Type` (no native module, same as remote input) and writes 48 kHz stereo 16-bit PCM to stdout | `electron/share-audio.ts` |
+| The main process forwards whole frames to the renderer as `share-audio:pcm` | `electron/share-audio.ts` |
+| An AudioWorklet with a 40 ms jitter buffer (backlog capped at 200 ms) plays the PCM into a `MediaStreamAudioDestinationNode` | `src/services/share-audio.ts` |
+| `shareScreen` starts this capture first and, if it runs, asks `getDisplayMedia` for video only | `src/stores/voice.ts` |
+
+It needs Windows 10 2004 or later. If the helper does not report `ready`
+within ten seconds, or exits, the share falls back to the whole-mix loopback
+rather than going out silent. The helper exits when its stdin closes, which
+happens when the share stops and when the app quits.
+
 ### Full screen on the desktop, and the two keys it keeps
 
 Full screen is two wishes that pull opposite ways, so it is two modes with a
