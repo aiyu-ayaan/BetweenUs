@@ -415,6 +415,12 @@ function createPipWindow(): void {
   });
 
   pip.setAlwaysOnTop(true, 'floating');
+  // The overlay is for the person in the call, not for the people watching
+  // their screen: without this, sharing a whole display put the overlay - and
+  // the share it was mirroring - in front of everyone on the other end. Same
+  // mechanism as `screen:protect` below; Windows and macOS honour it, and on
+  // Linux it is a no-op, so the overlay is still captured there.
+  pip.setContentProtection(true);
 
   pip.on('closed', () => {
     if (pipWindow === pip) pipWindow = null;

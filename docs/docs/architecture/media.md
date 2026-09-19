@@ -869,6 +869,18 @@ is only half true. Offering *this* machine is desktop-only and still is, under
 Settings → Remote Access. Reaching *another* machine is not, and hiding it took
 the web client's only route to driving anything.
 
+### What a share leaves out
+
+The desktop's picture-in-picture overlay (the floating window that appears when
+the app is minimised in a call) is excluded from capture with
+`setContentProtection(true)` in `createPipWindow`. It is there for the person in
+the call, not for the people watching their screen. Without it, sharing a whole
+display put the overlay, and the share it was mirroring, in front of everyone
+on the other end. This is the same mechanism as the one-time message viewer
+(`screen:protect`): Windows marks the window `WDA_EXCLUDEFROMCAPTURE`, macOS
+sets its sharing type to none, and on Linux it does nothing, so the overlay is
+still captured there.
+
 ### Full screen on the desktop, and the two keys it keeps
 
 Full screen is two wishes that pull opposite ways, so it is two modes with a
