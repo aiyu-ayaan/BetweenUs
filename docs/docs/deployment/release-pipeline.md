@@ -39,7 +39,7 @@ flowchart TD
         subgraph Matrix ["Build Targets"]
             direction LR
             DockerBuild["<b>Docker Images</b><br/><i>9 Microservice Containers</i>"]
-            DesktopBuild["<b>Desktop Packaging</b><br/><i>NSIS Windows Installer</i>"]
+            DesktopBuild["<b>Desktop Packaging</b><br/><i>NSIS Windows Installer & Linux AppImage</i>"]
             AndroidBuild["<b>Android Build</b><br/><i>APK & AAB Bundles</i>"]
         end
         MergePR ==>|"Yes"| Matrix
@@ -130,7 +130,7 @@ Not left behind — carried forward. `<service>-<version>` image tags exist
 for every service every release, either freshly built or named a second
 time (`.github/scripts/retag.sh`, no rebuild and no pull) from the last
 release's tag. The
-Windows installer and Android APKs are likewise downloaded from the
+Windows installer, Linux AppImage and Android APKs are likewise downloaded from the
 previous GitHub Release and re-attached under this version's release,
 keeping their own (older) filenames — which is the honest answer to "which
 build is this." The CHANGELOG carries a table saying exactly which half of

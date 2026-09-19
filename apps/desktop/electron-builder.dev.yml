@@ -31,6 +31,9 @@ productName: BetweenUs Dev
 # this is.
 extraMetadata:
   productName: BetweenUs Dev
+  # Its own window identity on Linux too, or a dock groups the Dev window
+  # under the stable client's launcher.
+  desktopName: betweenus-dev.desktop
 nsis:
   artifactName: BetweenUs-Dev-${version}-Setup.${ext}
   shortcutName: BetweenUs Dev
@@ -39,3 +42,4 @@ mac:
   artifactName: BetweenUs-Dev-${version}.${ext}
 linux:
   artifactName: BetweenUs-Dev-${version}.${ext}
+  executableName: betweenus-dev

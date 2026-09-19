@@ -10,6 +10,211 @@ displayed_sidebar: null
 All production release binaries (Windows Desktop installer and Android APK), asset checksums, and version tag comparisons are published on [GitHub Releases](https://github.com/aiyu-ayaan/BetweenUs/releases).
 :::
 
+## [1.0.5](https://github.com/aiyu-ayaan/BetweenUs/compare/v1.0.4...v1.0.5) (2026-09-18)
+
+### Features
+
+* The same animated boot screen, in this platform's idiom
+* An animated boot screen, with a tip that waits its turn
+* Offer custom roles in the @ menu
+* Wake and tint for a role you hold
+* Tint a message that addresses a role you hold
+* Let a custom role be a mention target
+* Add mention highlighting and addressed alert in MessageRow
+* Wire MentionSuggestPopup into chat Composer
+* Add WhatsApp-style MentionSuggestPopup and filter unit tests
+* Add MentionQueryParser with unit tests
+* Highlight @mentions in chat items and tint mentioned bubbles
+* Integrate MentionSuggest in MessageComposer
+* Add MentionSuggest popover component
+* Add mentionQueryAt with check tests
+* Let any member add someone to a direct message
+* Add an append-only audit log for moderation actions
+* Add a description column, editable and shown on the invite card
+* Group the server rail into collapsible folders
+* Android connection-panel parity, and a share-degraded warning
+* Let a screen share capture below native resolution
+
+### Bug fixes
+
+* Role mentions, a quieter sidebar, and a boot screen you can see
+* Hold the splash long enough to be seen
+* Make the boot screen long enough to actually see
+* Stop the account footer crushing its own name column
+* Defer voice store subscription in ring store and update devdocs
+* Step frame rate down under cpu pressure, cap Android's relay bitrate
+
+### Other changes
+
+* Merge: role mentions, the sidebar controls, and an animated boot screen
+* Bump devdocs for the splash floor and sidebar controls
+* The sidebar voice panel carries no controls
+* Bump devdocs for the boot screen
+* Drop the Voice Connected badge from the title bar
+* Bump devdocs to the role-mentions notes
+* Say what counts as a mention, now that a role does
+* Update subproject commit reference in development
+* Add implementation plan for @mentions on desktop and android
+* Add design spec for @mentions on desktop and android
+* Point the docs suite at the merged backlog and record the parity findings
+
+### Artifacts
+
+| Platform | This release |
+| --- | --- |
+| Server images | Built here |
+| Desktop | Built here |
+| Android | Built here |
+
+## [1.0.4](https://github.com/aiyu-ayaan/BetweenUs/compare/v1.0.3...v1.0.4) (2026-09-18)
+
+### Features
+
+* Promote Calls & Data to a rail destination
+* Staff role badge and full-date divider in chat
+* Port iMessage-style bubble arrival animation
+* Top-level Workbench/Activities/Moments nav and UI fixes
+* Polish workbench redesign with motion and Apple-style materials
+* Overhaul channel sidebar with voice participant tree and user controls
+* Redesign topbar navigation and server rail
+* Add headphones icon and motion animation tokens
+* Render 9:16 showcase video with baked poster frame 0
+* Implement 9:16 hyperframes composition for betweenus
+
+### Bug fixes
+
+* Workbench UI redesign, chat animation polish, and theme contrast fixes across Desktop and Android
+* Darken low-contrast accent in two light themes
+* Make the server rail follow the active theme
+* Make the iMessage-style bubble pop actually animate
+* Server rail unread badges, top-bar nav consistency
+* Remove placeholder box, fix titlebar button spacing, and add active server ring and marker
+* Mark subproject as dirty to indicate uncommitted changes
+* Debounce the friend search and cache the block list
+* Copy the username from the member menu, not the user id
+
+### Other changes
+
+* Note Calls & Data as a rail destination
+* Add workbench ui redesign implementation plan
+* Add workbench ui redesign design specification
+* Add brag skill and lockfile entry
+* Update readme with high-resolution screenshots and 9:16 showcase video
+* Add brag plan and composition brief for 9:16 vertical video
+* Generate voice, moments, and remote desktop screenshots
+* Generate native android compose mobile showcase screenshot
+* Generate high-resolution desktop workbench hero screenshot
+* Add implementation plan for 9:16 vertical video and screenshots
+* Add 9:16 vertical video and professional screenshot suite design
+
+### Artifacts
+
+| Platform | This release |
+| --- | --- |
+| Server images | Built here |
+| Desktop | Built here |
+| Android | Built here |
+
+## [1.0.3](https://github.com/aiyu-ayaan/BetweenUs/compare/v1.0.2...v1.0.3) (2026-09-17)
+
+### Features
+
+* Show the bandwidth estimate and the media path in the connection panel
+
+### Bug fixes
+
+* Screen share adaptive ladder, live candidate pair tracking, and client reconnection fixes
+* Stop "Reconnecting…" sticking after doze or process death
+* Stop the reconnect banner getting stuck after a long background
+* Refactor Theatre component layout for improved screen sharing experience
+* Stop budgeting resolution against the bandwidth estimate
+* Read the live candidate pair, matching the desktop
+* Read the live candidate pair, not the one an ICE restart left behind
+* Carry the same frame-rate ladder as the desktop
+* Drive the share ladder from the stats poll that already runs
+* Hold the share's frame rate and size the picture to the measured link
+* Tune speech ducking ratio to 0.55 and enable interruptible fade transitions
+
+### Other changes
+
+* Write down the client connection-liveness rules
+* Bump docs submodule
+* The selected candidate pair, and what the panel can now answer
+* Bump docs submodule to phase 47
+* Document the frame-rate ladder and why both preferences fail alone
+
+### Artifacts
+
+| Platform | This release |
+| --- | --- |
+| Server images | Built here |
+| Desktop | Built here |
+| Android | Built here |
+
+## [1.0.2](https://github.com/aiyu-ayaan/BetweenUs/compare/v1.0.1...v1.0.2) (2026-09-17)
+
+### Features
+
+* Run adverts out rather than sitting through them
+* Play the real youtube.com, and only its sound
+* A Dev channel that runs beside the installed app
+* A maximum share resolution, 1080p by default
+
+### Bug fixes
+
+* Enable background autoplay in prod, perceptual volume, and hover-aware controls
+* Enable background autoplay in prod, real-time perceptual volume control, and hover-aware controls
+* Give the packaged Dev channel its own data directory
+* Stop the clock strip appearing on a clock that is right
+* A share that recovers, and one a relay can carry
+
+### Other changes
+
+* Adverts are run out, and why nothing is blocked
+* Audio only, and a player that does not ask permission
+* What decides a share picture, after phase 44
+* !docs: restore feature screenshots, add video showcase section, and fix README video link
+
+### Artifacts
+
+| Platform | This release |
+| --- | --- |
+| Server images | Built here |
+| Desktop | Built here |
+| Android | Built here |
+
+## [1.0.1](https://github.com/aiyu-ayaan/BetweenUs/compare/v1.0.0...v1.0.1) (2026-09-16)
+
+### Features
+
+* Auto-hide fullscreen controls after 3s with a small toggle button
+* A handle for the full-screen strip, not a mouse twitch
+* Take the screen in full screen, and let the strip be pinned
+* One strip for the full-screen share, docked or floating
+* Count remote access in Calls & Data
+
+### Bug fixes
+
+* Auto-hide fullscreen controls and replace mouse-triggered strip
+* Allow the fullscreen permission, so full screen is full screen
+* Stop the faded full-screen strip from taking clicks
+* Queue and retry stored-object fetches so media loads
+
+### Other changes
+
+* Deploy the docs site on every release
+* Replace static images with video.mp4 across README and docs
+* !docs : fix MDX changelog compilation by escaping raw comparison angle brackets
+* !docs : Update v1.0.0 changelog and publish release documentation
+
+### Artifacts
+
+| Platform | This release |
+| --- | --- |
+| Server images | Built here |
+| Desktop | Built here |
+| Android | Built here |
+
 ## [1.0.0](https://github.com/aiyu-ayaan/BetweenUs/compare/v0.0.1-alpha.27...v1.0.0) (2026-09-11)
 
 BetweenUs v1.0.0 is the first major stable release, marking the culmination of over 1,130 commits of engineering. It transitions BetweenUs from an alpha prototype into a production-grade, self-hostable, privacy-first collaboration and voice platform across Desktop (Windows, Linux), Android, and Web.

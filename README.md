@@ -226,7 +226,7 @@ to be framed, so no browser tab can ever show it.
 | Not woken for a chat open on another of your devices | ✅ | ✅ | ✅ |
 | Notification clears when you read it on another device | ✅ | ✅ | ✅ |
 | System tray, start with the system | ✅ | — | — |
-| Self-updates from GitHub Releases (alpha / beta / stable) | — | — | ✅ |
+| Self-updates from GitHub Releases (alpha / beta / stable) | ✅ | — | ✅ |
 | **Remote desktop** | | | |
 | Offer this machine to be controlled | ✅ | — | — |
 | View and control another machine | ✅ | — | ✅ |
@@ -622,17 +622,31 @@ To build and package production release artifacts:
 # 1. Build all packages, backend microservices, and web frontends:
 pnpm build
 
-# 2. Package the Desktop Client executable (Electron installer/binary):
-pnpm desktop:package
+# 2. Package the Desktop Client for the platform you are on:
+pnpm desktop:package:win     # BetweenUs-<version>-Setup.exe, on Windows
+pnpm desktop:package:linux   # BetweenUs-<version>.AppImage, on Linux
 ```
-Output binaries are written to `apps/desktop/dist/`.
+Output binaries are written to `apps/desktop/release/`.
 
 ## Desktop client
 
 Electron with a hardened preload, React, Tailwind and Zustand. It keeps running
 in the system tray when the window is closed - which is what makes a
 notification possible while it is "shut" - and starts with the system by
-default, with both switches in Settings → Notifications.
+default, with both switches in Settings → Notifications. Windows gets an NSIS
+installer and Linux an AppImage, and both update themselves from GitHub
+Releases.
+
+On Linux (x86_64), one line installs the newest release for the current user.
+It puts the AppImage where the updater can replace it and adds a menu entry,
+an icon and a `betweenus` command. Then it starts the app, which registers
+itself in `~/.config/autostart`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/aiyu-ayaan/BetweenUs/master/scripts/install-linux.sh | sh
+# ... | sh -s -- --channel beta     beta builds too
+# ... | sh -s -- --uninstall        remove it; account data is kept
+```
 
 ```
 pnpm dev:desktop     one client against a running backend (the Dev channel)
@@ -893,7 +907,9 @@ Three layers, all runnable locally:
 
 GitHub Actions runs install → lint → typecheck → build → self-checks, then an
 integration job with Postgres and Redis containers that applies the migrations,
-starts the services and runs every smoke script.
+starts the services and runs every smoke script. A third job packages the Linux
+AppImage and boots it under Xvfb (`.github/scripts/smoke-appimage.sh`), the same
+check the release runs before it publishes one.
 
 ## API surface
 

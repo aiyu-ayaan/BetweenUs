@@ -110,6 +110,55 @@ jobs:
         if: failure()
         run: tail -n 200 /tmp/*.log
 
+  # The release packages the AppImage and refuses to publish anything if that
+  # leg fails, so the place to find out it is broken is here, on the pull
+  # request - not in the middle of a release with the images already pushed.
+  # Same build, same package command and same smoke test as release.yml's
+  # desktop job; unsigned and never uploaded.
+  desktop-linux:
+    name: Linux AppImage package and smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      # The installer is piped into whatever `sh` is (dash on Debian and
+      # Ubuntu), so it is held to POSIX; shellcheck is on the runner image.
+      - name: Lint the Linux installer and smoke test
+        run: shellcheck --shell=sh scripts/install-linux.sh .github/scripts/smoke-appimage.sh
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+          key: electron-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: electron-${{ runner.os }}-
+
+      - name: Package
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+        run: |
+          for attempt in 1 2 3; do
+            if pnpm --filter @betweenus/desktop exec electron-builder \
+                 --config electron-builder.yml --linux; then
+              exit 0
+            fi
+            echo "Package attempt $attempt failed; retrying."
+            sleep 15
+          done
+          exit 1
+
+      - name: Smoke-test the AppImage
+        run: sh .github/scripts/smoke-appimage.sh apps/desktop/release/*.AppImage
+
   android:
     name: Android debug build and unit tests
     runs-on: ubuntu-latest
