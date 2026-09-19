@@ -71,8 +71,9 @@
 #      notes that will describe it.
 #
 #   2. Merging that PR is what releases. The images go to Docker Hub, the
-#      Windows installer and the Android APKs are built, and the tag and the
-#      GitHub Release are created last, once all of it exists.
+#      Windows installer, the Linux AppImage and the Android APKs are built,
+#      and the tag and the GitHub Release are created last, once all of it
+#      exists.
 #
 # The order in step 2 is the whole rollback story:
 #
@@ -339,7 +340,7 @@ jobs:
             reads badly, that is what this PR is for.
 
             **Merging this PR is what releases.** It builds and pushes the server
-            images, the Windows installer and the Android APKs, then creates the
+            images, the Windows installer, the Linux AppImage and the Android APKs, then creates the
             tag and the GitHub Release. Closing it without merging releases
             nothing and costs nothing.
           branch: chore/release-v${{ needs.version.outputs.version }}
@@ -774,15 +775,17 @@ jobs:
             cache: |
               ~/AppData/Local/electron/Cache
               ~/AppData/Local/electron-builder/Cache
-          # Linux AppImage build commented out for now:
-          # - label: Linux AppImage
-          #   os: ubuntu-latest
-          #   artifact: linux
-          #   builder: --linux
-          #   output: apps/desktop/release/*.AppImage
-          #   cache: |
-          #     ~/.cache/electron
-          #     ~/.cache/electron-builder
+          # The AppImage the in-app updater and scripts/install-linux.sh both
+          # look for by name (BetweenUs-<version>.AppImage). x86_64 only, which
+          # is what the installer checks for.
+          - label: Linux AppImage
+            os: ubuntu-latest
+            artifact: linux
+            builder: --linux
+            output: apps/desktop/release/*.AppImage
+            cache: |
+              ~/.cache/electron
+              ~/.cache/electron-builder
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -849,6 +852,13 @@ jobs:
             sleep 15
           done
           exit 1
+
+      # Started, not just built: an AppImage that packages cleanly and cannot
+      # open is the one failure a release must not publish. See the script.
+      - name: Smoke-test the AppImage
+        if: matrix.artifact == 'linux'
+        shell: bash
+        run: sh .github/scripts/smoke-appimage.sh apps/desktop/release/*.AppImage
 
       # One name per platform. Both legs uploading `desktop` is a 409 on the
       # second, the same way the two Android legs collide; `publish` collects
@@ -1281,12 +1291,17 @@ jobs:
             It installs for you alone, so it never asks for an administrator, and
             it updates itself from then on.
 
-            <!-- Desktop (Linux) commented out for now:
-            **Desktop (Linux)** — `BetweenUs-${{ needs.merged.outputs.version }}.AppImage`.
-            Mark it executable (`chmod +x`) and run it; there is nothing to install.
-            Keep it somewhere you can write to and it updates itself in place, so
-            put it where you mean to keep it rather than in your downloads folder.
-            -->
+            **Desktop (Linux, x86_64)** — one line installs the newest build for you
+            alone, with a menu entry and the `betweenus` command, and it updates
+            itself from then on:
+
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/master/scripts/install-linux.sh | sh
+            ```
+
+            Or take `BetweenUs-${{ needs.merged.outputs.version }}.AppImage`, mark it
+            executable (`chmod +x`) and run it. Keep it somewhere you can write to so
+            it can update itself in place.
 
             **Android** — take the APK matching your device (`arm64-v8a` unless it is
             old or an emulator), or `universal` if you would rather not choose. The
