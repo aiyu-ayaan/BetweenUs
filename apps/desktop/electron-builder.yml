@@ -69,7 +69,39 @@ mac:
   target: dmg
   icon: public/icon.png
   artifactName: BetweenUs-${version}.${ext}
+# One Linux target, an AppImage, for the same reason Windows has one: it is the
+# only format that can replace itself. The updater writes the new AppImage over
+# the file `APPIMAGE` names (electron/updates.ts), which a .deb in /usr cannot
+# have done to it without root. `scripts/install-linux.sh` puts it somewhere the
+# user owns and adds the menu entry, icon and `betweenus` command around it.
 linux:
   target: AppImage
   icon: public/icon.png
   artifactName: BetweenUs-${version}.${ext}
+  category: Network
+  # A plain lower-case binary rather than `@betweenus/desktop` sanitised.
+  executableName: betweenus
+  synopsis: Chat, voice, screen share and remote desktop
+  # Electron reads `desktopName` from the packaged manifest and uses it as the
+  # window's WM_CLASS / Wayland app_id, which is how a dock matches a running
+  # window to its menu entry. Without it the window is an anonymous icon beside
+  # the launcher it came from. Synced, the embedded entry's StartupWMClass says
+  # the same thing, and the installer names its entry to match.
+  syncDesktopName: true
+# The static AppImage runtime rather than the legacy FUSE2 one, for two reasons
+# measured on a real machine:
+#
+# - Start-up. `compression: maximum` above is right for the NSIS installer, but
+#   the legacy toolset turns it into xz with 1 MB blocks, and an AppImage is not
+#   unpacked once - it is read page by page through FUSE for as long as it runs.
+#   A cold start took 90 seconds. The static runtime compresses with zstd, which
+#   decompresses an order of magnitude faster.
+# - Dependencies. The legacy runtime needs `libfuse.so.2`, which Ubuntu 22.04
+#   and later no longer install; the static one carries its own FUSE3 client
+#   and runs on a stock desktop.
+toolsets:
+  appimage: 1.0.3
+# Written into the packaged package.json only. `name` stays `@betweenus/desktop`,
+# which is what every installed client's userData directory is named after.
+extraMetadata:
+  desktopName: betweenus.desktop
