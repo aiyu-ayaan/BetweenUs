@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.0.6](https://github.com/aiyu-ayaan/BetweenUs/compare/v1.0.5...v1.0.6) (2026-09-19)
+
+### Features
+
+* One-line Linux installer that fetches the newest AppImage
+* Start with the session on Linux through an XDG autostart entry
+
+### Bug fixes
+
+* Linux desktop build, a one-line installer, and start with the system on Linux
+
+### Other changes
+
+* Merge: Linux AppImage build, installer script and startup entry
+* Document the Linux AppImage, its installer and autostart
+* Build, smoke-test and publish the Linux AppImage
+* Make the Linux AppImage start in seconds and run without libfuse2
+
+### Artifacts
+
+| Platform | This release |
+| --- | --- |
+| Server images | Built here |
+| Desktop | Built here |
+| Android | Built here |
+
 ## [1.0.5](https://github.com/aiyu-ayaan/BetweenUs/compare/v1.0.4...v1.0.5) (2026-09-18)
 
 ### Features
