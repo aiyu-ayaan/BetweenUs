@@ -15,7 +15,7 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: betweenus-dev-postgres
-    restart: unless-stopped
+    restart: "no"
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
@@ -34,7 +34,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: betweenus-dev-redis
-    restart: unless-stopped
+    restart: "no"
     command: ["redis-server", "--appendonly", "no"]
     ports:
       - "127.0.0.1:6379:6379"
