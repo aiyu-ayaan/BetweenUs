@@ -379,10 +379,11 @@ async function adoptOrCreateVault(
   await secureSet(masterKeyStore(userId), masterKey);
   const opened: OpenVault = { masterKey, keyring };
   await adopt(userId, device, opened, created.vault.factors);
-  // Shown once, by whoever is listening. Nothing stores it: a recovery code
-  // kept anywhere this app can read is a recovery code that goes with the
-  // machine, which is the thing it exists not to do.
-  recoveryCodeListeners.forEach((listener) => listener(code));
+  // Shown once, by whoever is listening - or held for the dialog that is
+  // about to mount. Nothing stores it: a recovery code kept anywhere this app
+  // can read is a recovery code that goes with the machine, which is the
+  // thing it exists not to do.
+  announceRecoveryCode(code);
   return opened;
 }
 
@@ -599,6 +600,18 @@ export async function rotateAccountIdentity(): Promise<void> {
 const recoveryCodeListeners = new Set<(code: string) => void>();
 
 /**
+ * A code minted before anything was listening.
+ *
+ * The vault is created inside a sign-in, and the screen that shows the code
+ * mounts in response to that same sign-in - so on a fresh registration the
+ * code is very often produced a frame or two before the dialog exists. Firing
+ * into an empty set there would lose the only copy of the only factor that
+ * survives losing everything else, silently, on the accounts least equipped
+ * to notice. So it is held until somebody asks.
+ */
+let pendingRecoveryCode: string | null = null;
+
+/**
  * Subscribes to the recovery code minted when an account's vault is created.
  *
  * A callback rather than a return value because the vault is created deep
@@ -607,7 +620,24 @@ const recoveryCodeListeners = new Set<(code: string) => void>();
  */
 export function onRecoveryCode(listener: (code: string) => void): () => void {
   recoveryCodeListeners.add(listener);
+  if (pendingRecoveryCode) {
+    const code = pendingRecoveryCode;
+    // Cleared as it is handed over: this is the one delivery, and holding it
+    // any longer would mean a later subscriber - a remount, a second dialog -
+    // showing a code that has already been written down and moved past.
+    pendingRecoveryCode = null;
+    listener(code);
+  }
   return () => recoveryCodeListeners.delete(listener);
+}
+
+/** Hands the code to whoever is listening, or holds it until somebody is. */
+function announceRecoveryCode(code: string): void {
+  if (recoveryCodeListeners.size === 0) {
+    pendingRecoveryCode = code;
+    return;
+  }
+  recoveryCodeListeners.forEach((listener) => listener(code));
 }
 
 /**
@@ -740,6 +770,9 @@ export function resetE2ee(): void {
   vault = null;
   deviceKeys = null;
   vaultUserId = null;
+  // A code minted for the account that is signing out must not be shown to
+  // whoever signs in next.
+  pendingRecoveryCode = null;
   vaultReady = null;
   signInSecret = null;
   channels.clear();

@@ -7,7 +7,7 @@ import {
   LAST_SEEN_VISIBILITIES,
   type LastSeenVisibility,
 } from '@betweenus/shared-types';
-import { handleOf, labelOf, type ActiveStatus, type DeviceKey, type StatusPrivacy } from '@betweenus/shared-types';
+import { handleOf, labelOf, type ActiveStatus, type DeviceKey, type StatusPrivacy, type VaultGrantRequest } from '@betweenus/shared-types';
 import { useAuthStore } from '../../stores/auth';
 import { useChatStore } from '../../stores/chat';
 import { usePresenceStore } from '../../stores/presence';
@@ -64,6 +64,10 @@ import {
 } from '../../services/notifications';
 import { serverUrl } from '../../services/endpoint';
 import {
+  approveGrant,
+  denyGrant,
+  pendingGrants,
+  regenerateRecoveryCode,
   setVaultFactor,
   deviceId,
   passwordRecoveryEnabled,
@@ -1292,8 +1296,157 @@ function EncryptionSection(): JSX.Element {
         {note && <p className="text-sm text-slate-300">{note}</p>}
       </div>
 
+      <RecoveryCodePanel />
+      <PendingDevices />
       <DeviceList />
     </>
+  );
+}
+
+/**
+ * The recovery code, and the button that mints a new one.
+ *
+ * The code itself is never shown here, because this app does not have it: it
+ * is generated once, handed to the screen that created the account, and
+ * forgotten. A recovery code this app can read back is a recovery code that
+ * goes with the machine, which is the one thing it exists not to do.
+ *
+ * So the only thing offered is replacement, and replacement is destructive in
+ * the way people expect: the old code stops working the moment a new one is
+ * sealed. That is said before the button rather than after it.
+ */
+function RecoveryCodePanel(): JSX.Element {
+  const [code, setCode] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  const regenerate = async (): Promise<void> => {
+    setBusy(true);
+    setNote(null);
+    try {
+      setCode(await regenerateRecoveryCode());
+    } catch (error) {
+      setNote(error instanceof Error ? error.message : 'A new code could not be created');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="mt-8">
+      <h2 className="text-lg font-semibold text-slate-50">Recovery code</h2>
+      <p className="mt-1 text-sm text-slate-400">
+        The way back into your account that does not depend on a password, a passphrase you
+        might forget, or a device you still have. You were shown one when you signed up. We
+        cannot show it again — it is not stored anywhere this app can read.
+      </p>
+      {code && (
+        <div className="mt-3 rounded-md bg-surface-800 p-3">
+          <p className="font-mono text-sm tracking-wide text-slate-100">{code}</p>
+          <p className="mt-1 text-xs text-amber-300">
+            Write this down now. This is the only time it will be shown, and your old code has
+            stopped working.
+          </p>
+        </div>
+      )}
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => void regenerate()}
+        className="mt-3 cursor-pointer rounded bg-surface-800 px-5 py-2 text-sm font-medium text-slate-100 hover:bg-surface-700 disabled:opacity-50"
+      >
+        {busy ? 'Creating…' : 'Create a new recovery code'}
+      </button>
+      {note && <p className="mt-2 text-sm text-slate-300">{note}</p>}
+    </section>
+  );
+}
+
+/**
+ * Machines waiting to be let into the account.
+ *
+ * The fingerprint is the whole of the security here, and the copy says so
+ * plainly rather than describing it as a formality. Approving seals this
+ * account's master key to whatever key that request carries, so the only
+ * thing between it and a key somebody else substituted is the person reading
+ * twelve digits off two screens. `approveGrant` recomputes the digest from
+ * the key it is about to seal for, so what is shown here is a digest of the
+ * real thing rather than a claim that arrived beside it.
+ */
+function PendingDevices(): JSX.Element | null {
+  const [requests, setRequests] = useState<VaultGrantRequest[]>([]);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+
+  const refresh = (): void => {
+    void pendingGrants()
+      .then(setRequests)
+      .catch(() => setRequests([]));
+  };
+
+  useEffect(() => {
+    refresh();
+    // Somebody may be standing in front of the other machine right now, on a
+    // screen that is polling for this to happen.
+    const timer = setInterval(refresh, 8000);
+    return () => clearInterval(timer);
+  }, []);
+
+  if (requests.length === 0) return null;
+
+  const decide = async (request: VaultGrantRequest, allow: boolean): Promise<void> => {
+    setBusy(request.deviceId);
+    setNote(null);
+    try {
+      if (allow) await approveGrant(request);
+      else await denyGrant(request.deviceId);
+      refresh();
+      setNote(allow ? 'Approved. That device can now read your messages.' : 'Denied.');
+    } catch (error) {
+      setNote(error instanceof Error ? error.message : 'That could not be done');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <section className="mt-8">
+      <h2 className="text-lg font-semibold text-slate-50">Devices waiting to be approved</h2>
+      <p className="mt-1 text-sm text-slate-400">
+        Approving gives that device your account key and every conversation it opens. Check the
+        code below matches the one on its screen before you do — if it does not, somebody else
+        is asking.
+      </p>
+      <ul className="mt-3 space-y-2">
+        {requests.map((request) => (
+          <li key={request.deviceId} className="rounded-md bg-surface-800 p-3">
+            <p className="text-sm text-slate-100">{request.label ?? 'Unknown device'}</p>
+            <p className="mt-1 font-mono text-sm tracking-widest text-slate-300">
+              {request.fingerprint}
+            </p>
+            <div className="mt-2 flex gap-2">
+              <button
+                type="button"
+                disabled={busy === request.deviceId}
+                onClick={() => void decide(request, true)}
+                className="cursor-pointer rounded bg-accent px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+              >
+                Approve
+              </button>
+              <button
+                type="button"
+                disabled={busy === request.deviceId}
+                onClick={() => void decide(request, false)}
+                className="cursor-pointer rounded px-3 py-1.5 text-sm font-medium text-slate-300 hover:bg-surface-700 disabled:opacity-50"
+              >
+                Not mine
+              </button>
+            </div>
+          </li>
+        ))}
+      </ul>
+      {note && <p className="mt-2 text-sm text-slate-300">{note}</p>}
+    </section>
   );
 }
 

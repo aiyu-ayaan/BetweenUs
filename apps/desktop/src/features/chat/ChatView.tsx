@@ -615,9 +615,9 @@ function MessageList({
    * explanation, and the messages that can actually be read left legible
    * between the ones that cannot.
    *
-   * They are hidden rather than dropped. Nothing here deletes anything, and the
-   * moment a machine that holds those keys opens this channel they come back on
-   * their own.
+   * They are hidden rather than dropped. Nothing here deletes anything, and if
+   * somebody who holds those keys re-shares them the rows come back on their
+   * own.
    */
   const sealed = received.some((message) => message.content === UNDECRYPTABLE);
   const messages = sealed
@@ -915,14 +915,23 @@ function MessageList({
       )}
 
       {/* Said once for the channel rather than once per message - the rows
-          themselves are hidden, see above. What somebody needs is why, and that
-          it repairs itself: a machine holding these keys hands them over the
-          next time it opens this channel, so there is nothing to do but open
-          BetweenUs where you first signed in. */}
+          themselves are hidden, see above.
+
+          It used to read "open BetweenUs on the device you first signed in
+          with", which was the app telling somebody to go and find a laptop
+          that may have been wiped, and calling permanent loss a sync delay.
+          That case is gone: a wrap is addressed to the account, so every
+          machine you sign in on opens the same one.
+
+          What is left is genuinely narrow and honestly stated - a channel
+          somebody was added to after these were written, or an epoch from
+          before the vault whose only copy went with a machine that no longer
+          exists. Neither repairs itself, and pretending otherwise is what the
+          old line did. */}
       {sealed && (
         <p className="mb-2 rounded-md bg-surface-800 px-3 py-2 text-xs text-slate-400">
-          Some of these messages were sealed for another of your devices. Open
-          BetweenUs on the device you first signed in with and they will unlock here.
+          Some earlier messages here were encrypted for people who were in this channel at
+          the time, and cannot be opened by this account.
         </p>
       )}
 
