@@ -1,8 +1,8 @@
-<!doctype html><html lang=en dir=ltr class="docs-wrapper plugin-docs plugin-id-default docs-version-current docs-doc-page docs-doc-id-security/e2ee" data-has-hydrated=false><head><meta charset=UTF-8><meta name=generator content="Docusaurus v3.10.2"><title data-rh=true>End-to-End Encryption | BetweenUs</title><meta data-rh=true name=viewport content="width=device-width, initial-scale=1.0"/><meta data-rh=true name=twitter:card content=summary_large_image /><meta data-rh=true property=og:image content=https://aiyu-ayaan.github.io/BetweenUs/img/home.png /><meta data-rh=true name=twitter:image content=https://aiyu-ayaan.github.io/BetweenUs/img/home.png /><meta data-rh=true property=og:url content=https://aiyu-ayaan.github.io/BetweenUs/security/e2ee /><meta data-rh=true property=og:locale content=en /><meta data-rh=true name=docusaurus_locale content=en /><meta data-rh=true name=docsearch:language content=en /><meta data-rh=true name=docusaurus_version content=current /><meta data-rh=true name=docusaurus_tag content=docs-default-current /><meta data-rh=true name=docsearch:version content=current /><meta data-rh=true name=docsearch:docusaurus_tag content=docs-default-current /><meta data-rh=true property=og:title content="End-to-End Encryption | BetweenUs"/><meta data-rh=true name=description content="Full source: development/E2EE.md."/><meta data-rh=true property=og:description content="Full source: development/E2EE.md."/><link data-rh=true rel=icon href=/BetweenUs/img/icon.svg /><link data-rh=true rel=canonical href=https://aiyu-ayaan.github.io/BetweenUs/security/e2ee /><link data-rh=true rel=alternate href=https://aiyu-ayaan.github.io/BetweenUs/security/e2ee hreflang=en /><link data-rh=true rel=alternate href=https://aiyu-ayaan.github.io/BetweenUs/security/e2ee hreflang=x-default /><script data-rh=true type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","item":"https://aiyu-ayaan.github.io/BetweenUs/security/overview","name":"Security","position":1},{"@type":"ListItem","item":"https://aiyu-ayaan.github.io/BetweenUs/security/e2ee","name":"End-to-End Encryption","position":2}]}</script><link rel=stylesheet href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" type=text/css><link rel=stylesheet href=/BetweenUs/assets/css/styles.71f96a55.css /><script src=/BetweenUs/assets/js/runtime~main.0e859ef3.js defer></script><script src=/BetweenUs/assets/js/main.0374203e.js defer></script></head><body><svg style="display: none;"><defs>
+<!doctype html><html lang=en dir=ltr class="docs-wrapper plugin-docs plugin-id-default docs-version-current docs-doc-page docs-doc-id-security/e2ee" data-has-hydrated=false><head><meta charset=UTF-8><meta name=generator content="Docusaurus v3.10.2"><title data-rh=true>End-to-End Encryption | BetweenUs</title><meta data-rh=true name=viewport content="width=device-width, initial-scale=1.0"/><meta data-rh=true name=twitter:card content=summary_large_image /><meta data-rh=true property=og:image content=https://aiyu-ayaan.github.io/BetweenUs/img/home.png /><meta data-rh=true name=twitter:image content=https://aiyu-ayaan.github.io/BetweenUs/img/home.png /><meta data-rh=true property=og:url content=https://aiyu-ayaan.github.io/BetweenUs/security/e2ee /><meta data-rh=true property=og:locale content=en /><meta data-rh=true name=docusaurus_locale content=en /><meta data-rh=true name=docsearch:language content=en /><meta data-rh=true name=docusaurus_version content=current /><meta data-rh=true name=docusaurus_tag content=docs-default-current /><meta data-rh=true name=docsearch:version content=current /><meta data-rh=true name=docsearch:docusaurus_tag content=docs-default-current /><meta data-rh=true property=og:title content="End-to-End Encryption | BetweenUs"/><meta data-rh=true name=description content="Full source: development/devdocs/E2EE.md."/><meta data-rh=true property=og:description content="Full source: development/devdocs/E2EE.md."/><link data-rh=true rel=icon href=/BetweenUs/img/icon.svg /><link data-rh=true rel=canonical href=https://aiyu-ayaan.github.io/BetweenUs/security/e2ee /><link data-rh=true rel=alternate href=https://aiyu-ayaan.github.io/BetweenUs/security/e2ee hreflang=en /><link data-rh=true rel=alternate href=https://aiyu-ayaan.github.io/BetweenUs/security/e2ee hreflang=x-default /><script data-rh=true type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","item":"https://aiyu-ayaan.github.io/BetweenUs/security/overview","name":"Security","position":1},{"@type":"ListItem","item":"https://aiyu-ayaan.github.io/BetweenUs/security/e2ee","name":"End-to-End Encryption","position":2}]}</script><link rel=stylesheet href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" type=text/css><link rel=stylesheet href=/BetweenUs/assets/css/styles.71f96a55.css /><script src=/BetweenUs/assets/js/runtime~main.05fb5a11.js defer></script><script src=/BetweenUs/assets/js/main.0374203e.js defer></script></head><body><svg style="display: none;"><defs>
 <symbol id=theme-svg-external-link viewBox="0 0 24 24"><path fill=currentColor d="M21 13v10h-21v-19h12v2h-10v15h17v-8h2zm3-12h-10.988l4.035 4-6.977 7.07 2.828 2.828 6.977-7.07 4.125 4.172v-11z"/></symbol>
 </defs></svg>
 <script>!function(){var t;document.documentElement.setAttribute("data-theme",t||"dark"),document.documentElement.setAttribute("data-theme-choice",t||"dark")}(),function(){try{for(var[t,e]of new URLSearchParams(window.location.search).entries())if(t.startsWith("docusaurus-data-")){var a=t.replace("docusaurus-data-","data-");document.documentElement.setAttribute(a,e)}}catch(t){}}()</script><div id=__docusaurus><link rel=preload as=image href=/BetweenUs/img/logo.svg /><div role=region aria-label="Skip to main content"><a class=skipToContent_fXgn href=#__docusaurus_skipToContent_fallback>Skip to main content</a></div><nav aria-label=Main class="theme-layout-navbar navbar navbar--fixed-top"><div class=navbar__inner><div class="theme-layout-navbar-left navbar__items"><button aria-label="Toggle navigation bar" aria-expanded=false class="navbar__toggle clean-btn" type=button><svg width=30 height=30 viewBox="0 0 30 30" aria-hidden=true><path stroke=currentColor stroke-linecap=round stroke-miterlimit=10 stroke-width=2 d="M4 7h22M4 15h22M4 23h22"/></svg></button><a class=navbar__brand href=/BetweenUs/><div class=navbar__logo><img src=/BetweenUs/img/logo.svg alt="BetweenUs Logo" class="themedComponent_mlkZ themedComponent--light_NVdE"/><img src=/BetweenUs/img/logo.svg alt="BetweenUs Logo" class="themedComponent_mlkZ themedComponent--dark_xIcU"/></div><b class="navbar__title text--truncate">BetweenUs</b></a><a class="navbar__item navbar__link" href=/BetweenUs/features>Features</a><a aria-current=page class="navbar__item navbar__link navbar__link--active" href=/BetweenUs/intro>Docs</a><a class="navbar__item navbar__link" href=/BetweenUs/reference>Code Reference</a></div><div class="theme-layout-navbar-right navbar__items navbar__items--right"><a class="navbar__item navbar__link" href=/BetweenUs/changelog>Changelog</a><a href=https://github.com/aiyu-ayaan/BetweenUs/releases target=_blank rel="noopener noreferrer" class="navbar__item navbar__link">Download<svg width=13.5 height=13.5 aria-label="(opens in new tab)" class=iconExternalLink_nPIU><use href=#theme-svg-external-link /></svg></a><a href=https://github.com/aiyu-ayaan/BetweenUs target=_blank rel="noopener noreferrer" class="navbar__item navbar__link">GitHub<svg width=13.5 height=13.5 aria-label="(opens in new tab)" class=iconExternalLink_nPIU><use href=#theme-svg-external-link /></svg></a><div class=navbarSearchContainer_Bca1><div class="navbar__search searchBarContainer_NW3z" dir=ltr><svg aria-hidden=true class=searchIcon_T3tP focusable=false viewBox="0 0 16 16"><path fill=currentColor d="M6.02945 10.20327a4.17382 4.17382 0 1 1 4.17382-4.17382 4.15609 4.15609 0 0 1-4.17382 4.17382Zm9.69195 4.2199-4.8225-4.82338A5.88021 5.88021 0 0 0 12.058 6.02856 6.00467 6.00467 0 1 0 9.59979 10.8989l4.82338 4.82338a.89729.89729 0 0 0 1.29912 0 .89749.89749 0 0 0-.00087-1.29909Z"/></svg><input placeholder=Search aria-label=Search class="navbar__search-input searchInput_YFbd" value="" /><div class="loadingRing_RJI3 searchBarLoadingRing_YnHq"><div></div><div></div><div></div><div></div></div></div></div></div></div><div role=presentation class=navbar-sidebar__backdrop></div></nav><div id=__docusaurus_skipToContent_fallback class="theme-layout-main main-wrapper mainWrapper_z2l0"><div class=docsWrapper_hBAB><button aria-label="Scroll back to top" class="clean-btn theme-back-to-top-button backToTopButton_sjWU" type=button></button><div class=docRoot_UBD9><aside class="theme-doc-sidebar-container docSidebarContainer_YfHR"><div class=sidebarViewport_aRkj><div class=sidebar_njMd><nav aria-label="Docs sidebar" class="menu thin-scrollbar menu_SIkG"><ul class="theme-doc-sidebar-menu menu__list"><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-1 menu__list-item"><a class=menu__link href=/BetweenUs/intro><span class=linkLabel_WmDU>BetweenUs</span></a><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class=menu__list-item-collapsible><a class="categoryLink_byQd menu__link menu__link--sublist" href=/BetweenUs/architecture/overview><span class=categoryLinkLabel_W154>Architecture</span></a><button aria-label="Expand sidebar category 'Architecture'" aria-expanded=false type=button class="clean-btn menu__caret"></button></div><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class=menu__list-item-collapsible><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role=button aria-expanded=false href=/BetweenUs/system-design/auth-and-permissions><span class=categoryLinkLabel_W154>System Design</span></a></div><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class=menu__list-item-collapsible><a class="categoryLink_byQd menu__link menu__link--sublist" href=/BetweenUs/services/overview><span class=categoryLinkLabel_W154>Services</span></a><button aria-label="Expand sidebar category 'Services'" aria-expanded=false type=button class="clean-btn menu__caret"></button></div><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class=menu__list-item-collapsible><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role=button aria-expanded=false href=/BetweenUs/database/schema><span class=categoryLinkLabel_W154>Database</span></a></div><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item"><div class=menu__list-item-collapsible><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--active" href=/BetweenUs/security/overview><span class=categoryLinkLabel_W154>Security</span></a><button aria-label="Collapse sidebar category 'Security'" aria-expanded=true type=button class="clean-btn menu__caret"></button></div><ul class=menu__list><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class=menu__link tabindex=0 href=/BetweenUs/security/overview><span class=linkLabel_WmDU>Security Overview</span></a><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link menu__link--active" aria-current=page tabindex=0 href=/BetweenUs/security/e2ee><span class=linkLabel_WmDU>End-to-End Encryption</span></a></ul><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class=menu__list-item-collapsible><a class="categoryLink_byQd menu__link menu__link--sublist" href=/BetweenUs/deployment/docker-compose><span class=categoryLinkLabel_W154>Deployment & CI/CD</span></a><button aria-label="Expand sidebar category 'Deployment & CI/CD'" aria-expanded=false type=button class="clean-btn menu__caret"></button></div><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class=menu__list-item-collapsible><a class="categoryLink_byQd menu__link menu__link--sublist" href=/BetweenUs/reference/overview><span class=categoryLinkLabel_W154>Code Reference</span></a><button aria-label="Expand sidebar category 'Code Reference'" aria-expanded=false type=button class="clean-btn menu__caret"></button></div><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class=menu__list-item-collapsible><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role=button aria-expanded=false href=/BetweenUs/running-locally><span class=categoryLinkLabel_W154>Guides</span></a></div></ul></nav></div></div></aside><main class=docMainContainer_TBSr><div class="container padding-top--md padding-bottom--lg"><div class=row><div class="col docItemCol_VOVn"><div class=docItemContainer_Djhp><article><nav class="theme-doc-breadcrumbs breadcrumbsContainer_Z_bl" aria-label=Breadcrumbs><ul class=breadcrumbs><li class=breadcrumbs__item><a aria-label="Home page" class=breadcrumbs__link href=/BetweenUs/><svg viewBox="0 0 24 24" class=breadcrumbHomeIcon_YNFT><path d="M10 19v-5h4v5c0 .55.45 1 1 1h3c.55 0 1-.45 1-1v-7h1.7c.46 0 .68-.57.33-.87L12.67 3.6c-.38-.34-.96-.34-1.34 0l-8.36 7.53c-.34.3-.13.87.33.87H5v7c0 .55.45 1 1 1h3c.55 0 1-.45 1-1z" fill=currentColor /></svg></a><li class=breadcrumbs__item><a class=breadcrumbs__link href=/BetweenUs/security/overview><span>Security</span></a><li class="breadcrumbs__item breadcrumbs__item--active"><span class=breadcrumbs__link>End-to-End Encryption</span></ul></nav><div class="tocCollapsible_ETCw theme-doc-toc-mobile tocMobile_ITEo"><button type=button class="clean-btn tocCollapsibleButton_TO0P">On this page</button></div><div class="theme-doc-markdown markdown"><header><h1>End-to-End Encryption</h1></header>
-<p>Full source: <a href=https://github.com/aiyu-ayaan/BetweenUs/blob/master/development/E2EE.md target=_blank rel="noopener noreferrer" class=""><code>development/E2EE.md</code></a>.</p>
+<p>Full source: <a href=https://github.com/aiyu-ayaan/BetweenUs/blob/master/development/devdocs/E2EE.md target=_blank rel="noopener noreferrer" class=""><code>development/devdocs/E2EE.md</code></a>.</p>
 <h2 class="anchor anchorTargetStickyNavbar_Vzrq" id=threat-model>Threat model<a href=#threat-model class=hash-link aria-label="Direct link to Threat model" title="Direct link to Threat model" translate=no>​</a></h2>
 <p><strong>Protected against</strong>: a reader of the database, a backup, Redis, or the
 Nginx logs — none of them holds a key that opens a message. Call media
@@ -12,35 +12,94 @@ read in the first place.</p>
 <p><strong>Not protected against</strong>: a compromised client (the keys live there), and
 metadata — the server still knows who wrote to which channel and when, and
 how big each message was.</p>
-<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id=one-key-per-machine>One key per machine<a href=#one-key-per-machine class=hash-link aria-label="Direct link to One key per machine" title="Direct link to One key per machine" translate=no>​</a></h2>
-<p>A channel's symmetric AES-256-GCM key is wrapped once per <strong>device</strong>, not
-once per account (<code>ChannelKey</code>, one row per <code>(channel, epoch, recipient user, recipient device)</code>). That's what lets a single device be revoked
-without rotating an identity every other machine is also using — and what
-lets "who can open this channel" be answered by the wrap table directly.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id=one-identity-per-account--not-one-per-machine>One identity per account — not one per machine<a href=#one-identity-per-account--not-one-per-machine class=hash-link aria-label="Direct link to One identity per account — not one per machine" title="Direct link to One identity per account — not one per machine" translate=no>​</a></h2>
+<p>A channel's symmetric AES-256-GCM key is wrapped once per <strong>account</strong>
+(<code>ChannelKey</code>, one row per <code>(channel, epoch, recipient user)</code>, filed under
+the recipient id <code>@account</code>). Every device you sign in on opens the same
+row, so your whole history is there the moment you sign in — with no other
+device online, and nothing to wait for.</p>
+<p>This is the most important thing on this page, and it is worth saying what
+it replaced, because the previous design lost people's conversations.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id=what-went-wrong-before>What went wrong before<a href=#what-went-wrong-before class=hash-link aria-label="Direct link to What went wrong before" title="Direct link to What went wrong before" translate=no>​</a></h3>
+<p>Keys used to be wrapped per <strong>device</strong>. Three things followed:</p>
+<ol>
+<li class="">A device that did not exist when a key generation was created held
+nothing for it.</li>
+<li class="">The only thing in the world that could seal one for it was another
+device that <em>already</em> held that generation. So history arrived — if it
+arrived — whenever one of your other machines next opened that channel.</li>
+<li class=""><strong>If no such machine ever came online again, those messages were gone.</strong>
+Not delayed. A reinstall, a wiped laptop, a phone you revoked, a
+single-device account starting over: the only key that opened those
+messages ceased to exist, and the server had never held one.</li>
+</ol>
+<p>There was a fourth, worse case. A device that could not open the account
+backup would quietly generate an identity of its own and carry on looking
+normal — so one account ended up with several identities, each able to read
+a different slice of its own history. What you saw was an empty channel and
+a line suggesting you open the app on the device you first signed in with,
+which was advice about a machine that might no longer exist.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id=the-account-vault>The account vault<a href=#the-account-vault class=hash-link aria-label="Direct link to The account vault" title="Direct link to The account vault" translate=no>​</a></h3>
 <!-- -->
-<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id=repairing-a-second-device--without-over-sharing>Repairing a second device — without over-sharing<a href=#repairing-a-second-device--without-over-sharing class=hash-link aria-label="Direct link to Repairing a second device — without over-sharing" title="Direct link to Repairing a second device — without over-sharing" translate=no>​</a></h2>
-<p><code>GET /api/v1/e2ee/keys/:channelId</code> answers two questions: who's missing the
-<strong>current</strong> epoch (keeps the next message readable), and who's missing
-<strong>any</strong> epoch their owner already holds on another machine (lets a phone
-signed in today read history from before it existed). The second is
-deliberately bounded — "their owner already holds it" — so a new device
-only ever recovers access the same person already has elsewhere, never a
-year of history handed to someone who joined yesterday.</p>
+<p><strong>Your account has an identity, and your devices open it.</strong> The identity is
+a <em>keyring</em> rather than a single key — rotating it after losing a laptop
+adds a generation and leaves every earlier one in place, so nothing already
+sealed ever stops opening.</p>
+<p><strong>Every account gets a recovery code at sign-up, shown once.</strong> It is not
+derived from your password, so a password reset does not touch it; it is
+not on any of your devices, so losing them does not touch it. It is the
+reason the answer to "I lost everything" is now a code on a piece of paper
+rather than an apology. The server refuses to let you remove your last
+portable way in.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id=signing-in-on-a-new-device>Signing in on a new device<a href=#signing-in-on-a-new-device class=hash-link aria-label="Direct link to Signing in on a new device" title="Direct link to Signing in on a new device" translate=no>​</a></h3>
+<p>Whichever of these happens, the outcome is the same: your history is there.</p>
+<ul>
+<li class=""><strong>With your password</strong> — the vault opens with nothing extra typed.</li>
+<li class=""><strong>With your recovery code or passphrase</strong> — typed once on the unlock
+screen. Needs no other device.</li>
+<li class=""><strong>By approving it from a device already signed in</strong> — the two screens
+show the same fingerprint, you check they match, and you tap approve.</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id=a-device-that-cannot-get-in-is-locked-not-broken>A device that cannot get in is locked, not broken<a href=#a-device-that-cannot-get-in-is-locked-not-broken class=hash-link aria-label="Direct link to A device that cannot get in is locked, not broken" title="Direct link to A device that cannot get in is locked, not broken" translate=no>​</a></h3>
+<p>If a device can open none of those — a provider sign-in with no password, a
+launch from a stored session — it says so and stops. It does <strong>not</strong> invent
+an identity, mint keys, or write anything, so nothing about the state is
+one-way. It draws one screen with all three ways in on it, and comes to
+life the moment you use any of them.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id=messages-written-under-the-old-design>Messages written under the old design<a href=#messages-written-under-the-old-design class=hash-link aria-label="Direct link to Messages written under the old design" title="Direct link to Messages written under the old design" translate=no>​</a></h3>
+<p>Those keys are sealed to one installation and only that installation can
+open them. So it re-seals them to your account — on every channel it opens,
+and once across every channel each time you sign in, because that window
+closes if the device is ever wiped. After that the conversation is readable
+from every device you own, including ones you have not set up yet.</p>
+<p><strong>Honestly stated</strong>: a generation whose only key went with a machine that
+no longer exists cannot be recovered — not by you, not by the operator, not
+by anybody. <code>GET /api/v1/e2ee/health</code> reports those rather than drawing
+padlocks and implying somebody is coming.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id=repairing-access--without-over-sharing>Repairing access — without over-sharing<a href=#repairing-access--without-over-sharing class=hash-link aria-label="Direct link to Repairing access — without over-sharing" title="Direct link to Repairing access — without over-sharing" translate=no>​</a></h2>
+<p><code>GET /api/v1/e2ee/keys/:channelId</code> answers three questions: who is missing
+the <strong>current</strong> generation (the sender clears that list <em>before</em> it seals,
+so a message is never written under a key a member cannot open), which
+earlier generations a member was deliberately let in on, and which
+generations this device still holds only in the old per-device form and
+should re-seal to its account.</p>
+<p>Repairing somebody's <em>own</em> second device is no longer one of them. There is
+nothing to repair: it opens the same row the first device does.</p>
 <h2 class="anchor anchorTargetStickyNavbar_Vzrq" id=letting-a-new-member-read-the-history>Letting a new member read the history<a href=#letting-a-new-member-read-the-history class=hash-link aria-label="Direct link to Letting a new member read the history" title="Direct link to Letting a new member read the history" translate=no>​</a></h2>
-<p>The one deliberate exception to that bound, and it is a decision somebody
-makes rather than a default. Adding a member (<code>POST /api/v1/servers/:serverId/members</code>) takes <code>shareHistory</code>, which is stored on
-<code>server_members.historyShared</code> and is <code>false</code> unless asked for.</p>
-<p>With it set, the gap list above stops asking whether that member already
-holds an epoch and offers their devices <strong>every</strong> epoch of every channel in
-the server. The server still hands over nothing itself — it holds no key —
-and the publish rules are unchanged: a caller may only add entries to an
-epoch it already holds. So the history opens the first time a machine that
-holds those keys opens the channel, not the moment the member is added.
-An account whose fellow members are all offline waits until one is back.</p>
-<p>Clearing the flag takes nothing back. A key that has been sealed for a
-device has been sealed.</p>
-<p>Without it, the default stands: a newcomer mints the next epoch, reads from
-the moment they arrive, and everything before that stays a padlock.</p>
+<p>The one deliberate exception, and it is a decision somebody makes rather
+than a default. Adding a member (<code>POST /api/v1/servers/:serverId/members</code>)
+takes <code>shareHistory</code>, which is stored on <code>server_members.historyShared</code> and
+is <code>false</code> unless asked for.</p>
+<p>With it set, the gap list offers that member <strong>every</strong> generation of every
+channel in the server. The server still hands over nothing itself — it
+holds no key — and the publish rules are unchanged: a caller may only add
+entries to a generation it already holds. So the history opens the first
+time a member who holds those keys opens the channel, not the moment the
+new member is added.</p>
+<p>Clearing the flag takes nothing back. A key that has been sealed for an
+account has been sealed.</p>
+<p>Without it, the default stands: a newcomer reads from the moment they
+arrive, and everything before that stays a padlock.</p>
 <h2 class="anchor anchorTargetStickyNavbar_Vzrq" id=the-one-body-the-server-can-read-webhooks>The one body the server can read: webhooks<a href=#the-one-body-the-server-can-read-webhooks class=hash-link aria-label="Direct link to The one body the server can read: webhooks" title="Direct link to The one body the server can read: webhooks" translate=no>​</a></h2>
 <p>Everything above assumes every author holds a channel key. One kind of author
 does not and cannot: a webhook — a URL a build server, an alerting stack or a
@@ -78,13 +137,12 @@ not a compromise, it is the behaviour every app with this feature has: somebody
 who becomes your friend tomorrow does not get shown what you posted today.</p>
 <p>How it works, whole:</p>
 <ol>
-<li class="">Before posting, the client reads <code>GET /api/v1/statuses/audience</code> — every
-device of every friend it may post to right now, plus its own, with revoked
-machines already filtered out.</li>
+<li class="">Before posting, the client reads <code>GET /api/v1/statuses/audience/accounts</code> —
+every friend it may post to right now, plus its own account.</li>
 <li class="">It mints one AES-256-GCM key for the post, seals the caption as an
 <code>EncryptedEnvelope</code> and the file as ciphertext under it.</li>
-<li class="">It wraps that key once per device, by the same ECDH → HKDF → AES-GCM wrap a
-channel key uses, and posts the bundle with the ciphertext.</li>
+<li class="">It wraps that key once per <strong>account</strong>, by the same ECDH → HKDF → AES-GCM
+wrap a channel key uses, and posts the bundle with the ciphertext.</li>
 <li class="">The server writes one <code>status_keys</code> row per wrap. That table <strong>is</strong> the
 audience: no row, no key, nothing to read.</li>
 </ol>
@@ -98,38 +156,83 @@ not post to, which closes the gap between the client reading the directory and
 the post landing.</p>
 <p>What this costs, said plainly:</p>
 <ul>
-<li class="">A machine that signs in after a post was written cannot open it. Its key was
-wrapped for the machines you had at the time, and there is no gap-filling for
-moments the way there is for channel epochs — the post expires before the
-repair would be worth having.</li>
-<li class="">Whether somebody posted, when, how long a video runs and what colour a text
+<li class="">
+<p>Somebody who becomes your friend after a post was written cannot open it.
+That is the design rather than a cost: the audience is frozen when the post
+is written, which is what every app with this feature does.</p>
+<p>A <em>device</em> signed in after the post used to be in the same position, and
+that one was a bug — a day-long version of the problem that lost whole
+conversations. The wrap is per account now, so a moment opens on whichever
+of your devices you happen to pick up, including one you set up an hour
+after it was posted.</p>
+</li>
+<li class="">
+<p>Whether somebody posted, when, how long a video runs and what colour a text
 post is drawn on stay in the clear: the server times the sweep with them, and
-the clients draw the tray with them.</li>
-<li class=""><code>mediaType</code> is in the clear too. The server cannot sniff ciphertext and a
+the clients draw the tray with them.</p>
+</li>
+<li class="">
+<p><code>mediaType</code> is in the clear too. The server cannot sniff ciphertext and a
 player will not decode a blob with no type, so the author sends what the bytes
 are once opened — stored exactly as sent, and never treated as a fact about
-the object on disk.</li>
-<li class="">The viewer list is readable by the author and nobody else. Everyone else can
-only ever learn whether <em>they</em> opened something.</li>
+the object on disk.</p>
+</li>
+<li class="">
+<p>The viewer list is readable by the author and nobody else. Everyone else can
+only ever learn whether <em>they</em> opened something.</p>
+</li>
 </ul>
 <p>The two smaller things outside the envelope are unchanged and unrelated:
 reaction emoji, and the <code>viewOnce</code> flag on a one-time message — in each case
 because the server has to act on it, and a server that cannot read the body
 cannot be told by the body.</p>
 <h2 class="anchor anchorTargetStickyNavbar_Vzrq" id=revocation>Revocation<a href=#revocation class=hash-link aria-label="Direct link to Revocation" title="Direct link to Revocation" translate=no>​</a></h2>
-<p>Deletes the wraps addressed to that device and refuses to seal for it
-again; the row itself stays, because "when a machine stopped being trusted"
-is the only thing anyone can audit afterwards. Every channel that device
-could read is marked stale and re-keys. Registering a revoked device id
-again is refused rather than silently un-revoking — the machine asking is
-running the same code that would let it un-revoke itself.</p>
-<p>What revocation does <strong>not</strong> do: reach what the device already decrypted,
-or stop a still-logged-in session from continuing (that's what ending the
-session is for — two different actions, both needed).</p>
+<p>Revoking a device stops it being granted the vault again and takes it out
+of the directory. The row itself stays, because "when a machine stopped
+being trusted" is the only thing anyone can audit afterwards. Registering a
+revoked device id again is refused rather than silently un-revoking — the
+machine asking is running the same code that would let it un-revoke itself.</p>
+<p>What revocation deliberately does <strong>not</strong> do is delete the account's
+wrapped channel keys. They are addressed to the account, not to the
+machine, so deleting them would lock you out of your own history.</p>
+<p>So closing the door on a lost device is <strong>two actions</strong>, and the app offers
+them together:</p>
+<ol>
+<li class=""><strong>Revoke the device.</strong> It stops being sealed for and loses its standing.</li>
+<li class=""><strong>Rotate your account identity.</strong> A new generation is added to the
+keyring, so everything sealed from now on is sealed to a public half
+that device's grant does not open. Nothing already sealed stops
+opening — that is what the keyring is for.</li>
+</ol>
+<p>What neither does: reach what the device already decrypted, or stop a
+still-logged-in session from continuing. Ending the session is a third
+action and is also needed.</p>
 <h2 class="anchor anchorTargetStickyNavbar_Vzrq" id=pieces>Pieces<a href=#pieces class=hash-link aria-label="Direct link to Pieces" title="Direct link to Pieces" translate=no>​</a></h2>
-<table><thead><tr><th>Piece<th>Where it lives<th>Who can read it<tbody><tr><td>Device identity key (ECDH P-256)<td>Private half sealed in the OS keychain, per machine<td>That machine<tr><td>Device public keys<td><code>device_keys</code> table<td>Everyone in the server<tr><td>Sealed identity backup, one per secret kind<td><code>identity_backups</code> table<td>Whoever knows the account password or a recovery passphrase<tr><td>Channel key (AES-256-GCM)<td>In memory on member devices<td>Channel members<tr><td>Wrapped channel key<td><code>channel_keys</code> table<td>Only the device it was sealed for<tr><td>Message body<td><code>messages.content</code><td>Channel members<tr><td>Attachment bytes<td>Object storage<td>Channel members (session to fetch, channel key to read)<tr><td>Voice/video media<td>DTLS-SRTP, direct between peers<td>The two people on that connection<tr><td>Avatars / server icons<td>Object storage<td><strong>Anyone with the URL</strong> — deliberately public</table>
+<table><thead><tr><th>Piece<th>Where it lives<th>Who can read it<tbody><tr><td>Account master key (32 bytes)<td>In memory, and each unlocked device's keychain<td>Whoever can open any one vault door<tr><td>Account identity keyring<td><code>account_vaults</code>, sealed under the master key<td>The same<tr><td>Vault doors, one row each<td><code>account_vault_factors</code><td>Each opens for one secret, or one machine<tr><td>Account identity public key<td><code>account_vaults.publicKey</code><td>Everyone — it is what others wrap to<tr><td>Device identity key (ECDH P-256)<td>Private half sealed in the OS keychain, per machine<td>That machine. Receives vault grants and opens pre-vault keys; <strong>not</strong> what channel keys are addressed to<tr><td>Device public keys<td><code>device_keys</code> table<td>Everyone in the server<tr><td>Sealed identity backup <em>(legacy)</em><td><code>identity_backups</code> table<td>Whoever knows the account password or a recovery passphrase. Read so older clients still sign in; nothing writes one<tr><td>Channel key (AES-256-GCM)<td>In memory on member devices<td>Channel members<tr><td>Wrapped channel key<td><code>channel_keys</code> table, one row per member <strong>account</strong><td>Only the account it was sealed for<tr><td>Message body<td><code>messages.content</code><td>Channel members<tr><td>Attachment bytes<td>Object storage<td>Channel members (session to fetch, channel key to read)<tr><td>Voice/video media<td>DTLS-SRTP, direct between peers<td>The two people on that connection<tr><td>Avatars / server icons<td>Object storage<td><strong>Anyone with the URL</strong> — deliberately public</table>
 <h3 class="anchor anchorTargetStickyNavbar_Vzrq" id=e2ee-encrypted-attachment--blob-lifecycle>E2EE Encrypted Attachment & Blob Lifecycle<a href=#e2ee-encrypted-attachment--blob-lifecycle class=hash-link aria-label="Direct link to E2EE Encrypted Attachment & Blob Lifecycle" title="Direct link to E2EE Encrypted Attachment & Blob Lifecycle" translate=no>​</a></h3>
 <!-- -->
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id=when-a-blob-is-collected>When a blob is collected<a href=#when-a-blob-is-collected class=hash-link aria-label="Direct link to When a blob is collected" title="Direct link to When a blob is collected" translate=no>​</a></h3>
+<p>Three passes, answering three different questions. They are separate on
+purpose: conflating them is how objects came to sit in storage that nothing
+would ever name again.</p>
+<table><thead><tr><th>Pass<th>When<th>What it collects<tbody><tr><td>Immediate purge<td>The moment a message is deleted, burned or expires<td>The blobs that message named. The rows are marked first, so a storage outage mid-delete is finished by the sweep rather than lost<tr><td><code>AttachmentSweeper</code><td>Every six hours<td>Uploads nobody ever sent (past their grace), blobs whose message is gone, and rows orphaned by a cascade that runs no application code<tr><td><code>StorageReconciler</code><td>Daily<td><strong>Objects with no database row at all</strong></table>
+<p>The third is the one worth explaining. Every other pass starts from a row
+and asks whether its object should go — so an object that <em>no</em> row named
+was invisible to all of them. Not kept deliberately: unreachable. No query
+could produce its key, so no code could produce its delete.</p>
+<p>A replaced avatar or server icon, a photo picked for a moment that was
+never posted, an upload whose bookkeeping lost a race with a dying process,
+a half-finished multi-part upload: each left bytes behind indefinitely.
+The reconciler walks the store itself and removes what nothing points at.</p>
+<p>Two rules keep it from becoming the problem it solves. It reads every
+reference <strong>first</strong>, so a failed database query deletes nothing rather than
+emptying the bucket. And it leaves anything younger than a week alone,
+because an object is always written <em>before</em> the row that names it —
+collecting a young orphan would delete a file somebody was in the middle of
+sending.</p>
+<p>One thing it cannot collect: ciphertext whose key is gone. A message row
+still references it, and the server cannot tell a message nobody <em>can</em> read
+from one nobody <em>has</em> read.</p>
 <h2 class="anchor anchorTargetStickyNavbar_Vzrq" id=forwarding>Forwarding<a href=#forwarding class=hash-link aria-label="Direct link to Forwarding" title="Direct link to Forwarding" translate=no>​</a></h2>
 <p>A forwarded message is a <strong>new message, not a pointer to the original</strong>. It has
 to be: the body and every attachment blob are sealed under the key of the
@@ -164,49 +267,39 @@ know when to delete the row, which is the whole feature.</li>
 tag can't carry an authorization header, and a member list renders them
 for people who hold no channel key at all.</li>
 </ul>
-<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id=identity-backup-the-one-boundary-that-moved>Identity backup: the one boundary that moved<a href=#identity-backup-the-one-boundary-that-moved class=hash-link aria-label="Direct link to Identity backup: the one boundary that moved" title="Direct link to Identity backup: the one boundary that moved" translate=no>​</a></h2>
-<p>The backup is sealed with a key derived from the account password, and the
-password is something a <em>live</em> server sees at sign-in. So a <strong>stolen
-database opens nothing</strong> (passwords are bcrypt-hashed, the backup is
-ciphertext), but a <strong>compromised running server</strong> could capture a password
-in use and open that user's backup afterward. Anyone whose threat model
-includes the running deployment should set a recovery passphrase instead —
-it is never sent anywhere in any form.</p>
-<p>An account holds <strong>one backup per secret kind</strong>, not one in total. Setting a
-recovery passphrase used to overwrite the password-sealed blob, and that blob is
-the only one a fresh sign-in holds the secret for — the password is in hand at
-that moment and nothing else is. Losing it meant every later sign-in on a new
-device fell into the fork below and stayed there. The passphrase now sits beside
-the password backup, and the switch that turns password recovery off is a
-deliberate choice on the same screen rather than a side effect.</p>
-<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id=signing-in-without-the-secret>Signing in without the secret<a href=#signing-in-without-the-secret class=hash-link aria-label="Direct link to Signing in without the secret" title="Direct link to Signing in without the secret" translate=no>​</a></h3>
-<p>A sign-in that cannot open the backup is not stopped and is never asked for a
-secret. A launch from a stored token has no password to hand, and an account
-that has only ever signed in with GitHub or Google has no password <em>at all</em> —
-so the machine generates a key pair of its own and carries on.</p>
-<p>Two properties make that safe rather than lossy:</p>
-<ul>
-<li class="">The machine leaves the backup exactly as it found it. Promoting a
-self-minted key to the account's backup would lock out every machine still
-restoring from the real one, so only a deliberate "set a recovery
-passphrase" (or a password change) ever replaces it.</li>
-<li class=""><code>channel_keys</code> is addressed per <code>recipientDeviceId</code>, so the new machine
-publishes its own public half under its own device id and takes nothing away
-from the rows already sealed for the others.</li>
-<li class="">The self-minted key is <strong>marked provisional</strong> whenever the account had a
-backup this machine could not open, and the next sign-in carrying a secret
-tries the backup again rather than short-circuiting on it. Unmarked, that key
-ended the story: a device signed in with the correct account password read
-every message the account had ever been sent as a padlock, for the life of the
-install, and nothing on screen said why.</li>
-</ul>
-<p>The cost is that history is not instant there. It reads what arrives from now
-on, and older conversations fill in as the account's other machines open them —
-the same "repairing a second device" path above. Supplying the secret (signing
-in with the account password, or setting a recovery passphrase) restores the
-account key outright and is the only instant path — and, because the key was
-marked, signing in with the password later works just as well as signing in with
-it first.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id=the-one-boundary-that-moved-password-recovery>The one boundary that moved: password recovery<a href=#the-one-boundary-that-moved-password-recovery class=hash-link aria-label="Direct link to The one boundary that moved: password recovery" title="Direct link to The one boundary that moved: password recovery" translate=no>​</a></h2>
+<p>The <code>password</code> door is sealed with a key derived from your account
+password, and the password is something a <em>live</em> server sees at sign-in. So
+a <strong>stolen database opens nothing</strong> (passwords are bcrypt-hashed, every
+door is ciphertext), but a <strong>compromised running server</strong> could capture a
+password in use and open that account's vault afterwards.</p>
+<p>Anyone whose threat model includes the running deployment should turn the
+password door off. That is safe to do now in a way it was not before: every
+account is created with a recovery code, so removing the password door
+leaves one standing by construction — and the server refuses the removal if
+it would not.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id=signing-in-without-a-secret>Signing in without a secret<a href=#signing-in-without-a-secret class=hash-link aria-label="Direct link to Signing in without a secret" title="Direct link to Signing in without a secret" translate=no>​</a></h3>
+<p>A sign-in that carries no secret — a launch from a stored session, or an
+account that has only ever signed in with GitHub or Google and has no
+password at all — leaves the device <strong>locked</strong> rather than improvising.</p>
+<p>It generates nothing, publishes nothing, and writes nothing. It shows one
+screen with three ways in: type the recovery code, type a passphrase, or
+approve the device from one already signed in. The moment any of them
+succeeds, the whole history is there.</p>
+<p>This is the part that changed, and it changed because the old behaviour
+lost data. Such a device used to generate an identity of its own and carry
+on looking normal — so the account had two identities, the new one could
+read nothing already sealed for the old one, and it would go on to create
+new keys that the <em>rest</em> of the account could not read either. What the
+person saw was a screen of padlocks and a suggestion to open the app on
+their previous device.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id=approving-a-device>Approving a device<a href=#approving-a-device class=hash-link aria-label="Direct link to Approving a device" title="Direct link to Approving a device" translate=no>​</a></h3>
+<p>Approving seals your account's master key to whatever public key that
+request carries, so the fingerprint comparison is the whole of the
+security, not a formality. Both screens show the same twelve digits; the
+approving device recomputes them from the key it is about to seal for
+rather than trusting the number that arrived with the request. If they do
+not match, somebody else is asking.</p>
 <h2 class="anchor anchorTargetStickyNavbar_Vzrq" id=safety-numbers>Safety numbers<a href=#safety-numbers class=hash-link aria-label="Direct link to Safety numbers" title="Direct link to Safety numbers" translate=no>​</a></h2>
 <p>Everything above protects a message from whoever reads the database. None of
 it protects against the server <strong>handing out the wrong public key</strong> — a client
@@ -249,4 +342,4 @@ next opened, not the moment it changes.</li>
 <p>No endpoint was added for any of this. The dialog reads the same
 <code>GET /api/v1/e2ee/devices?channelId=</code> the channel already uses — asking about
 somebody through a channel you share is a question you were already entitled to
-ask, and a per-user lookup would have been a new one.</div><footer class="theme-doc-footer docusaurus-mt-lg"><div class="row margin-top--sm theme-doc-footer-edit-meta-row"><div class="col noPrint_WFHX"><a href=https://github.com/aiyu-ayaan/BetweenUs/tree/master/docs/docs/security/e2ee.md target=_blank rel="noopener noreferrer" class=theme-edit-this-page><svg fill=currentColor height=20 width=20 viewBox="0 0 40 40" class=iconEdit_Z9Sw aria-hidden=true><g><path d="m34.5 11.7l-3 3.1-6.3-6.3 3.1-3q0.5-0.5 1.2-0.5t1.1 0.5l3.9 3.9q0.5 0.4 0.5 1.1t-0.5 1.2z m-29.5 17.1l18.4-18.5 6.3 6.3-18.4 18.4h-6.3v-6.2z"/></g></svg>Edit this page</a></div><div class="col lastUpdated_JAkA"></div></div></footer></article><nav class="docusaurus-mt-lg pagination-nav" aria-label="Docs pages"><a class="pagination-nav__link pagination-nav__link--prev" href=/BetweenUs/security/overview><div class=pagination-nav__sublabel>Previous</div><div class=pagination-nav__label>Security Overview</div></a><a class="pagination-nav__link pagination-nav__link--next" href=/BetweenUs/deployment/docker-compose><div class=pagination-nav__sublabel>Next</div><div class=pagination-nav__label>Docker Compose</div></a></nav></div></div><div class="col col--3"><div class="tableOfContents_bqdL thin-scrollbar theme-doc-toc-desktop"><ul class="table-of-contents table-of-contents__left-border"><li><a href=#threat-model class="table-of-contents__link toc-highlight">Threat model</a><li><a href=#one-key-per-machine class="table-of-contents__link toc-highlight">One key per machine</a><li><a href=#repairing-a-second-device--without-over-sharing class="table-of-contents__link toc-highlight">Repairing a second device — without over-sharing</a><li><a href=#letting-a-new-member-read-the-history class="table-of-contents__link toc-highlight">Letting a new member read the history</a><li><a href=#the-one-body-the-server-can-read-webhooks class="table-of-contents__link toc-highlight">The one body the server can read: webhooks</a><li><a href=#moments-sealed-with-the-audience-frozen class="table-of-contents__link toc-highlight">Moments: sealed, with the audience frozen</a><li><a href=#revocation class="table-of-contents__link toc-highlight">Revocation</a><li><a href=#pieces class="table-of-contents__link toc-highlight">Pieces</a><ul><li><a href=#e2ee-encrypted-attachment--blob-lifecycle class="table-of-contents__link toc-highlight">E2EE Encrypted Attachment & Blob Lifecycle</a></ul><li><a href=#forwarding class="table-of-contents__link toc-highlight">Forwarding</a><li><a href=#deliberate-leaks class="table-of-contents__link toc-highlight">Deliberate leaks</a><li><a href=#identity-backup-the-one-boundary-that-moved class="table-of-contents__link toc-highlight">Identity backup: the one boundary that moved</a><ul><li><a href=#signing-in-without-the-secret class="table-of-contents__link toc-highlight">Signing in without the secret</a></ul><li><a href=#safety-numbers class="table-of-contents__link toc-highlight">Safety numbers</a><ul><li><a href=#what-the-number-is-over class="table-of-contents__link toc-highlight">What the number is over</a><li><a href=#two-limits class="table-of-contents__link toc-highlight">Two limits</a></ul></ul></div></div></div></div></main></div></div></div><footer class="theme-layout-footer footer footer--dark"><div class="container container-fluid"><div class="row footer__links"><div class="theme-layout-footer-column col footer__col"><div class=footer__title>Docs</div><ul class="footer__items clean-list"><li class=footer__item><a class=footer__link-item href=/BetweenUs/architecture/overview>Architecture</a><li class=footer__item><a class=footer__link-item href=/BetweenUs/reference/overview>Code Reference</a><li class=footer__item><a class=footer__link-item href=/BetweenUs/running-locally>Running Locally</a><li class=footer__item><a class=footer__link-item href=/BetweenUs/database/schema>Database Schema</a></ul></div><div class="theme-layout-footer-column col footer__col"><div class=footer__title>Project</div><ul class="footer__items clean-list"><li class=footer__item><a href=https://github.com/aiyu-ayaan/BetweenUs/releases target=_blank rel="noopener noreferrer" class=footer__link-item>Download App<svg width=13.5 height=13.5 aria-label="(opens in new tab)" class=iconExternalLink_nPIU><use href=#theme-svg-external-link /></svg></a><li class=footer__item><a href=https://github.com/aiyu-ayaan/BetweenUs target=_blank rel="noopener noreferrer" class=footer__link-item>GitHub<svg width=13.5 height=13.5 aria-label="(opens in new tab)" class=iconExternalLink_nPIU><use href=#theme-svg-external-link /></svg></a><li class=footer__item><a class=footer__link-item href=/BetweenUs/changelog>Changelog</a></ul></div></div><div class="footer__bottom text--center"><div class=footer__copyright>Copyright © 2026 BetweenUs. Built with Docusaurus.</div></div></div></footer></div></body>
+ask, and a per-user lookup would have been a new one.</div><footer class="theme-doc-footer docusaurus-mt-lg"><div class="row margin-top--sm theme-doc-footer-edit-meta-row"><div class="col noPrint_WFHX"><a href=https://github.com/aiyu-ayaan/BetweenUs/tree/master/docs/docs/security/e2ee.md target=_blank rel="noopener noreferrer" class=theme-edit-this-page><svg fill=currentColor height=20 width=20 viewBox="0 0 40 40" class=iconEdit_Z9Sw aria-hidden=true><g><path d="m34.5 11.7l-3 3.1-6.3-6.3 3.1-3q0.5-0.5 1.2-0.5t1.1 0.5l3.9 3.9q0.5 0.4 0.5 1.1t-0.5 1.2z m-29.5 17.1l18.4-18.5 6.3 6.3-18.4 18.4h-6.3v-6.2z"/></g></svg>Edit this page</a></div><div class="col lastUpdated_JAkA"></div></div></footer></article><nav class="docusaurus-mt-lg pagination-nav" aria-label="Docs pages"><a class="pagination-nav__link pagination-nav__link--prev" href=/BetweenUs/security/overview><div class=pagination-nav__sublabel>Previous</div><div class=pagination-nav__label>Security Overview</div></a><a class="pagination-nav__link pagination-nav__link--next" href=/BetweenUs/deployment/docker-compose><div class=pagination-nav__sublabel>Next</div><div class=pagination-nav__label>Docker Compose</div></a></nav></div></div><div class="col col--3"><div class="tableOfContents_bqdL thin-scrollbar theme-doc-toc-desktop"><ul class="table-of-contents table-of-contents__left-border"><li><a href=#threat-model class="table-of-contents__link toc-highlight">Threat model</a><li><a href=#one-identity-per-account--not-one-per-machine class="table-of-contents__link toc-highlight">One identity per account — not one per machine</a><ul><li><a href=#what-went-wrong-before class="table-of-contents__link toc-highlight">What went wrong before</a><li><a href=#the-account-vault class="table-of-contents__link toc-highlight">The account vault</a><li><a href=#signing-in-on-a-new-device class="table-of-contents__link toc-highlight">Signing in on a new device</a><li><a href=#a-device-that-cannot-get-in-is-locked-not-broken class="table-of-contents__link toc-highlight">A device that cannot get in is locked, not broken</a><li><a href=#messages-written-under-the-old-design class="table-of-contents__link toc-highlight">Messages written under the old design</a></ul><li><a href=#repairing-access--without-over-sharing class="table-of-contents__link toc-highlight">Repairing access — without over-sharing</a><li><a href=#letting-a-new-member-read-the-history class="table-of-contents__link toc-highlight">Letting a new member read the history</a><li><a href=#the-one-body-the-server-can-read-webhooks class="table-of-contents__link toc-highlight">The one body the server can read: webhooks</a><li><a href=#moments-sealed-with-the-audience-frozen class="table-of-contents__link toc-highlight">Moments: sealed, with the audience frozen</a><li><a href=#revocation class="table-of-contents__link toc-highlight">Revocation</a><li><a href=#pieces class="table-of-contents__link toc-highlight">Pieces</a><ul><li><a href=#e2ee-encrypted-attachment--blob-lifecycle class="table-of-contents__link toc-highlight">E2EE Encrypted Attachment & Blob Lifecycle</a><li><a href=#when-a-blob-is-collected class="table-of-contents__link toc-highlight">When a blob is collected</a></ul><li><a href=#forwarding class="table-of-contents__link toc-highlight">Forwarding</a><li><a href=#deliberate-leaks class="table-of-contents__link toc-highlight">Deliberate leaks</a><li><a href=#the-one-boundary-that-moved-password-recovery class="table-of-contents__link toc-highlight">The one boundary that moved: password recovery</a><ul><li><a href=#signing-in-without-a-secret class="table-of-contents__link toc-highlight">Signing in without a secret</a><li><a href=#approving-a-device class="table-of-contents__link toc-highlight">Approving a device</a></ul><li><a href=#safety-numbers class="table-of-contents__link toc-highlight">Safety numbers</a><ul><li><a href=#what-the-number-is-over class="table-of-contents__link toc-highlight">What the number is over</a><li><a href=#two-limits class="table-of-contents__link toc-highlight">Two limits</a></ul></ul></div></div></div></div></main></div></div></div><footer class="theme-layout-footer footer footer--dark"><div class="container container-fluid"><div class="row footer__links"><div class="theme-layout-footer-column col footer__col"><div class=footer__title>Docs</div><ul class="footer__items clean-list"><li class=footer__item><a class=footer__link-item href=/BetweenUs/architecture/overview>Architecture</a><li class=footer__item><a class=footer__link-item href=/BetweenUs/reference/overview>Code Reference</a><li class=footer__item><a class=footer__link-item href=/BetweenUs/running-locally>Running Locally</a><li class=footer__item><a class=footer__link-item href=/BetweenUs/database/schema>Database Schema</a></ul></div><div class="theme-layout-footer-column col footer__col"><div class=footer__title>Project</div><ul class="footer__items clean-list"><li class=footer__item><a href=https://github.com/aiyu-ayaan/BetweenUs/releases target=_blank rel="noopener noreferrer" class=footer__link-item>Download App<svg width=13.5 height=13.5 aria-label="(opens in new tab)" class=iconExternalLink_nPIU><use href=#theme-svg-external-link /></svg></a><li class=footer__item><a href=https://github.com/aiyu-ayaan/BetweenUs target=_blank rel="noopener noreferrer" class=footer__link-item>GitHub<svg width=13.5 height=13.5 aria-label="(opens in new tab)" class=iconExternalLink_nPIU><use href=#theme-svg-external-link /></svg></a><li class=footer__item><a class=footer__link-item href=/BetweenUs/changelog>Changelog</a></ul></div></div><div class="footer__bottom text--center"><div class=footer__copyright>Copyright © 2026 BetweenUs. Built with Docusaurus.</div></div></div></footer></div></body>
