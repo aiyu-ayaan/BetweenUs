@@ -28,28 +28,34 @@ data class BackupSecret(val value: String, val kind: String) {
 class MissingChannelKeyError : Exception("No channel key on this device yet")
 
 /**
- * There is no `Locked`. A device that cannot open the account backup mints a
- * key of its own and signs in anyway - see [E2ee.initIdentity] - so there is no
- * state in which the app is signed in and waiting to be told a secret. That
- * fork used to be permanent; it is provisional now, and every later sign-in
- * with a secret that opens the backup undoes it.
+ * Lifecycle state of this device's access to the account vault.
+ *
+ * Unlike v1 which minted provisional keys and caused permanent identity forks,
+ * a device that cannot unlock the vault enters [Locked] and refuses to write or
+ * fork identity.
  */
 sealed interface IdentityStatus {
     data object Absent : IdentityStatus
 
     /**
-     * `backedUp` is whether *this device's* key is the one in the backup.
-     *
-     * `provisional` is this device having minted its own because it could not
-     * open the account's - so it reads what arrives from now on, and history is
-     * still sealed to an identity it does not hold.
+     * The vault is open on this device.
+     * `recoverable` indicates whether a portable factor (password, passphrase,
+     * or recovery code) stands to recover history if all current devices are lost.
      */
-    data class Ready(val backedUp: Boolean, val provisional: Boolean = false) : IdentityStatus
+    data class Ready(val recoverable: Boolean) : IdentityStatus
 
     /**
-     * The owner revoked this machine from another one. Nothing new is wrapped
-     * for it, so it reads what it already had and nothing since - saying so
-     * beats a screen full of "no key on this device yet".
+     * This device cannot unlock the account vault yet. It displays unlock options
+     * (recovery code, passphrase, or request authorization grant from another active device).
+     */
+    data class Locked(
+        val reason: LockedReason,
+        val grantRequested: Boolean = false,
+        val fingerprint: String? = null,
+    ) : IdentityStatus
+
+    /**
+     * The owner revoked this machine from another device.
      */
     data object Revoked : IdentityStatus
 }

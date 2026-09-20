@@ -21,9 +21,12 @@ diagram placed next to the section it belongs to.
 ```mermaid
 erDiagram
     User ||--o{ RefreshToken : has
-    User ||--o{ DeviceKey : "has (E2EE identity)"
+    User ||--o{ DeviceKey : "has (E2EE device key)"
     User ||--o{ DeviceToken : "has (push)"
-    User ||--o{ IdentityBackup : "backs up identity to (one per secret kind)"
+    User ||--o| AccountVault : "holds identity keyring"
+    AccountVault ||--o{ AccountVaultFactor : "unlocked by"
+    User ||--o{ VaultGrantRequest : "device requests vault access"
+    User ||--o{ IdentityBackup : "v1 legacy backup"
     User ||--o{ UserIdentity : "links OAuth"
     User ||--o{ Friendship : "is party to"
     User ||--o{ UserBlock : "blocks / is blocked by"
@@ -117,25 +120,39 @@ Operator-configured provider credentials (Google/GitHub), one row per
 provider name, `clientSecret` sealed with AES-256-GCM.
 
 ### `DeviceKey`
-One row per **machine**, not per account — an ECDH P-256 public key (JWK).
-The private half never leaves that machine. A device can be revoked
-independently of the account's identity; a revoked row is kept (not
-deleted) so the trust history stays auditable, but nothing new is ever
-wrapped for it.
+One row per **machine** — an ECDH P-256 public key (JWK). The private half never leaves that machine.
+Used for device-level identity, revocations, and receiving vault grants. `grantedAt` records when this machine
+was granted access to the account vault master key. A revoked row is kept so the trust history stays auditable,
+but nothing new is ever wrapped or granted for it.
 
-### `IdentityBackup`
-The identity private key, sealed client-side (PBKDF2 over a password or
-passphrase the server never sees) so signing in on a second machine or
-reinstalling doesn't mean losing history. Unique on `(userId, kind)` — one per
-secret kind, not one per user, so setting a recovery passphrase no longer
-overwrites the password-sealed blob that a fresh sign-in is the only thing
-holding the secret for. The server stores opaque ciphertext it cannot open.
+### `AccountVault`
+The account's identity keyring, sealed under a 32-byte master key the server never sees.
+One row per account (`userId` unique). Stores `publicKey` (current generation ECDH P-256 public key),
+`generation` (increments by 1 on rotation), and `keyringCiphertext` (AES-256-GCM encrypted ring of all identity
+generations). Every channel key is wrapped to this account identity, ensuring history is preserved across all devices.
+
+### `AccountVaultFactor`
+The doors that unlock the account vault master key. Multiple rows per vault:
+- `password`: master key sealed using PBKDF2 derived from the account password.
+- `passphrase`: master key sealed using PBKDF2 derived from a user-chosen passphrase.
+- `recovery-code`: master key sealed using PBKDF2 derived from an auto-generated Crockford base32 code.
+- `device`: master key sealed using ECDH wrap to a specific trusted `DeviceKey`.
+
+At least one portable factor (`password`, `passphrase`, or `recovery-code`) must always remain standing.
+
+### `VaultGrantRequest`
+Ephemeral requests from a newly-enrolled (locked) device requesting a vault grant from an already-authorized
+device. Carries a 12-digit fingerprint computed directly from the requesting device's public key.
+
+### `IdentityBackup` *(Legacy)*
+The v1 per-machine identity backup. Retained so legacy clients or pre-vault accounts can be migrated and
+promoted to the account vault. Never written by v2 clients.
 
 ### `ChannelKey`
-A channel's symmetric content key, wrapped once per `(recipient user,
-recipient device)` pair using ECDH between the sender's device key and the
-recipient's. The server stores only ciphertext (`wrappedKey`) it cannot
-open. `epoch` increments when the channel's membership/key needs to rotate.
+A channel's symmetric content key (AES-256-GCM), wrapped once per member **account** (`recipientDeviceId` set to `@account`),
+sealed with the ECDH shared secret between the sender's identity and recipient's account vault identity.
+The server stores only ciphertext (`wrappedKey`). When membership changes, `epoch` increments. Legacy per-device
+rows are automatically promoted to account wraps upon client channel synchronization.
 
 ## Servers, roles, channels
 
@@ -337,18 +354,13 @@ came through it.
 
 ### `Attachment`
 Links a stored blob (`key`, the storage key) to the message that claims it.
-Neither foreign key cascades on delete — both go `null` instead, and a
-background sweeper collects blobs no message claims any more. This is the
-one piece of metadata the server does learn about an attachment: how many
-blobs, what size, belong to which message. The file's name, real type and
-contents stay sealed inside the encrypted manifest.
+Records explicit lifecycle stage in `state` (`AttachmentState`: `PENDING`, `LINKED`, `ORPHANED`) and `stateAt`.
+The file's name, real type and contents stay sealed inside the encrypted manifest.
 
-Deleting, burning or expiring a message purges its blobs **immediately**, in
-the same request. The sweeper stays behind that as the backstop for what the
-immediate purge could not reach — storage that was down, a process that died
-mid-delete, a row orphaned by somebody else's cascade. It used to be the only
-path, and "I deleted that photo" meaning "some time in the next six hours" is
-why it is not any more.
+Three mechanisms ensure storage stays clean and unreferenced blobs never accumulate:
+1. **Immediate purge**: Deleting, burning, or expiring a message marks the attachment `ORPHANED` and purges its blob immediately.
+2. **`AttachmentSweeper` (every 6h)**: Sweeps abandoned uploads (`PENDING` past grace period), blobs marked `ORPHANED`, and rows orphaned by cascades.
+3. **`StorageReconciler` (daily)**: Walks object storage directly to detect and collect orphaned blobs that have no database reference whatsoever (e.g., replaced avatars, abandoned moment uploads, interrupted sessions).
 
 ## Moments (statuses)
 

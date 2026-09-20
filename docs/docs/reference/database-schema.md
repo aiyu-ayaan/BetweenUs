@@ -52,6 +52,7 @@ model User {
   refreshTokens      RefreshToken[]
   deviceKeys         DeviceKey[]
   identityBackups    IdentityBackup[]
+  vault              AccountVault?
   friendshipsInitiated Friendship[]     @relation("FriendshipInitiator")
   friendshipsReceived  Friendship[]     @relation("FriendshipReceiver")
 }
@@ -163,20 +164,90 @@ model MessageAttachment {
 ## 4. Cryptographic Key Registry
 
 ```prisma
+model AccountVault {
+  id                String               @id @default(uuid())
+  userId            String               @unique
+  publicKey         String
+  generation        Int                  @default(1)
+  keyringIv         String
+  keyringCiphertext String
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  user              User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  factors           AccountVaultFactor[]
+
+  @@map("account_vaults")
+}
+
+model AccountVaultFactor {
+  id         String       @id @default(uuid())
+  vaultId    String
+  userId     String
+  kind       String
+  deviceId   String       @default("")
+  kdf        String
+  iterations Int          @default(0)
+  salt       String       @default("")
+  iv         String
+  ciphertext String
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  vault      AccountVault @relation(fields: [vaultId], references: [id], onDelete: Cascade)
+
+  @@unique([vaultId, kind, deviceId])
+  @@index([userId, kind])
+  @@map("account_vault_factors")
+}
+
+model VaultGrantRequest {
+  id          String    @id @default(uuid())
+  userId      String
+  deviceId    String
+  publicKey   String
+  fingerprint String
+  grantedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@unique([userId, deviceId])
+  @@map("vault_grant_requests")
+}
+
 model DeviceKey {
   id                 String    @id @default(uuid())
   userId             String
   deviceId           String
-  /// Long-term identity public key (Curve25519 / ECDH P-256).
-  identityKey        String
-  /// Ephemeral signed pre-key.
-  signedPreKey       String
-  signature          String
+  /// ECDH P-256 public key as serialized JWK.
+  publicKey          String
+  label              String?
+  revokedAt          DateTime?
+  grantedAt          DateTime?
+  lastSeenAt         DateTime  @default(now())
   createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, deviceId])
+  @@map("device_keys")
+}
+
+model ChannelKey {
+  id                 String   @id @default(uuid())
+  channelId          String
+  epoch              Int
+  recipientUserId    String
+  /// Set to '@account' for v2 account-scoped wraps.
+  recipientDeviceId  String
+  senderPublicKey    String
+  wrappedKey         String
+  iv                 String
+  createdAt          DateTime @default(now())
+
+  @@unique([channelId, epoch, recipientUserId, recipientDeviceId])
+  @@index([channelId, recipientUserId])
+  @@map("channel_keys")
 }
 
 model IdentityBackup {
@@ -192,5 +263,6 @@ model IdentityBackup {
   user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, secretKind])
+  @@map("identity_backups")
 }
 ```

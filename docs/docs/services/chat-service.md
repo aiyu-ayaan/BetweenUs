@@ -376,14 +376,25 @@ and `viewCount` differ per reader, so the tray is re-read rather than patched.
 
 | Method | Path | What it does |
 | --- | --- | --- |
-| POST | `/devices` | Register this machine's device key |
+| GET | `/vault` | Fetch caller's sealed account vault and active factor metadata |
+| POST | `/vault` | Create initial account vault with recovery code and primary factor |
+| POST | `/vault/rotate` | Append a new ECDH public key generation to the keyring |
+| PUT | `/vault/factors` | Add or update a factor (`password`, `passphrase`, `recovery-code`, `device`) |
+| DELETE | `/vault/factors/:kind` | Remove a factor (refuses deletion of last portable factor) |
+| POST | `/vault/grants/request` | Locked device requests vault grant authorization |
+| GET | `/vault/grants` | List pending vault grant requests for this account |
+| POST | `/vault/grants/:requestId/approve` | Authorize and seal master key for requesting device |
+| POST | `/vault/grants/:requestId/deny` | Deny and dismiss a grant request |
+| GET | `/channels` | List all channel IDs this account holds keys for (promotion sweep) |
+| GET | `/recipients?channelId=` | Get account recipient identity keys (`AccountKeyRecipient`) for a channel |
+| GET | `/keys/:channelId` | Fetch wrapped channel keys addressed to caller's account and devices |
+| POST | `/keys` | Publish account-scoped wrapped channel keys (`@account`) |
+| POST | `/devices` | Register this machine's device key (with optional `holdsVault` assertion) |
 | GET | `/devices/mine` | List my own devices |
 | DELETE | `/devices/:deviceId` | Revoke a device |
-| GET | `/backup` | Fetch the sealed identity backup |
-| PUT | `/backup` | Store/replace it |
-| GET | `/devices` | List another user's devices (for wrapping a new channel key) |
-| GET | `/keys/:channelId` | Fetch wrapped channel keys addressed to me |
-| POST | `/keys` | Publish newly-wrapped channel keys |
+| GET | `/backup` | *(Legacy)* Fetch v1 identity backup |
+| PUT | `/backup` | *(Legacy)* Store v1 identity backup |
+
 
 ## `/api/v1/uploads`
 
@@ -416,6 +427,14 @@ A client that gzipped an attachment before encrypting it sets `gzip` on the
 manifest entry, and **every** client must un-gzip on the way out. The desktop
 packs text-shaped types (text, JSON, XML, SVG) above 4 KB; a client that
 ignored the flag handed a deflate stream to its image decoder.
+
+### Storage Garbage Collection & Reconciliation
+
+Three automated passes ensure storage blobs never leak or remain unreferenced:
+- **Immediate purge**: When a message is deleted, burned, or expired, all claimed attachments are set to `ORPHANED` and deleted immediately from disk/S3.
+- **`AttachmentSweeper` (every 6 hours)**: Collects abandoned composer uploads (`PENDING` older than grace period), `ORPHANED` attachments, and rows where the message was deleted via database foreign key cascade (`LINKED` with `messageId = null`).
+- **`StorageReconciler` (daily)**: Walks object storage (`StorageDriver.list()`) directly to identify and delete blobs that have no corresponding database row whatsoever (e.g. replaced avatars, abandoned moment drafts, interrupted uploads older than 7-day grace).
+
 
 A message may carry `MAX_ATTACHMENTS_PER_MESSAGE` (10) files. The cap is a
 client one, enforced in the picker on every platform where it can be explained,

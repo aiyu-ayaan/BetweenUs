@@ -4,7 +4,7 @@ sidebar_position: 2
 
 # End-to-End Encryption
 
-Full source: [`development/E2EE.md`](https://github.com/aiyu-ayaan/BetweenUs/blob/master/development/E2EE.md).
+Full source: [`development/devdocs/E2EE.md`](https://github.com/aiyu-ayaan/BetweenUs/blob/master/development/devdocs/E2EE.md).
 
 ## Threat model
 
@@ -18,111 +18,149 @@ read in the first place.
 metadata — the server still knows who wrote to which channel and when, and
 how big each message was.
 
-## One key per machine
+## One identity per account — not one per machine
 
-A channel's symmetric AES-256-GCM key is wrapped once per **device**, not
-once per account (`ChannelKey`, one row per `(channel, epoch, recipient
-user, recipient device)`). That's what lets a single device be revoked
-without rotating an identity every other machine is also using — and what
-lets "who can open this channel" be answered by the wrap table directly.
+A channel's symmetric AES-256-GCM key is wrapped once per **account**
+(`ChannelKey`, one row per `(channel, epoch, recipient user)`, filed under
+the recipient id `@account`). Every device you sign in on opens the same
+row, so your whole history is there the moment you sign in — with no other
+device online, and nothing to wait for.
+
+This is the most important thing on this page, and it is worth saying what
+it replaced, because the previous design lost people's conversations.
+
+### What went wrong before
+
+Keys used to be wrapped per **device**. Three things followed:
+
+1. A device that did not exist when a key generation was created held
+   nothing for it.
+2. The only thing in the world that could seal one for it was another
+   device that *already* held that generation. So history arrived — if it
+   arrived — whenever one of your other machines next opened that channel.
+3. **If no such machine ever came online again, those messages were gone.**
+   Not delayed. A reinstall, a wiped laptop, a phone you revoked, a
+   single-device account starting over: the only key that opened those
+   messages ceased to exist, and the server had never held one.
+
+There was a fourth, worse case. A device that could not open the account
+backup would quietly generate an identity of its own and carry on looking
+normal — so one account ended up with several identities, each able to read
+a different slice of its own history. What you saw was an empty channel and
+a line suggesting you open the app on the device you first signed in with,
+which was advice about a machine that might no longer exist.
+
+### The account vault
 
 ```mermaid
 flowchart TD
-    %% TIER 1: SIGN IN & DEVICE IDENTITY CHECK
-    subgraph T_IDENTITY ["Trust Boundary 1: Local Device Keystore (safeStorage)"]
+    subgraph T_DOORS ["Four independent ways in — each seals the same master key"]
         direction TB
-        SignIn["<b>User Signs In</b>"]
-        HasKey{"<b>Identity Key Found<br/>in OS Keychain?</b>"}
-        UseKey["<b>Use Local Identity Key</b><br/><i>(ECDH P-256 Keypair)</i>"]
-        Provisional{"<b>Marked Provisional?</b><br/><i>(minted while a backup existed)</i>"}
-        SignIn --> HasKey
-        HasKey -->|"Yes"| Provisional
-        Provisional -->|"No"| UseKey
+        Code["<b>Recovery code</b><br/><i>130 bits, shown once at sign-up</i>"]
+        Password["<b>Account password</b><br/><i>PBKDF2-SHA256, 600k rounds</i>"]
+        Passphrase["<b>Recovery passphrase</b><br/><i>never sent anywhere</i>"]
+        Grant["<b>Device grant</b><br/><i>sealed to one machine by another</i>"]
     end
 
-    %% TIER 2: BACKUP & RECOVERY CLUSTER
-    subgraph T_BACKUP ["Trust Boundary 2: Remote Encrypted Key Backup"]
-        direction TB
-        GetBackup["<b>GET /api/v1/e2ee/backup</b>"]
-        BackupExists{"<b>Encrypted Backup Exists?</b>"}
-        OpenBackup["<b>Decrypt Backup with Password</b><br/><i>(PBKDF2 + AES-256-GCM)</i>"]
-        GenOwnKey["<b>Generate New Device Keypair</b><br/><i>Mark PROVISIONAL, preserve remote backup</i>"]
-        GenBackup["<b>Generate Key & PUT /api/v1/e2ee/backup</b>"]
+    Master["<b>Account master key</b><br/><i>32 random bytes — the server never sees it</i>"]
+    Keyring["<b>Identity keyring</b><br/><i>one ECDH P-256 pair per generation<br/>rotation appends, never replaces</i>"]
 
-        HasKey -->|"No"| GetBackup
-        Provisional -->|"Yes, and a secret is at hand"| GetBackup
-        Provisional -->|"Yes, no secret"| UseKey
-        GetBackup --> BackupExists
-        BackupExists -->|"Yes (Secret Matches)"| OpenBackup --> UseKey
-        BackupExists -->|"Yes (No Secret)"| GenOwnKey
-        BackupExists -->|"No Backup"| GenBackup --> UseKey
+    Code --> Master
+    Password --> Master
+    Passphrase --> Master
+    Grant --> Master
+    Master ==> Keyring
+
+    subgraph T_CHANNEL ["What that opens"]
+        direction TB
+        Keys["<b>Every wrapped channel key<br/>addressed to this account</b>"]
+        History["<b>The whole history</b><br/><i>including channels older than this device</i>"]
+        Keyring ==> Keys ==> History
     end
 
-    %% TIER 3: DEVICE REGISTRY & DIRECTORY
-    subgraph T_DIR ["Trust Boundary 3: E2EE Key Directory (Server-Side)"]
-        direction TB
-        PublishDevice["<b>POST /api/v1/e2ee/devices</b><br/><i>Publish Public Key Bundle (P-256)</i>"]
-        OpenChannel["<b>Client Opens Encrypted Channel</b>"]
-        GetChannelKeys["<b>GET /api/v1/e2ee/keys/:channelId</b>"]
-        HasEpoch{"<b>Active Channel Epoch Key Present?</b>"}
-
-        UseKey ==> PublishDevice
-        GenOwnKey ==> PublishDevice
-        PublishDevice --> OpenChannel --> GetChannelKeys --> HasEpoch
-    end
-
-    %% TIER 4: CHANNEL KEY DISTRIBUTION
-    subgraph T_WRAP ["Trust Boundary 4: Channel Key Wrapping & Resealing"]
-        direction TB
-        NewEpoch["<b>Generate Channel AES-256 Key</b><br/><i>Seal per member device public key & POST /keys</i>"]
-        ResealEpoch["<b>Request Resealing from Peer Device</b><br/><i>Existing device re-encrypts epoch for new device</i>"]
-        Ready["<b>Channel E2EE Session Ready</b><br/><i>Zero Plaintext on Server</i>"]
-
-        HasEpoch -->|"No (New Channel)"| NewEpoch --> Ready
-        HasEpoch -->|"Missing on this device"| ResealEpoch --> Ready
-        HasEpoch -->|"Yes (Epoch cached)"| Ready
-    end
-
-    %% Styling
-    classDef primary fill:#1e40af,stroke:#60a5fa,stroke-width:2px,color:#ffffff;
-    classDef decision fill:#0f172a,stroke:#38bdf8,stroke-width:2px,color:#f8fafc;
+    classDef door fill:#1e40af,stroke:#60a5fa,stroke-width:2px,color:#ffffff;
+    classDef core fill:#0f172a,stroke:#38bdf8,stroke-width:2px,color:#f8fafc;
     classDef ready fill:#14532d,stroke:#22c55e,stroke-width:2px,color:#ffffff;
 
-    class SignIn,UseKey,PublishDevice,OpenChannel,GetChannelKeys,NewEpoch,ResealEpoch primary;
-    class HasKey,BackupExists,HasEpoch decision;
-    class Ready ready;
+    class Code,Password,Passphrase,Grant door;
+    class Master,Keyring,Keys core;
+    class History ready;
 ```
 
-## Repairing a second device — without over-sharing
+**Your account has an identity, and your devices open it.** The identity is
+a *keyring* rather than a single key — rotating it after losing a laptop
+adds a generation and leaves every earlier one in place, so nothing already
+sealed ever stops opening.
 
-`GET /api/v1/e2ee/keys/:channelId` answers two questions: who's missing the
-**current** epoch (keeps the next message readable), and who's missing
-**any** epoch their owner already holds on another machine (lets a phone
-signed in today read history from before it existed). The second is
-deliberately bounded — "their owner already holds it" — so a new device
-only ever recovers access the same person already has elsewhere, never a
-year of history handed to someone who joined yesterday.
+**Every account gets a recovery code at sign-up, shown once.** It is not
+derived from your password, so a password reset does not touch it; it is
+not on any of your devices, so losing them does not touch it. It is the
+reason the answer to "I lost everything" is now a code on a piece of paper
+rather than an apology. The server refuses to let you remove your last
+portable way in.
+
+### Signing in on a new device
+
+Whichever of these happens, the outcome is the same: your history is there.
+
+- **With your password** — the vault opens with nothing extra typed.
+- **With your recovery code or passphrase** — typed once on the unlock
+  screen. Needs no other device.
+- **By approving it from a device already signed in** — the two screens
+  show the same fingerprint, you check they match, and you tap approve.
+
+### A device that cannot get in is locked, not broken
+
+If a device can open none of those — a provider sign-in with no password, a
+launch from a stored session — it says so and stops. It does **not** invent
+an identity, mint keys, or write anything, so nothing about the state is
+one-way. It draws one screen with all three ways in on it, and comes to
+life the moment you use any of them.
+
+### Messages written under the old design
+
+Those keys are sealed to one installation and only that installation can
+open them. So it re-seals them to your account — on every channel it opens,
+and once across every channel each time you sign in, because that window
+closes if the device is ever wiped. After that the conversation is readable
+from every device you own, including ones you have not set up yet.
+
+**Honestly stated**: a generation whose only key went with a machine that
+no longer exists cannot be recovered — not by you, not by the operator, not
+by anybody. `GET /api/v1/e2ee/health` reports those rather than drawing
+padlocks and implying somebody is coming.
+
+## Repairing access — without over-sharing
+
+`GET /api/v1/e2ee/keys/:channelId` answers three questions: who is missing
+the **current** generation (the sender clears that list *before* it seals,
+so a message is never written under a key a member cannot open), which
+earlier generations a member was deliberately let in on, and which
+generations this device still holds only in the old per-device form and
+should re-seal to its account.
+
+Repairing somebody's *own* second device is no longer one of them. There is
+nothing to repair: it opens the same row the first device does.
 
 ## Letting a new member read the history
 
-The one deliberate exception to that bound, and it is a decision somebody
-makes rather than a default. Adding a member (`POST
-/api/v1/servers/:serverId/members`) takes `shareHistory`, which is stored on
-`server_members.historyShared` and is `false` unless asked for.
+The one deliberate exception, and it is a decision somebody makes rather
+than a default. Adding a member (`POST /api/v1/servers/:serverId/members`)
+takes `shareHistory`, which is stored on `server_members.historyShared` and
+is `false` unless asked for.
 
-With it set, the gap list above stops asking whether that member already
-holds an epoch and offers their devices **every** epoch of every channel in
-the server. The server still hands over nothing itself — it holds no key —
-and the publish rules are unchanged: a caller may only add entries to an
-epoch it already holds. So the history opens the first time a machine that
-holds those keys opens the channel, not the moment the member is added.
-An account whose fellow members are all offline waits until one is back.
+With it set, the gap list offers that member **every** generation of every
+channel in the server. The server still hands over nothing itself — it
+holds no key — and the publish rules are unchanged: a caller may only add
+entries to a generation it already holds. So the history opens the first
+time a member who holds those keys opens the channel, not the moment the
+new member is added.
 
-Clearing the flag takes nothing back. A key that has been sealed for a
-device has been sealed.
+Clearing the flag takes nothing back. A key that has been sealed for an
+account has been sealed.
 
-Without it, the default stands: a newcomer mints the next epoch, reads from
-the moment they arrive, and everything before that stays a padlock.
+Without it, the default stands: a newcomer reads from the moment they
+arrive, and everything before that stays a padlock.
 
 ## The one body the server can read: webhooks
 
@@ -167,13 +205,12 @@ who becomes your friend tomorrow does not get shown what you posted today.
 
 How it works, whole:
 
-1. Before posting, the client reads `GET /api/v1/statuses/audience` — every
-   device of every friend it may post to right now, plus its own, with revoked
-   machines already filtered out.
+1. Before posting, the client reads `GET /api/v1/statuses/audience/accounts` —
+   every friend it may post to right now, plus its own account.
 2. It mints one AES-256-GCM key for the post, seals the caption as an
    `EncryptedEnvelope` and the file as ciphertext under it.
-3. It wraps that key once per device, by the same ECDH → HKDF → AES-GCM wrap a
-   channel key uses, and posts the bundle with the ciphertext.
+3. It wraps that key once per **account**, by the same ECDH → HKDF → AES-GCM
+   wrap a channel key uses, and posts the bundle with the ciphertext.
 4. The server writes one `status_keys` row per wrap. That table **is** the
    audience: no row, no key, nothing to read.
 
@@ -189,10 +226,15 @@ the post landing.
 
 What this costs, said plainly:
 
-- A machine that signs in after a post was written cannot open it. Its key was
-  wrapped for the machines you had at the time, and there is no gap-filling for
-  moments the way there is for channel epochs — the post expires before the
-  repair would be worth having.
+- Somebody who becomes your friend after a post was written cannot open it.
+  That is the design rather than a cost: the audience is frozen when the post
+  is written, which is what every app with this feature does.
+
+  A *device* signed in after the post used to be in the same position, and
+  that one was a bug — a day-long version of the problem that lost whole
+  conversations. The wrap is per account now, so a moment opens on whichever
+  of your devices you happen to pick up, including one you set up an hour
+  after it was posted.
 - Whether somebody posted, when, how long a video runs and what colour a text
   post is drawn on stay in the clear: the server times the sweep with them, and
   the clients draw the tray with them.
@@ -210,26 +252,42 @@ cannot be told by the body.
 
 ## Revocation
 
-Deletes the wraps addressed to that device and refuses to seal for it
-again; the row itself stays, because "when a machine stopped being trusted"
-is the only thing anyone can audit afterwards. Every channel that device
-could read is marked stale and re-keys. Registering a revoked device id
-again is refused rather than silently un-revoking — the machine asking is
-running the same code that would let it un-revoke itself.
+Revoking a device stops it being granted the vault again and takes it out
+of the directory. The row itself stays, because "when a machine stopped
+being trusted" is the only thing anyone can audit afterwards. Registering a
+revoked device id again is refused rather than silently un-revoking — the
+machine asking is running the same code that would let it un-revoke itself.
 
-What revocation does **not** do: reach what the device already decrypted,
-or stop a still-logged-in session from continuing (that's what ending the
-session is for — two different actions, both needed).
+What revocation deliberately does **not** do is delete the account's
+wrapped channel keys. They are addressed to the account, not to the
+machine, so deleting them would lock you out of your own history.
+
+So closing the door on a lost device is **two actions**, and the app offers
+them together:
+
+1. **Revoke the device.** It stops being sealed for and loses its standing.
+2. **Rotate your account identity.** A new generation is added to the
+   keyring, so everything sealed from now on is sealed to a public half
+   that device's grant does not open. Nothing already sealed stops
+   opening — that is what the keyring is for.
+
+What neither does: reach what the device already decrypted, or stop a
+still-logged-in session from continuing. Ending the session is a third
+action and is also needed.
 
 ## Pieces
 
 | Piece | Where it lives | Who can read it |
 | --- | --- | --- |
-| Device identity key (ECDH P-256) | Private half sealed in the OS keychain, per machine | That machine |
+| Account master key (32 bytes) | In memory, and each unlocked device's keychain | Whoever can open any one vault door |
+| Account identity keyring | `account_vaults`, sealed under the master key | The same |
+| Vault doors, one row each | `account_vault_factors` | Each opens for one secret, or one machine |
+| Account identity public key | `account_vaults.publicKey` | Everyone — it is what others wrap to |
+| Device identity key (ECDH P-256) | Private half sealed in the OS keychain, per machine | That machine. Receives vault grants and opens pre-vault keys; **not** what channel keys are addressed to |
 | Device public keys | `device_keys` table | Everyone in the server |
-| Sealed identity backup, one per secret kind | `identity_backups` table | Whoever knows the account password or a recovery passphrase |
+| Sealed identity backup *(legacy)* | `identity_backups` table | Whoever knows the account password or a recovery passphrase. Read so older clients still sign in; nothing writes one |
 | Channel key (AES-256-GCM) | In memory on member devices | Channel members |
-| Wrapped channel key | `channel_keys` table | Only the device it was sealed for |
+| Wrapped channel key | `channel_keys` table, one row per member **account** | Only the account it was sealed for |
 | Message body | `messages.content` | Channel members |
 | Attachment bytes | Object storage | Channel members (session to fetch, channel key to read) |
 | Voice/video media | DTLS-SRTP, direct between peers | The two people on that connection |
@@ -270,6 +328,39 @@ sequenceDiagram
     Recipient->>Recipient: Decrypt Attachment Blob Locally with Manifest Key
 ```
 
+### When a blob is collected
+
+Three passes, answering three different questions. They are separate on
+purpose: conflating them is how objects came to sit in storage that nothing
+would ever name again.
+
+| Pass | When | What it collects |
+| --- | --- | --- |
+| Immediate purge | The moment a message is deleted, burned or expires | The blobs that message named. The rows are marked first, so a storage outage mid-delete is finished by the sweep rather than lost |
+| `AttachmentSweeper` | Every six hours | Uploads nobody ever sent (past their grace), blobs whose message is gone, and rows orphaned by a cascade that runs no application code |
+| `StorageReconciler` | Daily | **Objects with no database row at all** |
+
+The third is the one worth explaining. Every other pass starts from a row
+and asks whether its object should go — so an object that *no* row named
+was invisible to all of them. Not kept deliberately: unreachable. No query
+could produce its key, so no code could produce its delete.
+
+A replaced avatar or server icon, a photo picked for a moment that was
+never posted, an upload whose bookkeeping lost a race with a dying process,
+a half-finished multi-part upload: each left bytes behind indefinitely.
+The reconciler walks the store itself and removes what nothing points at.
+
+Two rules keep it from becoming the problem it solves. It reads every
+reference **first**, so a failed database query deletes nothing rather than
+emptying the bucket. And it leaves anything younger than a week alone,
+because an object is always written *before* the row that names it —
+collecting a young orphan would delete a file somebody was in the middle of
+sending.
+
+One thing it cannot collect: ciphertext whose key is gone. A message row
+still references it, and the server cannot tell a message nobody *can* read
+from one nobody *has* read.
+
 ## Forwarding
 
 A forwarded message is a **new message, not a pointer to the original**. It has
@@ -308,54 +399,47 @@ with an ordinary envelope, and there is no endpoint for it.
   tag can't carry an authorization header, and a member list renders them
   for people who hold no channel key at all.
 
-## Identity backup: the one boundary that moved
+## The one boundary that moved: password recovery
 
-The backup is sealed with a key derived from the account password, and the
-password is something a *live* server sees at sign-in. So a **stolen
-database opens nothing** (passwords are bcrypt-hashed, the backup is
-ciphertext), but a **compromised running server** could capture a password
-in use and open that user's backup afterward. Anyone whose threat model
-includes the running deployment should set a recovery passphrase instead —
-it is never sent anywhere in any form.
+The `password` door is sealed with a key derived from your account
+password, and the password is something a *live* server sees at sign-in. So
+a **stolen database opens nothing** (passwords are bcrypt-hashed, every
+door is ciphertext), but a **compromised running server** could capture a
+password in use and open that account's vault afterwards.
 
-An account holds **one backup per secret kind**, not one in total. Setting a
-recovery passphrase used to overwrite the password-sealed blob, and that blob is
-the only one a fresh sign-in holds the secret for — the password is in hand at
-that moment and nothing else is. Losing it meant every later sign-in on a new
-device fell into the fork below and stayed there. The passphrase now sits beside
-the password backup, and the switch that turns password recovery off is a
-deliberate choice on the same screen rather than a side effect.
+Anyone whose threat model includes the running deployment should turn the
+password door off. That is safe to do now in a way it was not before: every
+account is created with a recovery code, so removing the password door
+leaves one standing by construction — and the server refuses the removal if
+it would not.
 
-### Signing in without the secret
+### Signing in without a secret
 
-A sign-in that cannot open the backup is not stopped and is never asked for a
-secret. A launch from a stored token has no password to hand, and an account
-that has only ever signed in with GitHub or Google has no password *at all* —
-so the machine generates a key pair of its own and carries on.
+A sign-in that carries no secret — a launch from a stored session, or an
+account that has only ever signed in with GitHub or Google and has no
+password at all — leaves the device **locked** rather than improvising.
 
-Two properties make that safe rather than lossy:
+It generates nothing, publishes nothing, and writes nothing. It shows one
+screen with three ways in: type the recovery code, type a passphrase, or
+approve the device from one already signed in. The moment any of them
+succeeds, the whole history is there.
 
-- The machine leaves the backup exactly as it found it. Promoting a
-  self-minted key to the account's backup would lock out every machine still
-  restoring from the real one, so only a deliberate "set a recovery
-  passphrase" (or a password change) ever replaces it.
-- `channel_keys` is addressed per `recipientDeviceId`, so the new machine
-  publishes its own public half under its own device id and takes nothing away
-  from the rows already sealed for the others.
-- The self-minted key is **marked provisional** whenever the account had a
-  backup this machine could not open, and the next sign-in carrying a secret
-  tries the backup again rather than short-circuiting on it. Unmarked, that key
-  ended the story: a device signed in with the correct account password read
-  every message the account had ever been sent as a padlock, for the life of the
-  install, and nothing on screen said why.
+This is the part that changed, and it changed because the old behaviour
+lost data. Such a device used to generate an identity of its own and carry
+on looking normal — so the account had two identities, the new one could
+read nothing already sealed for the old one, and it would go on to create
+new keys that the *rest* of the account could not read either. What the
+person saw was a screen of padlocks and a suggestion to open the app on
+their previous device.
 
-The cost is that history is not instant there. It reads what arrives from now
-on, and older conversations fill in as the account's other machines open them —
-the same "repairing a second device" path above. Supplying the secret (signing
-in with the account password, or setting a recovery passphrase) restores the
-account key outright and is the only instant path — and, because the key was
-marked, signing in with the password later works just as well as signing in with
-it first.
+### Approving a device
+
+Approving seals your account's master key to whatever public key that
+request carries, so the fingerprint comparison is the whole of the
+security, not a formality. Both screens show the same twelve digits; the
+approving device recomputes them from the key it is about to seal for
+rather than trusting the number that arrived with the request. If they do
+not match, somebody else is asking.
 
 ## Safety numbers
 
