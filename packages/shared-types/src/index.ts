@@ -1468,13 +1468,20 @@ export interface StatusReactionSummary {
 }
 
 /**
- * One post's key, sealed for one device.
+ * One post's key, sealed for one recipient.
  *
  * The same shape as a `ChannelKeyEntry` minus the epoch - a status has exactly
  * one key and never rotates, because it is gone in a day.
+ *
+ * `recipientDeviceId` is `ACCOUNT_SCOPE` for everything a v2 client posts, so
+ * a moment opens on whichever machine the reader happens to pick up. It used
+ * to be one row per machine of every friend, which meant a post was invisible
+ * on a phone somebody signed in on after it was written - a day-long version
+ * of the same bug that lost whole conversations, and fixed by the same change.
  */
 export interface StatusKeyEntry {
   recipientUserId: string;
+  /** `ACCOUNT_SCOPE`, or a machine's id for a wrap a v1 client wrote. */
   recipientDeviceId: string;
   /** The author's ECDH public key (JWK): the recipient derives against it. */
   senderPublicKey: string;
@@ -2006,14 +2013,242 @@ export interface EncryptedEnvelope {
   ct: string;
 }
 
+// --- End-to-end encryption: the account vault (v2) ---------------------------
+//
+// The one structural fact everything below rests on: **a channel key is sealed
+// for an account, not for a machine.**
+//
+// v1 sealed it per device, and that is where every lost conversation came
+// from. A wrap addressed to a laptop is openable by that laptop and by nothing
+// else - so a phone that signs in tomorrow holds no wrap for anything written
+// before it existed, and the only thing in the world that can write one is a
+// machine that already holds the epoch. If that machine is reinstalled, wiped,
+// revoked or simply never opened again, those messages are ciphertext nobody
+// will ever read, and their attachments are bytes nobody will ever fetch. The
+// server cannot help: it has never held a key.
+//
+// v2 removes the class of failure rather than shortening the window. The
+// account holds one long-lived identity keyring; every channel key is wrapped
+// to it once; and the keyring is reachable from any machine through the vault
+// below. A new device is then a *reader* of history rather than a claimant on
+// it, and "open the app on your other laptop" stops being a thing anybody is
+// told.
+
+/**
+ * The recipient id that means "the account itself" rather than one machine.
+ *
+ * `channel_keys` and `status_keys` are still keyed on a recipient device, so
+ * this is what an account-scoped wrap is stored under: one row per member per
+ * epoch, openable by every machine that can unlock the vault. A client-minted
+ * device id may never begin with `@` - the DTOs refuse it - so this cannot be
+ * impersonated by a machine claiming to be the account.
+ */
+export const ACCOUNT_SCOPE = '@account';
+
+/**
+ * Whether a device id names a machine or the account it belongs to.
+ *
+ * One function rather than a comparison spelled out at each call site: the
+ * distinction decides who can open a wrap, and a typo in it is a silent
+ * downgrade back to v1 behaviour.
+ */
+export function isAccountScope(deviceId: string): boolean {
+  return deviceId === ACCOUNT_SCOPE;
+}
+
+/** A device id a client may mint. Anything in the `@` namespace is reserved. */
+export function isClientDeviceId(deviceId: string): boolean {
+  return deviceId.length > 0 && !deviceId.startsWith('@');
+}
+
+/**
+ * One way into the vault.
+ *
+ * Every factor seals the *same* account master key, independently. That is the
+ * whole shape of the recovery story: doors are added and removed without ever
+ * touching what is behind them, and losing one costs nothing as long as
+ * another stands.
+ *
+ * - `password` — derived from the account password, so an ordinary sign-in
+ *   opens the vault with nothing extra typed. A live server sees the password
+ *   at sign-in, so anybody whose threat model includes the running deployment
+ *   should turn it off and keep a passphrase instead.
+ * - `passphrase` — a secret the user chose, never sent anywhere in any form.
+ * - `recovery-code` — a code minted once, shown once, and printable. It is the
+ *   factor that exists so that an account can *always* get back in: it is not
+ *   derived from anything the user can change, forget on a password reset, or
+ *   lose with a machine.
+ * - `device` — the master key sealed to one machine's public key by a machine
+ *   that already holds it. This is how a provider account with no password and
+ *   no passphrase brings a second device in, and how "approve from your phone"
+ *   works.
+ */
+export type VaultFactorKind = 'password' | 'passphrase' | 'recovery-code' | 'device';
+
+/**
+ * A factor that is a secret in somebody's head or on a piece of paper, as
+ * opposed to one sealed to a machine.
+ *
+ * The distinction is load-bearing and the server enforces it: an account whose
+ * only factors are `device` ones is an account that is one wipe away from
+ * losing everything, which is the exact failure v2 exists to remove. At least
+ * one of these must always stand.
+ */
+export type PortableFactorKind = Exclude<VaultFactorKind, 'device'>;
+
+export const PORTABLE_FACTOR_KINDS: readonly PortableFactorKind[] = [
+  'password',
+  'passphrase',
+  'recovery-code',
+];
+
+export function isPortableFactor(kind: VaultFactorKind): kind is PortableFactorKind {
+  return kind !== 'device';
+}
+
+/**
+ * The account master key, sealed one way.
+ *
+ * `kdf` says how the sealing key was reached. `PBKDF2-SHA256` is a secret the
+ * user supplies; `ECDH-HKDF-SHA256` is the device factor, where the sealing key
+ * comes from the approving machine's account key and the new machine's device
+ * key, so no secret is typed at all.
+ */
+export interface VaultFactor {
+  v: 1;
+  kind: VaultFactorKind;
+  /**
+   * Which machine a `device` factor is addressed to. Empty for every other
+   * kind, because a secret in somebody's head is not addressed to anything.
+   */
+  deviceId: string;
+  kdf: 'PBKDF2-SHA256' | 'ECDH-HKDF-SHA256';
+  /** PBKDF2 rounds. Zero for the ECDH factor, which has no iteration count. */
+  iterations: number;
+  /** Base64 KDF salt (16 bytes). Empty for the ECDH factor. */
+  salt: string;
+  /** Base64 AES-GCM nonce (12 bytes). */
+  iv: string;
+  /** Base64 AES-GCM ciphertext of the 32-byte account master key, with tag. */
+  ct: string;
+  /**
+   * The approving machine's account public key, for a `device` factor: the new
+   * machine derives the same shared secret from it and its own private half.
+   * Empty for the password-shaped kinds.
+   */
+  senderPublicKey: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/**
+ * The identity keyring, sealed under the account master key.
+ *
+ * A *ring* rather than a key, and that is what makes rotation safe. Rotating
+ * the account identity after a lost machine appends a generation and leaves
+ * every earlier one in place, so keys wrapped to the old public half keep
+ * opening. v1 had no answer here at all: rotating an identity meant abandoning
+ * every `channel_keys` row sealed for it, which is to say abandoning the
+ * history.
+ */
+export interface SealedKeyring {
+  v: 1;
+  /** Base64 AES-GCM nonce (12 bytes). */
+  iv: string;
+  /**
+   * Base64 AES-GCM ciphertext of the JSON keyring, with tag. Opened, it is an
+   * array of `{ generation, publicKey, privateKey }`, newest generation last.
+   */
+  ct: string;
+}
+
+/**
+ * What a client gets back when it asks for the vault.
+ *
+ * `publicKey` is in the clear because it is public by definition: it is what
+ * everybody else wraps channel keys to. Everything else here is ciphertext the
+ * server has no key for.
+ */
+export interface AccountVaultResponse {
+  /**
+   * Null for an account that has never set one up - the first machine mints
+   * it. Distinguishing this from a failed request is the single most
+   * destructive thing a client can get wrong, which is why it is an explicit
+   * null rather than an empty object.
+   */
+  vault: {
+    /** Current account identity public key, ECDH P-256 as JWK JSON. */
+    publicKey: string;
+    /** Which generation `publicKey` is. Starts at 1. */
+    generation: number;
+    keyring: SealedKeyring;
+    factors: VaultFactor[];
+    createdAt: string;
+    updatedAt: string;
+  } | null;
+}
+
+/** Creates the vault. Refused when one already exists - use the factor routes. */
+export interface CreateVaultRequest {
+  publicKey: string;
+  keyring: SealedKeyring;
+  /**
+   * The doors to open it with, at least one of which must be portable. An
+   * account cannot be created into a state it can only escape from with a
+   * machine it still has.
+   */
+  factors: Array<Omit<VaultFactor, 'createdAt' | 'updatedAt'>>;
+}
+
+/**
+ * Replaces the sealed keyring, for a rotation that appended a generation.
+ *
+ * `publicKey` moves with it; `generation` must be exactly the next one, which
+ * is the same no-jumping rule a channel epoch has and for the same reason.
+ */
+export interface RotateVaultRequest {
+  publicKey: string;
+  generation: number;
+  keyring: SealedKeyring;
+}
+
+/** Adds or replaces one door. Replacing is keyed on `kind` plus `deviceId`. */
+export type PutVaultFactorRequest = Omit<VaultFactor, 'createdAt' | 'updatedAt'>;
+
+/**
+ * A machine asking to be let in, because it holds no portable secret.
+ *
+ * The request carries nothing secret: a device id, that machine's public key,
+ * and a label. What makes it safe is that approving it seals the master key to
+ * *that public key*, and the two people compare the fingerprint out of band
+ * before anybody presses the button.
+ */
+export interface VaultGrantRequest {
+  deviceId: string;
+  publicKey: string;
+  label: string | null;
+  /**
+   * A short human-readable digest of `publicKey`, computed identically on both
+   * machines. It exists to be read aloud, not to be trusted from the wire: the
+   * approving client recomputes it from the key it is about to seal for.
+   */
+  fingerprint: string;
+  requestedAt: string;
+}
+
+export interface VaultGrantsResponse {
+  /** Machines of this account waiting to be let in. Never anybody else's. */
+  requests: VaultGrantRequest[];
+}
+
 /** A user's published ECDH P-256 public key, JWK-serialised. */
 /**
  * One machine's public identity key.
  *
- * A list per user rather than one key per account. The single key was copied to
- * every machine the account signed in on, which made "revoke this laptop" mean
- * "rotate the identity every other machine is also using" - so nobody could,
- * and a key that cannot be revoked is a key that is trusted forever.
+ * Still one row per machine, and it still does two jobs: it is what a `device`
+ * vault factor is sealed to, and it is what revocation acts on. What it is no
+ * longer is the thing channel keys are addressed to - see {@link ACCOUNT_SCOPE}
+ * and the note at the top of this section.
  */
 export interface DeviceKey {
   userId: string;
@@ -2024,6 +2259,13 @@ export interface DeviceKey {
   label: string | null;
   /** Set once the owner revoked it. Nothing is ever wrapped for a revoked device. */
   revokedAt: string | null;
+  /**
+   * When this machine was given the master key, or null while it is still
+   * waiting. A machine with no grant can publish its public key and read
+   * nothing, which is the state v2 puts an unrecoverable device in instead of
+   * letting it mint an identity of its own.
+   */
+  grantedAt: string | null;
   lastSeenAt: string;
   createdAt: string;
 }
@@ -2034,10 +2276,16 @@ export interface RegisterDeviceKeyRequest {
   label?: string;
 }
 
-/** One channel key sealed for one device. */
+/**
+ * One channel key sealed for one recipient.
+ *
+ * `recipientDeviceId` is {@link ACCOUNT_SCOPE} for everything written by a v2
+ * client, and a machine's device id only for rows v1 left behind. Both are
+ * served; only the first is ever written now.
+ */
 export interface ChannelKeyEntry {
   recipientUserId: string;
-  /** Which of that user's devices this copy is for. */
+  /** {@link ACCOUNT_SCOPE}, or a machine's id for a legacy v1 row. */
   recipientDeviceId: string;
   senderUserId: string;
   senderDeviceId: string;
@@ -2055,6 +2303,22 @@ export interface PublishChannelKeysRequest {
   entries: Array<Omit<ChannelKeyEntry, 'senderUserId' | 'senderDeviceId'>>;
 }
 
+/**
+ * Somebody a channel key has to be wrapped for: an account and the public half
+ * of its identity keyring.
+ *
+ * One entry per member, where v1 had one per machine. The fanout a client does
+ * when it keys a channel is now the size of the membership and stays there,
+ * however many phones and laptops those people sign in on.
+ */
+export interface AccountKeyRecipient {
+  userId: string;
+  /** The account's current identity public key, ECDH P-256 as JWK. */
+  publicKey: string;
+  /** Which generation that key is, so a stale directory read is detectable. */
+  generation: number;
+}
+
 export interface ChannelKeysResponse {
   channelId: string;
   /** Highest epoch that exists for this channel, 0 when the channel has no key yet. */
@@ -2062,11 +2326,14 @@ export interface ChannelKeysResponse {
   /** Entries addressed to the caller, oldest epoch first. */
   keys: Array<ChannelKeyEntry & { epoch: number }>;
   /**
-   * Devices with a published key and no entry at `epoch` - each needs a
-   * re-wrap. One entry per device, not per person: somebody who signed in on a
-   * second machine yesterday is missing exactly one of their two.
+   * Members with no account-scoped wrap at `epoch`.
+   *
+   * This is the list a client must clear *before* it sends, not after: a
+   * message sealed under an epoch a member cannot open is a message that
+   * member will never read, and nothing later repairs it. v1 filled this in
+   * the background and sent anyway.
    */
-  missingRecipients: DeviceKey[];
+  missingRecipients: AccountKeyRecipient[];
   /**
    * True when somebody who is no longer a member holds the current epoch's key.
    *
@@ -2076,43 +2343,75 @@ export interface ChannelKeysResponse {
    * on their machine. Whoever holds the key rotates it when they see this, which
    * is the only place it can happen - the server cannot mint a key it must not
    * be able to read.
-   *
-   * It says nothing about *who*: a client re-wraps for the current membership,
-   * which it has to fetch anyway.
    */
   rekeyNeeded: boolean;
   /**
-   * Machines missing an epoch *their owner already holds somewhere else*, over
-   * every epoch the channel has had, newest first. This is what lets a second
-   * machine read history rather than only what is written after it arrives.
+   * Earlier epochs a member has no account wrap for and is entitled to, newest
+   * first.
    *
-   * `missingRecipients` covers the current epoch only, which is enough to keep
-   * the next message readable and nothing else. A machine that signs in today
-   * is missing every epoch before today: it cannot re-wrap them for itself
-   * (it holds none of them), and nothing else was looking, so it mints a fresh
-   * epoch and everything written before it stays a padlock for good.
-   *
-   * "Their owner already holds it" is the boundary, and it is load-bearing:
-   * without it this would hand the whole history to somebody who joined
-   * yesterday, which is the opposite of the rule everything else here keeps. It
-   * repairs one person's access on their own second machine and nothing else.
-   *
-   * A client that holds an epoch fills these gaps. The server already lets a
-   * holder add to an existing epoch, so this needs no new permission - only
-   * somebody to notice, which is what this field is.
-   *
-   * Empty for a channel with no key yet.
+   * Far smaller than v1's list, because the thing it mostly existed for is
+   * gone: a second machine of the same account needs no repair at all now, it
+   * opens what the account was already wrapped for. What is left is the one
+   * deliberate exception - a member let in with the history by somebody with
+   * `MANAGE_MEMBER` - and the rule is unchanged: the server writes nothing, it
+   * only says who is owed, and a client that holds the epoch seals it.
    */
-  gaps: Array<{ epoch: number; devices: DeviceKey[] }>;
+  gaps: Array<{ epoch: number; recipients: AccountKeyRecipient[] }>;
+  /**
+   * Epochs the caller holds **only** as a v1 per-device wrap.
+   *
+   * This is the rescue path for everything written before v2, and it is the
+   * whole of the migration. The wrap in hand opens the epoch; the account has
+   * no wrap for it; so the client re-seals what it can already read to its own
+   * account key, and that epoch is out of reach of every way v1 lost data -
+   * for good, on every machine, including ones that do not exist yet.
+   *
+   * It is not a grant of anything: the caller is re-addressing a key it holds
+   * to itself. The server checks exactly that before storing it.
+   */
+  promotable: number[];
 }
 
 /**
- * What secret opens an identity backup.
+ * How much of this account's history is reachable from a machine that holds
+ * nothing but the vault.
  *
- * `password` is the account password, so signing in on a new device restores
- * the identity with no extra step. `passphrase` is a separate secret the user
- * set themselves - the only option for an account that signs in with a
- * provider and has no password to derive from.
+ * The number that matters after v2, and the one nobody could ask before it:
+ * `sealed` is the count of epochs whose key exists only on some machine, which
+ * is the count of conversations a reinstall would have destroyed. A healthy
+ * account reads zero, and a client that finds otherwise has work to do rather
+ * than a warning to draw.
+ */
+export interface KeyHealthResponse {
+  /** Epochs across all the caller's channels with an account-scoped wrap. */
+  portable: number;
+  /** Epochs the caller holds only per device, and must promote. */
+  sealed: number;
+  /** Epochs nobody holds any wrap for - unreadable by this account, forever. */
+  lost: number;
+  /** Whether the vault has a portable factor. False means one wipe from lost. */
+  recoverable: boolean;
+}
+
+// --- End-to-end encryption: the v1 identity backup (legacy) -----------------
+//
+// Kept, and kept working, because it is the only thing that can open a machine
+// that has not run a v2 client yet - and because reading it is how a v2 client
+// adopts an account that predates the vault. Nothing writes a *new* one: the
+// vault replaces it, a factor at a time, and `POST /api/v1/e2ee/vault` is what
+// a client calls instead.
+//
+// The reason it is being retired rather than extended is in one sentence: it
+// sealed the identity of *one machine*, so an account ended up with as many
+// identities as it had devices that could not open a backup, and a channel key
+// wrapped for one of them was invisible to all the others.
+
+/**
+ * What secret opens a v1 identity backup.
+ *
+ * @deprecated Use {@link VaultFactorKind}, which adds the two doors this could
+ * never have: a recovery code that survives a password change, and a grant
+ * sealed to a machine for accounts that have no password at all.
  */
 export type BackupSecretKind = 'password' | 'passphrase';
 

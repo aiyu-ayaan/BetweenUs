@@ -72,9 +72,9 @@ enum StatusPrivacy {
 }
 
 model User {
-  id                 String     @id @default(uuid())
-  email              String     @unique
-  username           String     @unique
+  id                 String             @id @default(uuid())
+  email              String             @unique
+  username           String             @unique
   displayName        String
   passwordHash       String
   avatarUrl          String?
@@ -92,7 +92,7 @@ model User {
   /// way an avatar is, and every client that can see the name renders it.
   /// Capped at ABOUT_MAX_LENGTH (140) by the DTO, which is the length that
   /// still reads as one line under a heading.
-  about              String     @default("Hey, I’m on Between Us.")
+  about              String             @default("Hey, I’m on Between Us.")
   /// The last moment presence-service saw this account connected and visible.
   ///
   /// Redis holds the live value while somebody is online (`presence:lastseen`);
@@ -113,10 +113,10 @@ model User {
   /// value it was sent: a timestamp that reaches a client is a timestamp that
   /// account can read, whatever the UI does with it.
   lastSeenVisibility LastSeenVisibility @default(EVERYONE)
-  role               GlobalRole @default(USER)
+  role               GlobalRole         @default(USER)
   /// Set for accounts created with a generated password (the bootstrap admin);
   /// they can do nothing until they choose their own.
-  mustChangePassword Boolean    @default(false)
+  mustChangePassword Boolean            @default(false)
   /// A disabled account keeps its data but cannot log in or refresh.
   disabledAt         DateTime?
   /// While this is in the future the account is in administrator-granted reset
@@ -140,7 +140,7 @@ model User {
   /// outranks it - that one actually deletes rows, for everyone.
   messageTtlSeconds  Int?
   /// Who this account's moments are sealed for. See `enum StatusPrivacy`.
-  statusPrivacy      StatusPrivacy @default(FRIENDS)
+  statusPrivacy      StatusPrivacy      @default(FRIENDS)
   /// The people the choice above names: excluded under FRIENDS_EXCEPT, and the
   /// whole audience under ONLY_SHARE_WITH. Ignored under FRIENDS.
   ///
@@ -149,9 +149,9 @@ model User {
   /// "whose list am I on" is not a question anybody may ask. An id that no
   /// longer names anybody is harmless, because the friend list is still the
   /// ceiling.
-  statusPrivacyList  String[]   @default([])
-  createdAt          DateTime   @default(now())
-  updatedAt          DateTime   @updatedAt
+  statusPrivacyList  String[]           @default([])
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
 
   refreshTokens   RefreshToken[]
   ownedServers    Server[]             @relation("ServerOwner")
@@ -167,7 +167,11 @@ model User {
   deviceKeys      DeviceKey[]
   /// One per installation that can be pushed to - see DeviceToken.
   deviceTokens    DeviceToken[]
+  /// The v1 per-machine identity backups. Read to adopt an account into the
+  /// vault, never written now - see AccountVault.
   identityBackups IdentityBackup[]
+  /// The one place this account's identity keyring lives - see AccountVault.
+  vault           AccountVault?
   identities      UserIdentity[]
   notifications   NotificationSetting?
   channelReads    ChannelRead[]
@@ -457,6 +461,15 @@ model DeviceKey {
   label      String?
   /// Set when the owner revoked it. Nothing is wrapped for a revoked device.
   revokedAt  DateTime?
+  /// When this machine was given the account master key, or null while it is
+  /// still waiting for one.
+  ///
+  /// A machine with no grant is *locked*, not forked: it publishes its public
+  /// key, reads nothing, and says so. That is the replacement for v1's
+  /// provisional identity, which let such a machine mint a key of its own,
+  /// carry on as if nothing were wrong, and drag channels onto epochs the rest
+  /// of the account could not read.
+  grantedAt  DateTime?
   lastSeenAt DateTime  @default(now())
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
@@ -500,16 +513,148 @@ model IdentityBackup {
   @@map("identity_backups")
 }
 
-/// A channel's symmetric content key, wrapped once per recipient. The server
-/// stores only ciphertext it cannot open: `wrappedKey` is sealed with the ECDH
-/// secret between `senderPublicKey` and the recipient's device key.
+/// The account's identity keyring, sealed under a master key the server never
+/// sees. One row per account, and the reason multi-device stopped losing data.
+///
+/// What it replaces: `IdentityBackup` sealed the key of *one machine*, and a
+/// machine that could not open one minted its own. An account therefore ended
+/// up with several identities, and a `channel_keys` row wrapped for one of
+/// them was invisible to every other - which is what made "the messages are
+/// gone on my new phone" a permanent condition rather than a sync delay.
+///
+/// What it is: one identity per account, wrapped to by everybody else exactly
+/// once per epoch, reachable from any machine that can open any one of the
+/// `AccountVaultFactor` rows beside it. A new device is then a reader of the
+/// history rather than a claimant on it.
+///
+/// `keyringCiphertext` is a *ring*, not a key: an array of generations, newest
+/// last. Rotating the account identity - after a laptop is lost, say - appends
+/// one and leaves the rest, so every key ever wrapped to an older generation
+/// still opens. v1 had no way to rotate at all for exactly this reason.
+model AccountVault {
+  id                String   @id @default(uuid())
+  userId            String   @unique
+  /// Current identity public key, ECDH P-256 as JWK JSON. Public by
+  /// definition: it is what every other member wraps a channel key to.
+  publicKey         String
+  /// Which generation `publicKey` is. Starts at 1 and only ever increases, by
+  /// exactly one - the same no-jumping rule a channel epoch has.
+  generation        Int      @default(1)
+  /// Base64 AES-GCM nonce for the keyring.
+  keyringIv         String
+  /// Base64 AES-GCM ciphertext of the JSON keyring, sealed under the account
+  /// master key. The server holds nothing that opens it.
+  keyringCiphertext String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user    User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  factors AccountVaultFactor[]
+
+  @@map("account_vaults")
+}
+
+/// One way into the vault: the account master key, sealed one way.
+///
+/// Every row here seals the *same* 32 bytes independently, which is the whole
+/// of the recovery design - doors are added and taken away without touching
+/// what is behind them, and losing one costs nothing while another stands.
+///
+/// The invariant the service enforces, and the only one that matters: an
+/// account must always keep at least one **portable** factor - a password, a
+/// passphrase or a recovery code. A vault whose only doors are `device` grants
+/// is one wipe away from losing every message the account has ever been sent,
+/// which is precisely the state v2 exists to make unreachable.
+model AccountVaultFactor {
+  id              String   @id @default(uuid())
+  vaultId         String
+  userId          String
+  /// "password", "passphrase", "recovery-code" or "device".
+  kind            String
+  /// Which machine a `device` grant is addressed to. Empty string for the
+  /// portable kinds, so the uniqueness below works without a nullable column.
+  deviceId        String   @default("")
+  /// "PBKDF2-SHA256" for a secret somebody types, "ECDH-HKDF-SHA256" for a
+  /// grant sealed to a machine's public key.
+  kdf             String
+  /// PBKDF2 rounds. Zero for the ECDH kind, which has no iteration count.
+  iterations      Int      @default(0)
+  /// Base64 KDF salt. Empty for the ECDH kind.
+  salt            String   @default("")
+  iv              String
+  /// Base64 AES-GCM ciphertext of the account master key, with tag.
+  ciphertext      String
+  /// The approving machine's account public key, for a `device` grant. Empty
+  /// for the kinds derived from a secret.
+  senderPublicKey String   @default("")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  vault AccountVault @relation(fields: [vaultId], references: [id], onDelete: Cascade)
+
+  /// One door per kind, except `device`, which is one per machine.
+  @@unique([userId, kind, deviceId])
+  @@index([vaultId])
+  @@map("account_vault_factors")
+}
+
+/// A machine asking to be let into the vault.
+///
+/// It exists for the account that has no portable secret to hand: a provider
+/// sign-in with no password, or somebody who would rather tap "approve" on a
+/// phone than type twenty-six characters. Nothing secret is in the row - a
+/// device id, a public key and a label - and approving it writes an
+/// `AccountVaultFactor` of kind `device` sealed to that public key.
+///
+/// The request is what v1 did *not* have, and its absence is what forced the
+/// fork: a machine that could not open a backup had no way to ask, so it made
+/// an identity of its own and quietly split the account in two.
+model VaultGrantRequest {
+  id          String    @id @default(uuid())
+  userId      String
+  deviceId    String
+  /// The requesting machine's public key, which the grant will be sealed to.
+  publicKey   String
+  label       String?
+  /// A digest of `publicKey` for the two people to compare out of band. Stored
+  /// so the list can show it; never trusted - the approver recomputes it.
+  fingerprint String
+  createdAt   DateTime  @default(now())
+  /// Set when a machine that holds the master key sealed it for this one. The
+  /// row stays afterwards: who let which machine in, and when, is the only
+  /// thing anybody can audit later.
+  grantedAt   DateTime?
+
+  @@unique([userId, deviceId])
+  @@index([userId, grantedAt])
+  @@map("vault_grant_requests")
+}
+
+/// A channel's symmetric content key, wrapped once per recipient **account**.
+/// The server stores only ciphertext it cannot open: `wrappedKey` is sealed
+/// with the ECDH secret between `senderPublicKey` and the recipient's account
+/// identity key.
+///
+/// The word "account" there is the entire v2 change, and it is worth stating
+/// why rather than leaving it to a migration note. A wrap addressed to a
+/// laptop can be opened by that laptop and by nothing else, so a phone signed
+/// in tomorrow holds nothing for anything written today, and the only thing in
+/// the world that can write it one is a machine that already holds the epoch.
+/// Reinstall that machine, revoke it, or simply never open it again, and those
+/// messages are ciphertext nobody will ever read and their attachments are
+/// bytes nobody will ever fetch. The server cannot help; it has never held a
+/// key. Addressing the wrap to the account instead makes a new machine a
+/// reader of the history rather than a claimant on it.
 model ChannelKey {
   id                String   @id @default(uuid())
   channelId         String
   epoch             Int
   recipientUserId   String
-  /// Which of that user's devices this copy is sealed for. One row per device,
-  /// because a wrap is to a key and a key belongs to a machine.
+  /// `@account` for every row a v2 client writes, and a machine's device id
+  /// for the rows v1 left behind. Both are served to their owner; only the
+  /// first is ever written now, and a client promotes the second to the first
+  /// the moment it can open one. A client-minted device id may never start
+  /// with `@`, so the two namespaces cannot collide.
   recipientDeviceId String
   senderUserId      String
   /// Which machine did the sealing, so a wrap can be attributed after the fact.
@@ -548,15 +693,15 @@ model RefreshToken {
 }
 
 model Server {
-  id        String   @id @default(uuid())
-  name      String
-  slug      String   @unique
-  iconUrl   String?
+  id                String   @id @default(uuid())
+  name              String
+  slug              String   @unique
+  iconUrl           String?
   /// Shown on the invite preview card before a join, and in server settings.
   /// Nullable: most servers have said nothing, and null means exactly that
   /// rather than an empty string worth rendering as a blank line.
-  description String?
-  ownerId   String
+  description       String?
+  ownerId           String
   /// How long a message sent in this server's channels lives, in seconds, or
   /// null for "for ever". Set by whoever holds MANAGE_SERVER, and it binds
   /// every member: the sweeper destroys the row and its blobs when the window
@@ -566,8 +711,8 @@ model Server {
   /// time, so changing the window governs what is sent next and never
   /// retroactively resurrects or condemns what is already there.
   messageTtlSeconds Int?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   owner    User               @relation("ServerOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   members  ServerMember[]
@@ -856,19 +1001,19 @@ model ServerEmoji {
 /// this is the third copy of a pattern that should not be invented a fourth
 /// time.
 model ServerAudit {
-  id       String  @id @default(uuid())
-  serverId String
+  id          String  @id @default(uuid())
+  serverId    String
   /// Null once the actor's own account is deleted. The row outlives it.
-  actorId  String?
+  actorId     String?
   /// Who or what it was done to, when the action has a target - a member, a
   /// role. Null for actions on the server itself (its own settings).
-  targetId String?
+  targetId    String?
   /// How the target read at the time - `@ayaan`, a role's name. Never updated.
   targetLabel String?
   /// member.role.changed, member.permissions.changed, member.removed,
   /// role.created, role.updated, role.deleted, server.updated.
-  action   String
-  detail   Json?
+  action      String
+  detail      Json?
 
   createdAt DateTime @default(now())
 
@@ -899,7 +1044,7 @@ enum MessageKind {
 }
 
 model Message {
-  id          String    @id @default(uuid())
+  id          String      @id @default(uuid())
   channelId   String
   authorId    String
   /// Which sort of row this is; see [MessageKind]. `USER` unless the server
@@ -910,7 +1055,7 @@ model Message {
   /// the author do not already say, and an empty string is honest about that in
   /// a way a server-written sentence in one language would not be.
   content     String
-  createdAt   DateTime  @default(now())
+  createdAt   DateTime    @default(now())
   editedAt    DateTime?
   deletedAt   DateTime?
   /// Who deleted it, when that was not the author - a client shows "deleted by
@@ -931,7 +1076,7 @@ model Message {
   /// it - burning is a row update and a blob delete, and a server that cannot
   /// read the body cannot be told by the body. What leaks is that some message
   /// was one-time, which is a fact both clients already draw on screen.
-  viewOnce    Boolean           @default(false)
+  viewOnce    Boolean     @default(false)
   /// When the *first* recipient opened it. Not the gate - `views` is - but the
   /// stamp a backstop expiry is measured from, so a one-time message nobody
   /// finishes opening still leaves eventually.
@@ -1028,10 +1173,27 @@ model MessageReaction {
 /// instead and the sweeper - which looks for rows no message claims - collects
 /// the object. That makes one mechanism cover a deleted message, a deleted
 /// channel, a deleted server, a deleted account and an upload nobody ever sent.
+/// Where a stored object is in its life.
+///
+/// Recorded rather than derived, which is the change. It used to be inferred
+/// from `messageId IS NULL` plus a join onto the message's `deletedAt`, and
+/// that expression cannot tell an upload still being composed from one
+/// abandoned an hour ago, or a blob whose message was hard-deleted from one
+/// that was never claimed. Both ambiguities resolved the same way - leave it -
+/// so objects accumulated that nothing would ever name again.
+enum AttachmentState {
+  /// Uploaded, not yet carried by a message. Collected once its grace expires.
+  PENDING
+  /// A live message names it. Never collected while that stays true.
+  LINKED
+  /// Its message is gone. Collected on the next pass, whatever its age.
+  ORPHANED
+}
+
 model Attachment {
-  id         String   @id @default(uuid())
+  id         String          @id @default(uuid())
   /// The storage key. Unique: one row per object, so claiming twice is caught.
-  key        String   @unique
+  key        String          @unique
   /// Null once the account that uploaded it is gone. See the note above.
   uploaderId String?
   /// Ciphertext length, which is not the plaintext size and is not meant to be.
@@ -1039,12 +1201,23 @@ model Attachment {
   /// Null until the message carrying it is sent, and null again if that message
   /// row is destroyed rather than tombstoned.
   messageId  String?
-  createdAt  DateTime @default(now())
+  /// Where this object is in its life. The sweep reads this column and nothing
+  /// else, so "which blobs are collectable" is a fact written down at the
+  /// moment it becomes true rather than a query re-deriving it every six hours.
+  state      AttachmentState @default(PENDING)
+  /// When `state` last changed. The grace period is measured from here, not
+  /// from `createdAt`: a blob orphaned today should not be kept for a day
+  /// because it was uploaded a year ago, and one claimed then released should
+  /// not be collected on the strength of its upload date.
+  stateAt    DateTime        @default(now())
+  createdAt  DateTime        @default(now())
 
   uploader User?    @relation("AttachmentUploader", fields: [uploaderId], references: [id], onDelete: SetNull)
   message  Message? @relation(fields: [messageId], references: [id], onDelete: SetNull)
 
   @@index([messageId])
+  /// The sweep reads collectable rows oldest first, by state.
+  @@index([state, stateAt])
   /// The sweeper reads unclaimed rows oldest first.
   @@index([createdAt])
   @@map("attachments")
@@ -1121,14 +1294,14 @@ model RemoteGrant {
 /// when it starts, so revoking a grant mid-session is a decision the gateway
 /// takes deliberately (it ends the session) rather than an accident of timing.
 model RemoteSession {
-  id          String    @id @default(uuid())
-  machineId   String
-  userId      String
-  permissions String[]  @default([])
-  startedAt   DateTime  @default(now())
-  endedAt     DateTime?
+  id            String    @id @default(uuid())
+  machineId     String
+  userId        String
+  permissions   String[]  @default([])
+  startedAt     DateTime  @default(now())
+  endedAt       DateTime?
   /// Why it stopped: "controller", "agent", "revoked", "agent-offline".
-  endedReason String?
+  endedReason   String?
   /// What this session moved, as the controller's own machine counted it.
   ///
   /// A remote session is a screen, its sound and a file channel running over a
@@ -1139,12 +1312,12 @@ model RemoteSession {
   /// whose window died before it could report. Only the controller reports:
   /// the two ends see the same link from opposite sides, and adding both would
   /// count every byte twice.
-  bytesSent     BigInt   @default(0)
-  bytesReceived BigInt   @default(0)
+  bytesSent     BigInt    @default(0)
+  bytesReceived BigInt    @default(0)
   /// "direct", "relay", or null when ICE never settled. The difference between
   /// a session that cost the operator nothing and one that spent relay
   /// bandwidth for its whole length, and invisible from anywhere else.
-  transport   String?
+  transport     String?
 
   machine RemoteMachine @relation(fields: [machineId], references: [id], onDelete: Cascade)
   user    User          @relation("RemoteSessionUser", fields: [userId], references: [id], onDelete: Cascade)
