@@ -178,4 +178,19 @@ server.listen(PORT, '0.0.0.0', () => {
   }
   console.log('            (same Wi-Fi, and the firewall has to allow inbound %d)', PORT);
   console.log('  routes:   %s', ROUTES.map(([prefix]) => prefix).join(' '));
+
+  // Also bind port 8080 if free, so emulators/clients pointing at 8080 connect without errors
+  const ALT_PORT = 8080;
+  if (PORT !== ALT_PORT) {
+    const altServer = http.createServer((req, res) => {
+      server.emit('request', req, res);
+    });
+    altServer.on('upgrade', (req, socket, head) => {
+      server.emit('upgrade', req, socket, head);
+    });
+    altServer.on('error', () => {});
+    altServer.listen(ALT_PORT, '0.0.0.0', () => {
+      console.log('  fallback: http://10.0.2.2:%d (also bound)', ALT_PORT);
+    });
+  }
 });
