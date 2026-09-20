@@ -1291,6 +1291,8 @@ data class DeviceKey(
     val publicKey: String,
     val label: String? = null,
     val revokedAt: String? = null,
+    /** When this machine was given the account master key, or null while it waits. */
+    val grantedAt: String? = null,
     val lastSeenAt: String = "",
     val createdAt: String = "",
 ) {
@@ -1301,8 +1303,123 @@ data class DeviceKey(
             publicKey = json.optString("publicKey"),
             label = json.stringOrNull("label"),
             revokedAt = json.stringOrNull("revokedAt"),
+            grantedAt = json.stringOrNull("grantedAt"),
             lastSeenAt = json.optString("lastSeenAt"),
             createdAt = json.optString("createdAt"),
+        )
+    }
+}
+
+/**
+ * Who a channel key must be wrapped for: an account, and the public half of
+ * its identity keyring.
+ *
+ * One entry per member, where there used to be one per machine. A list of
+ * machines grows after the key was minted, and everybody added to it after the
+ * fact read padlocks until somebody else's client noticed; a list of accounts
+ * is settled the moment the membership is.
+ */
+data class AccountKeyRecipient(
+    val userId: String,
+    val publicKey: String,
+    val generation: Int,
+) {
+    companion object {
+        fun from(json: JSONObject) = AccountKeyRecipient(
+            userId = json.optString("userId"),
+            publicKey = json.optString("publicKey"),
+            generation = json.optInt("generation", 1),
+        )
+    }
+}
+
+/**
+ * One way into the account vault: the master key, sealed one way.
+ *
+ * `password`, `passphrase` and `recovery-code` are derived from something
+ * somebody types; `device` is sealed to one machine's public key by a machine
+ * that already holds the master key. Every row seals the same 32 bytes, so
+ * doors are added and removed without touching what is behind them.
+ */
+data class VaultFactor(
+    val kind: String,
+    val deviceId: String,
+    val kdf: String,
+    val iterations: Int,
+    val salt: String,
+    val iv: String,
+    val ct: String,
+    val senderPublicKey: String,
+) {
+    val portable: Boolean get() = kind != "device"
+
+    fun toJson(): JSONObject = JSONObject()
+        .put("v", 1)
+        .put("kind", kind)
+        .put("deviceId", deviceId)
+        .put("kdf", kdf)
+        .put("iterations", iterations)
+        .put("salt", salt)
+        .put("iv", iv)
+        .put("ct", ct)
+        .put("senderPublicKey", senderPublicKey)
+
+    companion object {
+        fun from(json: JSONObject) = VaultFactor(
+            kind = json.optString("kind"),
+            deviceId = json.optString("deviceId"),
+            kdf = json.optString("kdf"),
+            iterations = json.optInt("iterations"),
+            salt = json.optString("salt"),
+            iv = json.optString("iv"),
+            ct = json.optString("ct"),
+            senderPublicKey = json.optString("senderPublicKey"),
+        )
+    }
+}
+
+/**
+ * The account's sealed identity keyring, and the doors into it.
+ *
+ * Null from the API means the account has never set one up. A *failed* read
+ * must never be read as that: creating a second vault over a standing one
+ * orphans every key wrapped for the first, with no undo.
+ */
+data class AccountVault(
+    val publicKey: String,
+    val generation: Int,
+    val keyringIv: String,
+    val keyringCt: String,
+    val factors: List<VaultFactor>,
+) {
+    companion object {
+        fun from(json: JSONObject): AccountVault {
+            val keyring = json.optJSONObject("keyring") ?: JSONObject()
+            return AccountVault(
+                publicKey = json.optString("publicKey"),
+                generation = json.optInt("generation", 1),
+                keyringIv = keyring.optString("iv"),
+                keyringCt = keyring.optString("ct"),
+                factors = json.optJSONArray("factors")?.map { VaultFactor.from(it) }.orEmpty(),
+            )
+        }
+    }
+}
+
+/** A machine asking to be let into the vault. Nothing secret is in it. */
+data class VaultGrantRequest(
+    val deviceId: String,
+    val publicKey: String,
+    val label: String?,
+    /** Read aloud and compared, never trusted from the wire - it is recomputed. */
+    val fingerprint: String,
+) {
+    companion object {
+        fun from(json: JSONObject) = VaultGrantRequest(
+            deviceId = json.optString("deviceId"),
+            publicKey = json.optString("publicKey"),
+            label = json.stringOrNull("label"),
+            fingerprint = json.optString("fingerprint"),
         )
     }
 }
@@ -1336,36 +1453,54 @@ data class ChannelKeyEntry(
 data class ChannelKeys(
     val epoch: Int,
     val keys: List<ChannelKeyEntry>,
-    /** Members with a device key but no entry at `epoch` - they need a re-wrap. */
-    val missingRecipients: List<DeviceKey>,
+    /** Members with no account-scoped wrap at `epoch` - they need one before a send. */
+    val missingRecipients: List<AccountKeyRecipient>,
+    /** True when somebody who is no longer a member holds the current key. */
+    val rekeyNeeded: Boolean,
     /**
-     * The same question asked of every epoch, for machines whose owner already
-     * holds that epoch somewhere else. Filling these is what lets a phone that
-     * signed in today read what was said before it existed, instead of a screen
-     * of padlocks - see `development/E2EE.md`.
-     *
-     * Empty against a server older than this field, which is the correct
-     * reading: nothing to repair that this client knows about.
+     * Earlier epochs a member is owed a wrap for. Nearly always empty now: it
+     * used to exist to repair somebody's own second machine, one epoch at a
+     * time, whenever another of their machines happened to open the channel -
+     * which is why history arrived late, partially, or never. An
+     * account-scoped wrap needs no such repair, so what is left is the one
+     * deliberate exception, a member let in *with* the history.
      */
     val gaps: List<EpochGap>,
+    /**
+     * Epochs this device holds only as a pre-vault, per-device wrap.
+     *
+     * The rescue path for everything written before the vault, and this device
+     * is the only thing in the world that can walk it: those rows are sealed
+     * to this installation's key, so nothing else - no server, no other
+     * machine, no machine that does not exist yet - can open them. Re-sealing
+     * them to the account key is what takes that history out of reach of
+     * losing this phone.
+     */
+    val promotable: List<Int>,
 ) {
     companion object {
         fun from(json: JSONObject) = ChannelKeys(
             epoch = json.optInt("epoch"),
             keys = json.optJSONArray("keys")?.map { ChannelKeyEntry.from(it) }.orEmpty(),
             missingRecipients =
-                json.optJSONArray("missingRecipients")?.map { DeviceKey.from(it) }.orEmpty(),
+                json.optJSONArray("missingRecipients")?.map { AccountKeyRecipient.from(it) }
+                    .orEmpty(),
+            rekeyNeeded = json.optBoolean("rekeyNeeded"),
             gaps = json.optJSONArray("gaps")?.map { EpochGap.from(it) }.orEmpty(),
+            promotable = json.optJSONArray("promotable")?.let { array ->
+                (0 until array.length()).map { array.optInt(it) }
+            }.orEmpty(),
         )
     }
 }
 
-/** One epoch, and the machines still missing it. */
-data class EpochGap(val epoch: Int, val devices: List<DeviceKey>) {
+/** One epoch, and the accounts still owed a wrap for it. */
+data class EpochGap(val epoch: Int, val recipients: List<AccountKeyRecipient>) {
     companion object {
         fun from(json: JSONObject) = EpochGap(
             epoch = json.optInt("epoch"),
-            devices = json.optJSONArray("devices")?.map { DeviceKey.from(it) }.orEmpty(),
+            recipients =
+                json.optJSONArray("recipients")?.map { AccountKeyRecipient.from(it) }.orEmpty(),
         )
     }
 }

@@ -31,7 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
-import com.aatech.betweenus.core.crypto.BackupSecret
+import com.aatech.betweenus.core.crypto.VaultSecret
 import com.aatech.betweenus.core.crypto.E2ee
 import com.aatech.betweenus.core.crypto.IdentityStatus
 import com.aatech.betweenus.core.data.ABOUT_MAX_LENGTH
@@ -306,14 +306,14 @@ fun AccountSecurityScreen(
             Column(Modifier.padding(horizontal = 16.dp)) {
                 Text(
                     text = when (val state = identity) {
-                        is IdentityStatus.Ready -> when {
-                            state.backedUp ->
-                                "This device holds your account key, and it is backed up. Signing in elsewhere will restore your conversation history."
-                            state.provisional ->
-                                "This device could not open the account key, so it made one of its own. Sign out and back in with your account password to recover full history."
-                            else ->
-                                "This device has a key of its own, and no backup. Set a recovery passphrase to seal your identity key across devices."
-                        }
+                        is IdentityStatus.Ready ->
+                            if (state.recoverable) {
+                                "This device has your account key, and the account can be recovered without it. Signing in somewhere new brings every conversation with it."
+                            } else {
+                                "This device has your account key and nothing else does. Set a recovery passphrase, or keep a recovery code, or these conversations end with your devices."
+                            }
+                        is IdentityStatus.Locked ->
+                            "This device has not been let into your account yet. Enter your recovery code or passphrase, or approve it from a device that is already signed in."
                         IdentityStatus.Revoked ->
                             "This device was revoked from another session. Older cached messages remain readable, but new messages are not encrypted for it."
                         IdentityStatus.Absent -> "No identity key present on this device yet."
@@ -368,7 +368,7 @@ fun AccountSecurityScreen(
                     enabled = passphrase.length >= 8,
                     onClick = {
                         act {
-                            E2ee.backupIdentity(BackupSecret.passphrase(passphrase))
+                            E2ee.setVaultFactor(VaultSecret.passphrase(passphrase))
                             if (!keepPasswordRecovery) E2ee.disablePasswordRecovery()
                             byPassword = keepPasswordRecovery
                             passphrase = ""

@@ -139,7 +139,10 @@ object Statuses {
         // audience, as it stands at the moment of posting, which is what makes
         // a friendship made afterwards not a way into what was posted before
         // it. See `E2ee.sealStatus`.
-        val sealed = E2ee.sealStatus(caption, payload, BetweenUsApi.statusAudience())
+        // One entry per account, not per machine: a friend who signs in on a
+        // new phone an hour from now still opens this post, where under the
+        // machine list they saw a padlock until it expired.
+        val sealed = E2ee.sealStatus(caption, payload, BetweenUsApi.statusAudienceAccounts())
         val entry = BetweenUsApi.postStatus(
             kind = kind,
             caption = sealed.caption,

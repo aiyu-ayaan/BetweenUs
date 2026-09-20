@@ -748,6 +748,13 @@ object BetweenUsApi {
      * Read immediately before posting rather than cached - this list is the
      * audience, and a friend added a minute ago belongs in it.
      */
+    /** Every account a post written now may be sealed for: its own, and friends'. */
+    suspend fun statusAudienceAccounts(): List<AccountKeyRecipient> = io {
+        authedArray("GET", "/api/v1/statuses/audience/accounts")
+            .map { AccountKeyRecipient.from(it) }
+    }
+
+    @Deprecated("A moment is sealed for accounts now - see statusAudienceAccounts")
     suspend fun statusAudience(): List<DeviceKey> = io {
         authedArray("GET", "/api/v1/statuses/audience").map { DeviceKey.from(it) }
     }
@@ -883,16 +890,29 @@ object BetweenUsApi {
 
     // --- end-to-end encryption key directory ---
 
+    /**
+     * Publishes this device's public key.
+     *
+     * `holdsVault` is this device saying it can open the vault. An assertion
+     * rather than a proof, and safe to be: the only thing it changes is how
+     * this account's own device list is drawn to this account, and whether
+     * the request this device made while it was locked is withdrawn.
+     */
     suspend fun registerDeviceKey(
         deviceId: String,
         publicKey: String,
         label: String,
+        holdsVault: Boolean = false,
     ): DeviceKey = io {
         DeviceKey.from(
             authed(
                 "POST",
                 "/api/v1/e2ee/devices",
-                obj("deviceId" to deviceId, "publicKey" to publicKey, "label" to label),
+                JSONObject()
+                    .put("deviceId", deviceId)
+                    .put("publicKey", publicKey)
+                    .put("label", label)
+                    .put("holdsVault", holdsVault),
             ),
         )
     }
@@ -940,9 +960,112 @@ object BetweenUsApi {
         authed("DELETE", "/api/v1/e2ee/backup/${enc(kind)}")
     }
 
+    @Deprecated("Channel keys are wrapped for accounts now - see channelRecipients")
     suspend fun channelDevices(channelId: String): List<DeviceKey> = io {
         authedArray("GET", "/api/v1/e2ee/devices?channelId=${enc(channelId)}")
             .map { DeviceKey.from(it) }
+    }
+
+    /** Who a channel key must be wrapped for: one entry per member account. */
+    suspend fun channelRecipients(channelId: String): List<AccountKeyRecipient> = io {
+        authedArray("GET", "/api/v1/e2ee/recipients?channelId=${enc(channelId)}")
+            .map { AccountKeyRecipient.from(it) }
+    }
+
+    /** Channels this account holds any wrap for, for the promotion sweep. */
+    suspend fun channelsWithKeys(): List<String> = io {
+        val array = authedArray("GET", "/api/v1/e2ee/channels")
+        (0 until array.length()).map { array.optString(it) }.filter { it.isNotEmpty() }
+    }
+
+    // --- the account vault ---
+
+    /**
+     * The caller's sealed vault, or null when the account has never set one up.
+     *
+     * A *failed* call throws rather than returning null, and the difference is
+     * load-bearing: reading a network error as "no vault" would publish a
+     * second identity over a standing one and orphan every key wrapped for the
+     * first, with no undo.
+     */
+    suspend fun vault(): AccountVault? = io {
+        authed("GET", "/api/v1/e2ee/vault").optJSONObject("vault")?.let { AccountVault.from(it) }
+    }
+
+    suspend fun createVault(
+        publicKey: String,
+        keyringIv: String,
+        keyringCt: String,
+        factors: List<VaultFactor>,
+    ): AccountVault? = io {
+        val array = JSONArray()
+        factors.forEach { array.put(it.toJson()) }
+        authed(
+            "POST",
+            "/api/v1/e2ee/vault",
+            JSONObject()
+                .put("publicKey", publicKey)
+                .put("keyring", JSONObject().put("v", 1).put("iv", keyringIv).put("ct", keyringCt))
+                .put("factors", array),
+        ).optJSONObject("vault")?.let { AccountVault.from(it) }
+    }
+
+    suspend fun rotateVault(
+        publicKey: String,
+        generation: Int,
+        keyringIv: String,
+        keyringCt: String,
+    ): Unit = io {
+        authed(
+            "POST",
+            "/api/v1/e2ee/vault/rotate",
+            JSONObject()
+                .put("publicKey", publicKey)
+                .put("generation", generation)
+                .put("keyring", JSONObject().put("v", 1).put("iv", keyringIv).put("ct", keyringCt)),
+        )
+    }
+
+    suspend fun putVaultFactor(factor: VaultFactor): Unit = io {
+        authed("PUT", "/api/v1/e2ee/vault/factors", factor.toJson())
+    }
+
+    /** Refused by the server when it would leave no portable way back in. */
+    suspend fun deleteVaultFactor(kind: String): Unit = io {
+        authed("DELETE", "/api/v1/e2ee/vault/factors/${enc(kind)}")
+    }
+
+    suspend fun requestVaultGrant(
+        deviceId: String,
+        publicKey: String,
+        label: String,
+        fingerprint: String,
+    ): Unit = io {
+        authed(
+            "POST",
+            "/api/v1/e2ee/vault/grants",
+            JSONObject()
+                .put("deviceId", deviceId)
+                .put("publicKey", publicKey)
+                .put("label", label)
+                .put("fingerprint", fingerprint),
+        )
+    }
+
+    /** Machines of this account waiting to be let in. Never anybody else's. */
+    suspend fun vaultGrants(): List<VaultGrantRequest> = io {
+        authed("GET", "/api/v1/e2ee/vault/grants")
+            .optJSONArray("requests")?.map { VaultGrantRequest.from(it) }.orEmpty()
+    }
+
+    /** Whether this machine has been let in - what a locked screen polls. */
+    suspend fun vaultGrant(deviceId: String): VaultFactor? = io {
+        authed("GET", "/api/v1/e2ee/vault/grants/${enc(deviceId)}")
+            .optJSONObject("factor")?.let { VaultFactor.from(it) }
+    }
+
+    suspend fun denyVaultGrant(deviceId: String): Unit = io {
+        authed("DELETE", "/api/v1/e2ee/vault/grants/${enc(deviceId)}")
     }
 
     suspend fun channelKeys(channelId: String): ChannelKeys = io {

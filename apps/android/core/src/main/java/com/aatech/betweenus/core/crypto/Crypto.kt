@@ -1,10 +1,12 @@
 package com.aatech.betweenus.core.crypto
 
+import org.json.JSONArray
 import org.json.JSONObject
 import java.math.BigInteger
 import java.security.AlgorithmParameters
 import java.security.KeyFactory
 import java.security.KeyPairGenerator
+import java.security.MessageDigest
 import java.security.PrivateKey
 import java.security.PublicKey
 import java.security.SecureRandom
@@ -45,6 +47,32 @@ import okio.ByteString.Companion.toByteString
 object Crypto {
     private const val CURVE = "secp256r1"
     private const val WRAP_INFO = "betweenus/e2ee/v1/channel-key-wrap"
+
+    /**
+     * Domain separation for a vault grant, so one can never be replayed as a
+     * channel-key wrap.
+     *
+     * Both use the same curve, and on the approving side the same private
+     * key. Without a different `info` a wrap lifted from the key directory and
+     * a grant of the account's master key would be ciphertext under the same
+     * derived key, which is a substitution nobody would notice. Has to match
+     * the other clients byte for byte.
+     */
+    private const val GRANT_INFO = "betweenus/e2ee/v2/vault-grant"
+
+    /** The account master key, which seals the identity keyring. */
+    private const val MASTER_KEY_BYTES = 32
+
+    /**
+     * Crockford base32 without the letters that read as digits, so a recovery
+     * code can be copied off paper by somebody who is not enjoying the
+     * experience. Identical to the desktop alphabet, because the code has to
+     * open the same factor on either.
+     */
+    private const val RECOVERY_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+
+    /** 26 characters of that alphabet is 130 bits. Not guessable, and writable. */
+    private const val RECOVERY_CODE_LENGTH = 26
     private const val IV_BYTES = 12
     private const val GCM_TAG_BITS = 128
     private const val CHANNEL_KEY_BYTES = 32
@@ -122,6 +150,188 @@ object Crypto {
     private fun deriveBackupKey(secret: String, salt: ByteArray, iterations: Int): ByteArray {
         val spec = PBEKeySpec(secret.toCharArray(), salt, iterations, 256)
         return SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).encoded
+    }
+
+    // --- the account vault ---
+    //
+    // One master key per account seals one identity *keyring*; each factor
+    // seals that master key independently. Channel keys are wrapped to the
+    // keyring's current public half, so any device that can open any factor
+    // reads everything the account has ever been wrapped for - including
+    // history from before that device existed.
+    //
+    // Every parameter below has to match the web and desktop clients exactly.
+    // A mismatch here does not fail loudly; it produces a device that signs in
+    // fine and cannot open a single message, which is the failure this whole
+    // design exists to stop.
+
+    /** One identity generation. The ring is these, oldest first. */
+    data class KeyringEntry(val generation: Int, val publicKey: String, val privateKey: String)
+
+    /** The open vault: the master key, and every generation it seals. */
+    data class OpenVault(val masterKey: String, val keyring: List<KeyringEntry>) {
+        /** The generation everybody else wraps for. */
+        val current: KeyringEntry get() = keyring.last()
+    }
+
+    fun generateMasterKey(): String = base64(randomBytes(MASTER_KEY_BYTES))
+
+    /**
+     * A recovery code, in groups of four.
+     *
+     * The factor that exists so an account can always get back in: not derived
+     * from anything somebody can change, forget on a password reset, or lose
+     * with a device.
+     *
+     * Masked to five bits rather than taken modulo 32, because a byte is 256
+     * values and the alphabet is 32 - a modulo over the full byte range would
+     * bias the draw invisibly.
+     */
+    fun generateRecoveryCode(): String {
+        val bytes = randomBytes(RECOVERY_CODE_LENGTH)
+        val raw = bytes.joinToString("") { RECOVERY_ALPHABET[it.toInt() and 31].toString() }
+        return raw.chunked(4).joinToString("-")
+    }
+
+    /**
+     * What a typed recovery code has to become before it is used as a secret.
+     *
+     * Somebody reading one off paper will use spaces, lowercase, or their own
+     * dashes. A correct code failing on its punctuation is indistinguishable,
+     * to the person typing it, from having lost the account - so the two
+     * substitutions people actually make are folded here, which is also why
+     * the alphabet excludes I, L, O and U.
+     */
+    fun normaliseRecoveryCode(typed: String): String {
+        val bare = typed.uppercase().filter { it.isLetterOrDigit() }
+        val folded = bare.map {
+            when (it) {
+                'I', 'L' -> '1'
+                'O' -> '0'
+                else -> it
+            }
+        }.joinToString("")
+        return folded.chunked(4).joinToString("-")
+    }
+
+    /** Seals the master key under a secret somebody typed. Returns salt, iv, ct. */
+    fun sealMasterKeyWithSecret(
+        masterKey: String,
+        secret: String,
+        iterations: Int = BACKUP_ITERATIONS,
+    ): Triple<String, String, String> {
+        val salt = randomBytes(BACKUP_SALT_BYTES)
+        val key = deriveBackupKey(secret, salt, iterations)
+        val iv = randomBytes(IV_BYTES)
+        val sealed = aes(Cipher.ENCRYPT_MODE, key, iv, unbase64(masterKey))
+        return Triple(base64(salt), base64(iv), base64(sealed))
+    }
+
+    /** Throws if the secret is wrong - AES-GCM's tag is the only check needed. */
+    fun openMasterKeyWithSecret(
+        salt: String,
+        iv: String,
+        ciphertext: String,
+        secret: String,
+        iterations: Int,
+    ): String {
+        val key = deriveBackupKey(secret, unbase64(salt), iterations)
+        return base64(aes(Cipher.DECRYPT_MODE, key, unbase64(iv), unbase64(ciphertext)))
+    }
+
+    /**
+     * Seals the master key to one device's public key, which is how a device
+     * with no portable secret is let in.
+     *
+     * The sealing half is an *account* identity and the receiving half a
+     * *device* key, on purpose: the approver proves it holds the account, and
+     * the grant opens only on the device whose fingerprint the two people
+     * compared.
+     */
+    fun sealMasterKeyForDevice(
+        masterKey: String,
+        accountPrivateJwk: String,
+        devicePublicJwk: String,
+    ): Wrapped {
+        val key = deriveGrantKey(accountPrivateJwk, devicePublicJwk)
+        val iv = randomBytes(IV_BYTES)
+        val sealed = aes(Cipher.ENCRYPT_MODE, key, iv, unbase64(masterKey))
+        return Wrapped(base64(sealed), base64(iv))
+    }
+
+    /** The receiving half: this device's private key against the approver's. */
+    fun openMasterKeyFromGrant(
+        wrapped: Wrapped,
+        devicePrivateJwk: String,
+        senderPublicJwk: String,
+    ): String {
+        val key = deriveGrantKey(devicePrivateJwk, senderPublicJwk)
+        return base64(aes(Cipher.DECRYPT_MODE, key, unbase64(wrapped.iv), unbase64(wrapped.wrappedKey)))
+    }
+
+    /** Seals the keyring under the master key. Returns iv and ciphertext. */
+    fun sealKeyring(keyring: List<KeyringEntry>, masterKey: String): Pair<String, String> {
+        val array = JSONArray()
+        for (entry in keyring) {
+            array.put(
+                JSONObject()
+                    .put("generation", entry.generation)
+                    .put("publicKey", entry.publicKey)
+                    .put("privateKey", entry.privateKey),
+            )
+        }
+        val iv = randomBytes(IV_BYTES)
+        val sealed = aes(Cipher.ENCRYPT_MODE, unbase64(masterKey), iv, array.toString().toByteArray())
+        return base64(iv) to base64(sealed)
+    }
+
+    /**
+     * Opens the keyring, and refuses anything that is not one.
+     *
+     * The shape check is not defensive typing for its own sake: a keyring that
+     * parsed to something unexpected and was used anyway would have this
+     * client publish a public key it holds no private half for, and every key
+     * wrapped to it afterwards would be unopenable by anybody, forever.
+     */
+    fun openKeyring(iv: String, ciphertext: String, masterKey: String): List<KeyringEntry> {
+        val opened = aes(Cipher.DECRYPT_MODE, unbase64(masterKey), unbase64(iv), unbase64(ciphertext))
+        val array = JSONArray(String(opened))
+        require(array.length() > 0) { "The vault did not contain a keyring" }
+
+        val entries = (0 until array.length()).map { index ->
+            val row = array.getJSONObject(index)
+            val public = row.optString("publicKey")
+            val private = row.optString("privateKey")
+            require(public.isNotEmpty() && private.isNotEmpty()) {
+                "The vault did not contain a keyring"
+            }
+            KeyringEntry(row.optInt("generation", index + 1), public, private)
+        }
+        return entries.sortedBy { it.generation }
+    }
+
+    /**
+     * A digest of a public key, for two people to read to each other.
+     *
+     * Approving a grant seals the account's master key to whatever key is in
+     * the request, so the only thing between that and a key somebody else
+     * substituted is a person comparing twelve digits on two screens. Has to
+     * produce the same string as the other clients.
+     */
+    fun keyFingerprint(publicJwk: String): String {
+        val digest = MessageDigest.getInstance("SHA-256").digest(publicJwk.toByteArray())
+        val digits = digest.take(6).joinToString("") {
+            (it.toInt() and 0xff).toString().padStart(3, '0')
+        }
+        return digits.chunked(4).joinToString(" ")
+    }
+
+    private fun deriveGrantKey(privateJwk: String, peerPublicJwk: String): ByteArray {
+        val agreement = KeyAgreement.getInstance("ECDH")
+        agreement.init(privateFromJwk(privateJwk))
+        agreement.doPhase(publicFromJwk(peerPublicJwk), true)
+        val shared = agreement.generateSecret()
+        return hkdfSha256(shared, ByteArray(32), GRANT_INFO.toByteArray(), 32)
     }
 
     // --- channel keys ---

@@ -3,7 +3,7 @@ package com.aatech.betweenus.core.data
 import android.content.Context
 import android.content.SharedPreferences
 import com.aatech.betweenus.core.crypto.SecureStore
-import com.aatech.betweenus.core.crypto.BackupSecret
+import com.aatech.betweenus.core.crypto.VaultSecret
 import com.aatech.betweenus.core.crypto.E2ee
 import com.aatech.betweenus.core.store.Cache
 import com.aatech.betweenus.core.store.Conversation
@@ -152,7 +152,7 @@ object Session {
         refreshToken = response.tokens.refreshToken
         if (email != null) prefs.edit().putString(EMAIL_KEY, email).apply()
         _state.value = AuthPhase.SignedIn(response.user)
-        begin(response.user, password?.let { BackupSecret.password(it) })
+        begin(response.user, password?.let { VaultSecret.password(it) })
     }
 
     /**
@@ -164,7 +164,7 @@ object Session {
      * offline one is retried the next time a channel needs a key. Neither is a
      * reason to throw somebody back to a login form they have just filled in.
      */
-    private fun begin(user: PublicUser, secret: BackupSecret?) {
+    private fun begin(user: PublicUser, secret: VaultSecret?) {
         val token = accessToken ?: return
         // Before either store starts reading from it: a cache belonging to
         // another account has to be gone, not merely about to be.
@@ -175,7 +175,14 @@ object Session {
         Conversation.start()
         Workspace.start()
         Statuses.start()
-        scope.launch { runCatching { E2ee.initIdentity(user.id, secret) } }
+        scope.launch {
+            runCatching { E2ee.initIdentity(user.id, secret) }
+            // Everything this phone alone can still rescue from the
+            // pre-vault wraps addressed to it. It is the only thing that
+            // can, and the window closes when it is wiped - so it is done at
+            // sign-in rather than waiting for somebody to open each channel.
+            runCatching { E2ee.promoteEverything() }
+        }
         // The push registration belongs to the account, not to the app: it is
         // made here on every sign-in and every restore, so a token that rotated
         // while the app was closed is put back under the right user.

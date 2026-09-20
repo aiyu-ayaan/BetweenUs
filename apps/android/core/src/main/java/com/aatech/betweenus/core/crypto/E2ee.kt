@@ -4,8 +4,10 @@ import android.content.Context
 import com.aatech.betweenus.core.data.ApiError
 import com.aatech.betweenus.core.data.ChannelKeyEntry
 import com.aatech.betweenus.core.data.ChannelKeys
-import com.aatech.betweenus.core.data.DeviceKey
-import com.aatech.betweenus.core.data.IdentityBackup
+import com.aatech.betweenus.core.data.AccountKeyRecipient
+import com.aatech.betweenus.core.data.AccountVault
+import com.aatech.betweenus.core.data.VaultFactor
+import com.aatech.betweenus.core.data.VaultGrantRequest
 import com.aatech.betweenus.core.data.StatusEntry
 import com.aatech.betweenus.core.data.StatusKeyEntry
 import com.aatech.betweenus.core.data.BetweenUsApi
@@ -17,34 +19,65 @@ import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
 import java.util.concurrent.ConcurrentHashMap
 
-/** What opens an identity backup. Held only for the moment a sign-in needs it. */
-data class BackupSecret(val value: String, val kind: String) {
+/** What opens the account vault. Held only for the moment a sign-in needs it. */
+data class VaultSecret(val value: String, val kind: String) {
     companion object {
-        fun password(value: String) = BackupSecret(value, "password")
-        fun passphrase(value: String) = BackupSecret(value, "passphrase")
+        fun password(value: String) = VaultSecret(value, "password")
+        fun passphrase(value: String) = VaultSecret(value, "passphrase")
+        fun recoveryCode(value: String) =
+            VaultSecret(Crypto.normaliseRecoveryCode(value), "recovery-code")
     }
 }
 
 class MissingChannelKeyError : Exception("No channel key on this device yet")
 
 /**
- * There is no `Locked`. A device that cannot open the account backup mints a
- * key of its own and signs in anyway - see [E2ee.initIdentity] - so there is no
- * state in which the app is signed in and waiting to be told a secret. That
- * fork used to be permanent; it is provisional now, and every later sign-in
- * with a secret that opens the backup undoes it.
+ * Thrown when this device cannot open the vault.
+ *
+ * Distinct from [MissingChannelKeyError] because the two need different
+ * screens: one is a channel nobody has keyed yet, the other is this device not
+ * being in the account yet, and conflating them is how the app came to tell
+ * people to go and open it on another laptop.
+ */
+class VaultLockedError : Exception("This device has not been let into the account vault yet")
+
+/** Why this device cannot open the vault, which decides what its screen leads with. */
+enum class LockedReason { NoSecret, WrongSecret, AwaitingApproval }
+
+/**
+ * ## Why `Locked` exists, having been deliberately avoided before
+ *
+ * There used to be no such state on purpose: a device that could not open the
+ * account backup minted a key of its own and signed in anyway, so there was
+ * never a screen asking for a secret nobody could supply.
+ *
+ * What that bought was a working sign-in. What it cost was the account. Such a
+ * device published a second identity, could read nothing already wrapped for
+ * the first, and - holding no channel key - minted fresh epochs and dragged
+ * conversations onto keys the rest of the account could not read either. The
+ * message people actually saw was "open BetweenUs on the device you first
+ * signed in with", which is a thing an app should never have to say.
+ *
+ * So the fork is gone and the honest state is back. A locked device is not a
+ * broken one: it has three ways out - a recovery code, a passphrase, or
+ * approval from a device already in - and none of them can lose anything,
+ * because it has not written anything.
  */
 sealed interface IdentityStatus {
     data object Absent : IdentityStatus
 
     /**
-     * `backedUp` is whether *this device's* key is the one in the backup.
-     *
-     * `provisional` is this device having minted its own because it could not
-     * open the account's - so it reads what arrives from now on, and history is
-     * still sealed to an identity it does not hold.
+     * `recoverable` is whether a portable factor stands - a password, a
+     * passphrase or a recovery code - which is the difference between an
+     * account that survives losing every device and one that does not.
      */
-    data class Ready(val backedUp: Boolean, val provisional: Boolean = false) : IdentityStatus
+    data class Ready(val recoverable: Boolean) : IdentityStatus
+
+    /** The account has a vault and this device cannot open it yet. */
+    data class Locked(
+        val reason: LockedReason,
+        val grantRequested: Boolean,
+    ) : IdentityStatus
 
     /**
      * The owner revoked this machine from another one. Nothing new is wrapped
@@ -55,15 +88,37 @@ sealed interface IdentityStatus {
 }
 
 /**
- * The end-to-end encryption service: this device's identity, the channel keys
- * it can open, and sealing and opening content with them.
+ * The end-to-end encryption service: the account vault, the channel keys it
+ * opens, and sealing and opening content with them.
  *
  * The port of `apps/desktop/src/services/e2ee.ts`. Every decision here about
  * *when* to mint an epoch, when to re-wrap for a member, and what to do when a
  * key cannot be opened is that file's, because the three clients share one
  * channel and disagreeing about any of it locks somebody out of their history.
+ *
+ * ## The one thing to understand before changing anything here
+ *
+ * A channel key is wrapped for an **account**, not for a device. Every device
+ * that can open the vault opens the same rows, which is why signing in on a
+ * new phone brings the whole history with it and needs nothing from anybody
+ * else.
+ *
+ * It used to wrap per device, and every conversation this project lost was
+ * that decision playing out: a phone that did not exist when an epoch was
+ * minted held nothing for it, only another device already holding that epoch
+ * could seal one, and if none ever came online again those messages were
+ * ciphertext forever.
  */
 object E2ee {
+    /**
+     * The recipient id that means "the account itself" rather than one machine.
+     *
+     * Has to match `ACCOUNT_SCOPE` in `packages/shared-types` exactly: it is
+     * the string the server files an account-scoped wrap under, and a client
+     * that spelled it differently would write rows nothing else can find.
+     */
+    const val ACCOUNT_SCOPE = "@account"
+
     /**
      * Shown instead of a message this device holds no key for.
      *
@@ -75,7 +130,19 @@ object E2ee {
 
     private lateinit var store: SecureStore
 
-    private var identity: Crypto.KeyPairJwk? = null
+    /** The open vault: the master key, and every identity generation it seals. */
+    @Volatile
+    private var vault: Crypto.OpenVault? = null
+
+    /**
+     * This device's own key pair. Not the account identity - it receives vault
+     * grants and opens the pre-vault rows addressed to this installation, and
+     * that second job is the whole of how history written before the vault is
+     * rescued.
+     */
+    @Volatile
+    private var deviceKeys: Crypto.KeyPairJwk? = null
+
     private var userId: String? = null
 
     /**
@@ -83,13 +150,13 @@ object E2ee {
      *
      * It used to be an argument and nothing else, so a sign-in whose identity
      * setup failed once - the network dropped, the token was a moment late -
-     * lost it. [currentIdentity] then retried with no secret, could not open the
+     * lost it. [currentVault] then retried with no secret, could not open the
      * account backup, and minted a device-local key instead, which was
      * permanent. A password typed into a login form is dropped when the session
      * ends, and that is the only thing keeping it here has to guarantee.
      */
     @Volatile
-    private var signInSecret: BackupSecret? = null
+    private var signInSecret: VaultSecret? = null
 
     private val identityLock = Mutex()
     private val channelLocks = ConcurrentHashMap<String, Mutex>()
@@ -106,6 +173,9 @@ object E2ee {
      */
     private val rekeyed = ConcurrentHashMap.newKeySet<String>()
 
+    /** Channel-and-epoch pairs already promoted, so a re-open does not re-send. */
+    private val promoted = ConcurrentHashMap.newKeySet<String>()
+
     /**
      * Epochs this client has already gone back to the directory for and still
      * not found. Without it, a channel holding one genuinely unreadable message
@@ -120,286 +190,549 @@ object E2ee {
         store = SecureStore(context)
     }
 
-    // --- identity ---
+    // --- the account vault ---
 
     /**
-     * Loads this device's identity key and publishes the public half. Called
-     * once per sign-in, with the password when there is one to hand.
+     * Opens this account's vault and publishes this device's key. Called once
+     * per sign-in, with the password when there is one to hand.
      *
-     * It never fails for want of a secret, and it never asks for one.
+     * It resolves in one of two states and never a third. Either the vault is
+     * open - and then everything the account has ever been wrapped for opens,
+     * including history from before this phone existed - or this device is
+     * locked and says so.
+     *
+     * What it will not do, under any circumstance, is mint an identity of its
+     * own. That is the change. It used to do exactly that whenever it could
+     * not open a backup, because stopping to ask for a secret is a question a
+     * provider sign-in cannot answer - and the cost was an account with
+     * several identities, each reading a different slice of its own history,
+     * permanently. A locked device has written nothing, so nothing about it is
+     * one-way.
      */
-    suspend fun initIdentity(userId: String, secret: BackupSecret? = null): Crypto.KeyPairJwk =
+    suspend fun initIdentity(userId: String, secret: VaultSecret? = null): Crypto.OpenVault =
         identityLock.withLock {
-            identity?.let { if (this.userId == userId) return@withLock it }
+            vault?.let { if (this.userId == userId) return@withLock it }
             this.userId = userId
-            // Held past this call on purpose: [currentIdentity] retries with no
-            // secret of its own, and a retry without one forks permanently.
+            // Held past this call on purpose: [currentVault] retries with no
+            // secret of its own, and a retry that locks a device whose owner
+            // typed the right password is its own small betrayal.
             if (secret != null) signInSecret = secret
             val opener = secret ?: signInSecret
 
-            val storageKey = "identity:$userId"
-            store.get(storageKey)?.let { stored ->
-                val saved = runCatching { readStored(stored) }.getOrNull()
-                if (saved != null) {
-                    // A device that forked gets another go, every time a secret
-                    // is at hand. This is the whole of "sign in on a new phone
-                    // and your messages are there": the fork below is silent and
-                    // one-way, so the only thing that makes it recoverable is
-                    // trying the backup again on the next sign-in rather than
-                    // short-circuiting on the key the fork left behind.
-                    if (saved.provisional && opener != null) {
-                        restoreFromBackup(storageKey, opener)?.let { return@withLock it }
-                    }
-                    adopt(saved.pair, provisional = saved.provisional)
-                    // A device that already worked may still have no backup.
-                    // Fix it quietly when a secret is at hand rather than
-                    // waiting for the next reinstall to notice.
-                    ensureBackup(saved.pair, opener)
-                    return@withLock saved.pair
-                }
+            val device = deviceIdentity(userId)
+
+            // A failed fetch must not be read as "there is no vault": creating
+            // a second one over a standing one orphans every key wrapped for
+            // the first, with no undo. It throws, and the sign-in retries.
+            val stored = BetweenUsApi.vault()
+                ?: return@withLock createVault(userId, device, opener)
+
+            val opened = unlock(userId, stored, device, opener)
+            if (opened != null) {
+                adopt(userId, device, opened, stored.factors)
+                return@withLock opened
             }
 
-            // A failed fetch must not be read as "there is no backup": that
-            // would seal a fresh key over one that exists. It throws, and the
-            // sign-in retries.
-            val backups = BetweenUsApi.identityBackups()
-
-            // The account's own key, when the secret that opens it is at hand.
-            // The good path and the only instant one: every epoch already
-            // sealed for that identity opens the moment it lands.
-            if (opener != null) {
-                restoreFromBackup(storageKey, opener, backups)?.let { return@withLock it }
-            }
-
-            // Otherwise this device gets a key of its own and the sign-in
-            // carries on. It used to stop and ask - and asking is not something
-            // every sign-in can answer: a provider sign-in has no account
-            // password to offer, and an account that has only ever used one has
-            // no password at all.
-            //
-            // Minting is safe because a channel key is wrapped per *device*:
-            // this device publishes its own public key under its own device id
-            // and takes nothing from the devices already in the directory.
-            // History arrives from them - `fillGaps` hands every epoch a device
-            // holds to the owner's devices missing it - so the account
-            // converges without anyone typing anything. What it costs is that
-            // history is not instant; it appears as the other devices open
-            // those channels. See apps/desktop/src/services/e2ee.ts.
-            //
-            // The fork is marked when the account *had* a backup this device
-            // could not open, and that mark is what lets the next sign-in undo
-            // it. Unmarked means there was nothing to restore from, so this key
-            // is the account's own.
-            val provisional = backups.isNotEmpty()
-            val pair = Crypto.generateIdentity()
-            store.put(storageKey, writePair(pair, provisional))
-            adopt(pair, provisional = provisional)
-            ensureBackup(pair, opener)
-            pair
+            // Locked. Ask to be let in from a device that already is, and say
+            // so rather than quietly becoming a second account.
+            requestGrant(device)
+            _status.value = IdentityStatus.Locked(
+                reason = if (opener != null) LockedReason.WrongSecret else LockedReason.NoSecret,
+                grantRequested = true,
+            )
+            throw VaultLockedError()
         }
 
     /**
-     * Opens whichever backup [secret] fits and makes it this device's identity.
+     * Tries every way this device might already be entitled to the master key:
+     * the one it has already opened, a secret somebody typed, and a grant
+     * somebody approved.
      *
-     * Null means "not this secret" - a wrong password, or a passphrase-only
-     * account signing in with a password - which is an ordinary outcome here,
-     * not a failure.
-     *
-     * Every channel key held on this device is dropped on the way out. They are
-     * still valid, but they are the *subset* a forked identity could reach, and
-     * the caches in front of them - memory and the sealed store both - would
-     * keep serving that subset while the wraps this identity can now open sat
-     * unread in the directory. Dropping them costs one re-read of a directory
-     * we have just been talking to.
+     * Null is an ordinary outcome, not a failure - it is what a phone signing
+     * in for the first time with no password looks like.
      */
-    private suspend fun restoreFromBackup(
-        storageKey: String,
-        secret: BackupSecret,
-        known: List<IdentityBackup>? = null,
-    ): Crypto.KeyPairJwk? {
-        val backups = known ?: runCatching { BetweenUsApi.identityBackups() }.getOrNull() ?: return null
-        val sealed = backups.firstOrNull { it.kind == secret.kind } ?: return null
-        val pair = openBackup(sealed, secret) ?: return null
+    private suspend fun unlock(
+        userId: String,
+        stored: AccountVault,
+        device: Crypto.KeyPairJwk,
+        secret: VaultSecret?,
+    ): Crypto.OpenVault? {
+        // A relaunch must not ask for a password that a launch already took.
+        store.get(masterKeyStore(userId))?.takeIf { it.isNotEmpty() }?.let { cached ->
+            openWith(stored, cached)?.let { return it }
+            // The cached key does not open the current keyring: the account
+            // rotated, or this is stale. Drop it and try the routes below.
+            store.put(masterKeyStore(userId), "")
+        }
 
-        store.put(storageKey, writePair(pair))
+        if (secret != null) {
+            for (factor in stored.factors.filter { it.kind == secret.kind }) {
+                val masterKey = runCatching {
+                    Crypto.openMasterKeyWithSecret(
+                        factor.salt,
+                        factor.iv,
+                        factor.ct,
+                        secret.value,
+                        factor.iterations,
+                    )
+                }.getOrNull() ?: continue
+                openWith(stored, masterKey)?.let {
+                    store.put(masterKeyStore(userId), masterKey)
+                    return it
+                }
+            }
+        }
+
+        val grant = stored.factors.firstOrNull {
+            it.kind == "device" && it.deviceId == DeviceIdentity.id()
+        }
+        if (grant != null) {
+            val masterKey = runCatching {
+                Crypto.openMasterKeyFromGrant(
+                    Crypto.Wrapped(grant.ct, grant.iv),
+                    device.privateKey,
+                    grant.senderPublicKey,
+                )
+            }.getOrNull()
+            if (masterKey != null) {
+                openWith(stored, masterKey)?.let {
+                    store.put(masterKeyStore(userId), masterKey)
+                    return it
+                }
+            }
+        }
+
+        return null
+    }
+
+    /** The keyring behind a master key, or null when that key is not the one. */
+    private fun openWith(stored: AccountVault, masterKey: String): Crypto.OpenVault? =
+        runCatching {
+            Crypto.OpenVault(
+                masterKey,
+                Crypto.openKeyring(stored.keyringIv, stored.keyringCt, masterKey),
+            )
+        }.getOrNull()
+
+    /**
+     * An account with no vault: one that predates it, or a brand-new one.
+     *
+     * The two are handled the same way and deliberately so. The pre-vault
+     * identity is not promoted into the keyring even when this device holds
+     * it: generation 1 of an account identity and the private key of one phone
+     * are different things, and conflating them would mean every later
+     * rotation reasoning about a key a device also holds outside the vault.
+     * What rescues the old history is promoting the wraps, not reusing the key.
+     *
+     * The recovery code is minted here, once, and handed to whoever is
+     * listening. Offering it later in a settings screen is offering it to the
+     * few people who go looking, and the whole value of the factor is that
+     * everybody has one.
+     */
+    private suspend fun createVault(
+        userId: String,
+        device: Crypto.KeyPairJwk,
+        secret: VaultSecret?,
+    ): Crypto.OpenVault {
+        val identity = Crypto.generateIdentity()
+        val masterKey = Crypto.generateMasterKey()
+        val keyring = listOf(Crypto.KeyringEntry(1, identity.publicKey, identity.privateKey))
+        val (keyringIv, keyringCt) = Crypto.sealKeyring(keyring, masterKey)
+
+        val code = Crypto.generateRecoveryCode()
+        val factors = mutableListOf(secretFactor(masterKey, VaultSecret(code, "recovery-code")))
+        // The password as well when there is one, because it is what makes
+        // signing in on a new phone need nothing typed beyond the password.
+        if (secret != null && secret.kind != "recovery-code") {
+            factors += secretFactor(masterKey, secret)
+        }
+
+        val created = BetweenUsApi.createVault(identity.publicKey, keyringIv, keyringCt, factors)
+            // Somebody else's device created it a moment ago - two sign-ins at
+            // once, or a retry after a lost response. Read theirs rather than
+            // insisting on ours: the server refuses the second create for
+            // exactly this reason, and the alternative is two identities again.
+            ?: BetweenUsApi.vault()
+            ?: error("The vault could not be created or read")
+
+        val opened = unlock(userId, created, device, secret)
+            ?: run {
+                requestGrant(device)
+                _status.value =
+                    IdentityStatus.Locked(LockedReason.NoSecret, grantRequested = true)
+                throw VaultLockedError()
+            }
+
+        adopt(userId, device, opened, created.factors)
+        // Shown once, by whoever is listening, or held until somebody is.
+        // Nothing stores it: a recovery code this app can read back is one
+        // that goes with the phone, which is the thing it exists not to do.
+        announceRecoveryCode(code)
+        return opened
+    }
+
+    /**
+     * Publishes this device's key and marks the vault open.
+     *
+     * `holdsVault` is what stops the owner's own settings screen describing a
+     * working device as one waiting for approval. It is an assertion rather
+     * than a proof, and safe to be: the only thing it changes is how this
+     * account's device list is drawn to this account.
+     */
+    private suspend fun adopt(
+        userId: String,
+        device: Crypto.KeyPairJwk,
+        opened: Crypto.OpenVault,
+        factors: List<VaultFactor>,
+    ) {
+        vault = opened
+        deviceKeys = device
+        try {
+            // Idempotent: re-publishing keeps the directory correct if the row
+            // was lost, and refreshes when this phone was last seen.
+            BetweenUsApi.registerDeviceKey(
+                DeviceIdentity.id(),
+                device.publicKey,
+                DeviceIdentity.label(),
+                holdsVault = true,
+            )
+        } catch (error: ApiError) {
+            // Revoked from another machine. Not a thing to retry, and not a
+            // reason to mint a new id - minting one is how a revoked phone
+            // would walk straight back into the directory.
+            if (error.code == "DEVICE_REVOKED") _status.value = IdentityStatus.Revoked
+            throw error
+        }
+        _status.value = IdentityStatus.Ready(recoverable = factors.any { it.portable })
+    }
+
+    /**
+     * Asks to be let in from a device that already is.
+     *
+     * Sent even when nobody is likely to be watching: the request costs
+     * nothing, and the alternative is a screen with a button somebody has to
+     * find. Approving it is a deliberate act on another device, with a
+     * fingerprint to compare first.
+     */
+    private suspend fun requestGrant(device: Crypto.KeyPairJwk) {
+        runCatching {
+            BetweenUsApi.requestVaultGrant(
+                DeviceIdentity.id(),
+                device.publicKey,
+                DeviceIdentity.label(),
+                Crypto.keyFingerprint(device.publicKey),
+            )
+        }
+        // Offline, or the queue is full. The locked screen offers the two
+        // routes that need nobody else, and this is asked again next time.
+    }
+
+    /**
+     * Opens the vault with a secret typed on the locked screen: a second
+     * attempt rather than a first, so the sign-in has already happened and
+     * what is missing is one string.
+     */
+    suspend fun unlockWithSecret(secret: VaultSecret) {
+        val id = userId ?: error("Nobody is signed in")
+        signInSecret = secret
+        identityLock.withLock { vault = null }
+        // Every channel key held at rest is dropped on the way in. They are
+        // still valid, but they are the subset a locked or pre-vault identity
+        // could reach, and the cache would go on serving that subset while
+        // the wraps the account key opens sat unread in the directory - which
+        // is somebody unlocking their account and still seeing padlocks.
         forgetAllKeys()
-        adopt(pair, backedUp = true)
-        return pair
-    }
-
-    /** Seals the current identity under a secret the user chose. */
-    suspend fun backupIdentity(secret: BackupSecret) {
-        val pair = currentIdentity()
-        BetweenUsApi.putIdentityBackup(seal(pair, secret))
-        _status.value = IdentityStatus.Ready(backedUp = true)
+        initIdentity(id, secret)
     }
 
     /**
-     * Re-seals the backup after a password change. Skipped silently when the
-     * backup is keyed to a passphrase, which a password change does not touch.
+     * Whether a device waiting for approval has been let in yet. Polled by the
+     * locked screen, so a phone approved in the next room comes to life
+     * without anybody restarting anything.
      */
-    suspend fun rewrapBackupForPassword(newPassword: String) {
-        if (BetweenUsApi.identityBackups().none { it.kind == "password" }) return
-        backupIdentity(BackupSecret.password(newPassword))
-        // The secret this session holds is now the old one, and a retry using it
-        // would fail to open the blob it has just re-sealed.
-        signInSecret = BackupSecret.password(newPassword)
+    suspend fun checkForGrant(): Boolean {
+        val id = userId ?: return false
+        return runCatching {
+            BetweenUsApi.vaultGrant(DeviceIdentity.id()) ?: return false
+            identityLock.withLock { vault = null }
+            initIdentity(id)
+            true
+        }.getOrDefault(false)
+    }
+
+    /** Devices of this account waiting to be let in, for the approval screen. */
+    suspend fun pendingGrants(): List<VaultGrantRequest> = BetweenUsApi.vaultGrants()
+
+    /**
+     * Lets one device in.
+     *
+     * The fingerprint is recomputed here from the key that is about to be
+     * sealed for, and compared against the one the request carried. That is
+     * not belt-and-braces: the request's own field arrived over the wire
+     * beside the key, so trusting it would be checking a claim against itself.
+     */
+    suspend fun approveGrant(request: VaultGrantRequest) {
+        val open = currentVault()
+        val identity = open.current
+        require(Crypto.keyFingerprint(request.publicKey) == request.fingerprint) {
+            "That device's fingerprint does not match the key it published"
+        }
+
+        val sealed = Crypto.sealMasterKeyForDevice(
+            open.masterKey,
+            identity.privateKey,
+            request.publicKey,
+        )
+        BetweenUsApi.putVaultFactor(
+            VaultFactor(
+                kind = "device",
+                deviceId = request.deviceId,
+                kdf = "ECDH-HKDF-SHA256",
+                iterations = 0,
+                salt = "",
+                iv = sealed.iv,
+                ct = sealed.wrappedKey,
+                senderPublicKey = identity.publicKey,
+            ),
+        )
+    }
+
+    /** Withdraws a request, for somebody who did not recognise the device. */
+    suspend fun denyGrant(deviceId: String) = BetweenUsApi.denyVaultGrant(deviceId)
+
+    /**
+     * Adds or replaces a door into the vault.
+     *
+     * Replacing is the ordinary case: a changed password re-seals the same
+     * master key under a new derivation, and nothing history depends on is
+     * touched - which is the whole reason the master key is a layer of its own
+     * rather than the identity being sealed four times.
+     */
+    suspend fun setVaultFactor(secret: VaultSecret) {
+        BetweenUsApi.putVaultFactor(secretFactor(currentVault().masterKey, secret))
+    }
+
+    /** Takes a door away. The server refuses the last portable one. */
+    suspend fun removeVaultFactor(kind: String) = BetweenUsApi.deleteVaultFactor(kind)
+
+    /**
+     * Mints a fresh recovery code and replaces the old one. Returned rather
+     * than stored, for the same reason it is shown once and never again.
+     */
+    suspend fun regenerateRecoveryCode(): String {
+        val code = Crypto.generateRecoveryCode()
+        BetweenUsApi.putVaultFactor(
+            secretFactor(currentVault().masterKey, VaultSecret(code, "recovery-code")),
+        )
+        return code
     }
 
     /**
-     * Whether the account password can still recover this identity on a device
-     * that has never seen it.
+     * Appends an identity generation, after a device was lost.
+     *
+     * Nothing is taken away by it, and that is what makes it usable: every
+     * earlier private half stays in the ring, so every channel key ever
+     * wrapped to an older public half still opens. This could not be done at
+     * all before - rotating meant abandoning every row sealed for the old
+     * identity, which is to say the history - so a lost phone was something an
+     * account simply lived with.
+     */
+    suspend fun rotateAccountIdentity() {
+        val open = currentVault()
+        val next = open.current.generation + 1
+        val identity = Crypto.generateIdentity()
+        val keyring = open.keyring + Crypto.KeyringEntry(next, identity.publicKey, identity.privateKey)
+        val (iv, ct) = Crypto.sealKeyring(keyring, open.masterKey)
+
+        BetweenUsApi.rotateVault(identity.publicKey, next, iv, ct)
+        identityLock.withLock { vault = Crypto.OpenVault(open.masterKey, keyring) }
+        // The held keys are still openable - every generation stays in the
+        // ring - but the cached *epoch* per channel is now behind whatever
+        // members seal next, so the directory is re-read on the next open.
+        forgetAllKeys()
+    }
+
+    /**
+     * Whether the account password can still open the vault on a device that
+     * has never seen it.
      *
      * The one thing a settings screen has to be able to say plainly: it is the
-     * difference between "sign in anywhere" and "sign in anywhere and type a
-     * passphrase you wrote down once".
+     * difference between "sign in anywhere" and "sign in anywhere and find the
+     * piece of paper".
      */
     suspend fun passwordRecoveryEnabled(): Boolean =
-        BetweenUsApi.identityBackups().any { it.kind == "password" }
+        BetweenUsApi.vault()?.factors?.any { it.kind == "password" } == true
 
     /**
      * Turns the password path off, for somebody who set a recovery passphrase
-     * *because* a live server sees the password at sign-in and they would rather
-     * it could never open the backup.
+     * *because* a live server sees the password at sign-in and they would
+     * rather it could never open the vault.
      *
-     * Refuses when it would leave the account with no backup at all. That is not
-     * a security setting, it is losing every message on the next reinstall.
+     * The server refuses this when it would leave no portable factor at all,
+     * which is not a security setting - it is losing every message on the next
+     * reinstall - and it is refused there rather than here so that it holds
+     * for every client there will ever be.
      */
-    suspend fun disablePasswordRecovery() {
-        if (BetweenUsApi.identityBackups().none { it.kind == "passphrase" }) {
-            error("Set a recovery passphrase first, or this account has no way back at all")
-        }
-        BetweenUsApi.deleteIdentityBackup("password")
+    suspend fun disablePasswordRecovery() = BetweenUsApi.deleteVaultFactor("password")
+
+    /** Re-seals the password factor after a password change. */
+    suspend fun rewrapBackupForPassword(newPassword: String) {
+        if (!passwordRecoveryEnabled()) return
+        setVaultFactor(VaultSecret.password(newPassword))
+        // The secret this session holds is now the old one, and a retry using
+        // it would fail to open the factor it has just re-sealed.
+        signInSecret = VaultSecret.password(newPassword)
     }
 
     fun reset() {
         // Key material is per-user; a sign-out must not leak it into the next
         // session. What is on disk stays - it is sealed, and the same account
-        // signing back in should not have to fetch its backup again.
-        identity = null
+        // signing back in should not have to open its vault from scratch.
+        vault = null
+        deviceKeys = null
         userId = null
         signInSecret = null
+        // A code minted for the account signing out must not be shown to
+        // whoever signs in next.
+        pendingRecoveryCode = null
         channels.clear()
         channelLocks.clear()
         rekeyed.clear()
+        promoted.clear()
         missedEpochs.clear()
         _status.value = IdentityStatus.Absent
     }
 
-    private suspend fun adopt(
-        pair: Crypto.KeyPairJwk,
-        backedUp: Boolean = false,
-        provisional: Boolean = false,
-    ) {
-        identity = pair
-        try {
-            // Idempotent: re-publishing keeps the directory correct if the row
-            // was lost, and refreshes when this phone was last seen.
-            BetweenUsApi.registerDeviceKey(DeviceIdentity.id(), pair.publicKey, DeviceIdentity.label())
-        } catch (error: ApiError) {
-            // Revoked from another machine. Not a thing to retry, and not a
-            // reason to mint a new id - minting one is how a revoked phone
-            // would walk straight back into the directory.
-            if (error.code == "DEVICE_REVOKED") {
-                _status.value = IdentityStatus.Revoked
-            }
-            throw error
-        }
-        _status.value = IdentityStatus.Ready(backedUp, provisional)
-    }
-
-    /**
-     * Uploads a backup when the account has none for this identity and a secret
-     * is available to seal it with. Never throws into a sign-in: an account
-     * without a backup still works, it is only unrecoverable, and settings says so.
-     */
-    private suspend fun ensureBackup(pair: Crypto.KeyPairJwk, secret: BackupSecret?) {
-        runCatching {
-            val backups = BetweenUsApi.identityBackups()
-            val backedUp = backups.any { it.publicKey == pair.publicKey }
-
-            // A backup that already stands is not this device's to replace
-            // unless it is this device's key in it. Since a device that could
-            // not open one mints its own, sealing over it here would take the
-            // account's recoverable identity away from every device still
-            // restoring from it. Deliberate re-sealing is [backupIdentity]'s.
-            //
-            // Scoped to the *kind* now. An account holding a passphrase backup
-            // and no password one is exactly the account that cannot recover on
-            // a fresh sign-in, so filling that gap when the password is at hand
-            // is the point rather than an overreach - and it only ever seals the
-            // key this device already holds, which is the identity the other
-            // devices restore from whenever `backedUp` says so.
-            if (secret == null || backups.any { it.kind == secret.kind } || !backedUp) {
-                _status.value = IdentityStatus.Ready(
-                    backedUp = backedUp,
-                    provisional = backups.isNotEmpty() && !backedUp,
-                )
-                return
-            }
-            BetweenUsApi.putIdentityBackup(seal(pair, secret))
-            _status.value = IdentityStatus.Ready(backedUp = true)
-        }
-        // Offline, or a server older than this client. Nothing is lost that was
-        // not already missing.
-    }
-
-    private fun seal(pair: Crypto.KeyPairJwk, secret: BackupSecret): IdentityBackup {
-        val (salt, iv, ct) = Crypto.sealIdentity(pair, secret.value)
-        return IdentityBackup(
+    private fun secretFactor(masterKey: String, secret: VaultSecret): VaultFactor {
+        val (salt, iv, ct) = Crypto.sealMasterKeyWithSecret(masterKey, secret.value)
+        return VaultFactor(
             kind = secret.kind,
+            deviceId = "",
+            kdf = "PBKDF2-SHA256",
             iterations = Crypto.BACKUP_ITERATIONS,
             salt = salt,
             iv = iv,
             ct = ct,
-            publicKey = pair.publicKey,
+            senderPublicKey = "",
         )
     }
-
-    /** The wrong secret is an ordinary outcome here, not an error: null, and on. */
-    private fun openBackup(backup: IdentityBackup, secret: BackupSecret): Crypto.KeyPairJwk? =
-        runCatching {
-            Crypto.openIdentity(backup.salt, backup.iv, backup.ct, secret.value, backup.iterations)
-        }.getOrNull()
 
     /**
-     * What the sealed store holds. `provisional` marks a key this device minted
-     * for itself *while the account had a backup it could not open* - the fork
-     * described in [initIdentity]. It is the flag that makes the fork
-     * recoverable: without it the stored key short-circuits every later launch
-     * and the backup is never tried again, on any sign-in, ever.
+     * This device's own key pair: for receiving a vault grant, and for opening
+     * the pre-vault rows addressed to it.
+     *
+     * Stored where the old identity was, and reusing whatever is there. That
+     * is deliberate and it is what makes promotion possible at all: the key in
+     * that slot is the one `channel_keys` rows were sealed to before the vault
+     * existed, and generating a fresh one here would throw away the only thing
+     * in the world that can open them.
      */
-    private class StoredIdentity(val pair: Crypto.KeyPairJwk, val provisional: Boolean)
+    private fun deviceIdentity(userId: String): Crypto.KeyPairJwk {
+        val slot = "identity:$userId"
+        store.get(slot)?.let { stored ->
+            runCatching {
+                val json = JSONObject(stored)
+                Crypto.KeyPairJwk(json.getString("publicKey"), json.getString("privateKey"))
+            }.getOrNull()?.let { return it }
+        }
 
-    private fun writePair(pair: Crypto.KeyPairJwk, provisional: Boolean = false) = JSONObject()
-        .put("publicKey", pair.publicKey)
-        .put("privateKey", pair.privateKey)
-        .put("provisional", provisional)
-        .toString()
-
-    private fun readStored(stored: String): StoredIdentity {
-        val json = JSONObject(stored)
-        return StoredIdentity(
-            pair = Crypto.KeyPairJwk(json.getString("publicKey"), json.getString("privateKey")),
-            // Absent on a blob written before the fork was recoverable. False is
-            // the safe reading: it was minted under rules that had no mark, and
-            // a sign-in that opens the backup replaces it either way.
-            provisional = json.optBoolean("provisional", false),
+        val pair = Crypto.generateIdentity()
+        store.put(
+            slot,
+            JSONObject()
+                .put("publicKey", pair.publicKey)
+                .put("privateKey", pair.privateKey)
+                .toString(),
         )
+        return pair
     }
 
-    private suspend fun currentIdentity(): Crypto.KeyPairJwk =
-        identity
-            // With the session's secret, not without it. A retry that dropped it
-            // opened no backup, minted a device-local key, and forked for good.
+    /** Where this device keeps the master key once it has opened the vault. */
+    private fun masterKeyStore(userId: String) = "vault:$userId"
+
+    /** Who is listening for the one-time recovery code, at account creation. */
+    private val recoveryCodeListeners = mutableSetOf<(String) -> Unit>()
+
+    /**
+     * A code minted before anything was listening.
+     *
+     * The vault is created inside a sign-in and the screen that shows the code
+     * appears in response to that same sign-in, so on a fresh registration the
+     * code is often produced before anything is subscribed. Firing into an
+     * empty room there would lose the only copy of the only factor that
+     * survives losing everything else, silently, on the accounts least
+     * equipped to notice.
+     */
+    @Volatile
+    private var pendingRecoveryCode: String? = null
+
+    /** Subscribes to the recovery code minted when a vault is created. */
+    @Synchronized
+    fun onRecoveryCode(listener: (String) -> Unit): () -> Unit {
+        recoveryCodeListeners += listener
+        pendingRecoveryCode?.let { code ->
+            // Cleared as it is handed over: this is the one delivery, and
+            // holding it longer would show a later subscriber a code that has
+            // already been written down and moved past.
+            pendingRecoveryCode = null
+            listener(code)
+        }
+        return { synchronized(this) { recoveryCodeListeners -= listener } }
+    }
+
+    @Synchronized
+    private fun announceRecoveryCode(code: String) {
+        if (recoveryCodeListeners.isEmpty()) {
+            pendingRecoveryCode = code
+            return
+        }
+        recoveryCodeListeners.toList().forEach { it(code) }
+    }
+
+    /** Waits for sign-in key setup instead of racing it, and retries a failed one. */
+    private suspend fun currentVault(): Crypto.OpenVault =
+        vault
+            // With the session's secret, not without it. A retry that dropped
+            // it opened no backup, minted a device-local key, and forked the
+            // account for good.
             ?: userId?.let { initIdentity(it, signInSecret) }
-            ?: throw MissingChannelKeyError()
+            ?: throw VaultLockedError()
+
+    /**
+     * Every private half this device can try a wrap against, newest identity
+     * first.
+     *
+     * Order matters only for speed - the newest generation opens almost
+     * everything - but the device key going last is worth keeping: it is the
+     * one that opens the rows this device has a duty to promote, and having it
+     * fail first on every account-scoped row would be a wasted AES operation
+     * per message on a busy channel.
+     */
+    private fun privateHalves(): List<String> {
+        val halves = vault?.keyring.orEmpty()
+            .sortedByDescending { it.generation }
+            .map { it.privateKey }
+            .toMutableList()
+        deviceKeys?.let { halves += it.privateKey }
+        return halves
+    }
 
     // --- content ---
 
+    /**
+     * Seals a message, but not before every member can open the epoch it is
+     * sealed under.
+     *
+     * The order is the fix. The re-wrap for uncovered members used to happen
+     * in the background while the send went ahead, so a message could be -
+     * and routinely was - written under an epoch somebody had no wrap for.
+     * Nothing ever repaired that: the epoch was minted, the message stored,
+     * and the member read a padlock until the channel happened to rotate.
+     */
     suspend fun encryptForChannel(channelId: String, plaintext: String): String {
         val state = ensureChannelKey(channelId)
         val key = state.keys[state.epoch] ?: throw MissingChannelKeyError()
+        coverEveryone(channelId, state.epoch, key)
         val sealed = Crypto.encrypt(plaintext, key)
         return JSONObject()
             .put("v", 1)
@@ -407,6 +740,26 @@ object E2ee {
             .put("iv", sealed.iv)
             .put("ct", Crypto.base64(sealed.ciphertext))
             .toString()
+    }
+
+    /**
+     * Seals the current epoch for any member who has no wrap for it yet.
+     *
+     * Quiet about its own failure and deliberately so: the alternative is a
+     * message somebody cannot send because a third party joined the channel a
+     * second ago and the directory has not caught up. What it must not do is
+     * *skip* the attempt, which is what running it in the background amounted
+     * to.
+     */
+    private suspend fun coverEveryone(channelId: String, epoch: Int, key: String) {
+        runCatching {
+            val latest = BetweenUsApi.channelKeys(channelId)
+            if (latest.epoch != epoch || latest.missingRecipients.isEmpty()) return
+            shareKey(channelId, epoch, key, latest.missingRecipients)
+        }
+        // Offline, or somebody rotated underneath us. The send goes ahead: the
+        // epoch is the one this device holds and the members who do have a
+        // wrap read it. The next open asks again for the ones who do not.
     }
 
     /**
@@ -483,24 +836,32 @@ object E2ee {
     suspend fun sealStatus(
         caption: String?,
         media: ByteArray?,
-        devices: List<DeviceKey>,
+        audience: List<AccountKeyRecipient>,
     ): SealedStatus {
-        val self = currentIdentity()
+        val open = currentVault()
+        val identity = open.current
         val key = Crypto.generateChannelKey()
         val mine = DeviceIdentity.id()
-        val recipients = if (devices.any { it.userId == userId && it.deviceId == mine }) {
-            devices
+        val recipients = if (audience.any { it.userId == userId }) {
+            audience
         } else {
-            devices + DeviceKey(userId.orEmpty(), mine, self.publicKey)
+            audience + AccountKeyRecipient(
+                userId.orEmpty(),
+                identity.publicKey,
+                identity.generation,
+            )
         }
 
-        val keys = recipients.mapNotNull { device ->
+        val keys = recipients.mapNotNull { who ->
             runCatching {
-                val wrapped = Crypto.wrapChannelKey(key, self.privateKey, device.publicKey)
+                val wrapped = Crypto.wrapChannelKey(key, identity.privateKey, who.publicKey)
                 StatusKeyEntry(
-                    recipientUserId = device.userId,
-                    recipientDeviceId = device.deviceId,
-                    senderPublicKey = self.publicKey,
+                    recipientUserId = who.userId,
+                    // Per account, so a friend who signs in on a new phone an
+                    // hour from now still opens this post. Per device it was a
+                    // day-long version of the bug that lost conversations.
+                    recipientDeviceId = ACCOUNT_SCOPE,
+                    senderPublicKey = identity.publicKey,
                     wrappedKey = wrapped.wrappedKey,
                     iv = wrapped.iv,
                 )
@@ -537,16 +898,22 @@ object E2ee {
      */
     suspend fun statusKey(post: StatusEntry): String? {
         if (post.keys.isEmpty()) return null
-        val self = currentIdentity()
+        currentVault()
         for (wrap in post.keys) {
-            val opened = runCatching {
-                Crypto.unwrapChannelKey(
-                    Crypto.Wrapped(wrap.wrappedKey, wrap.iv),
-                    self.privateKey,
-                    wrap.senderPublicKey,
-                )
-            }.getOrNull()
-            if (opened != null) return opened
+            for (privateKey in privateHalves()) {
+                val opened = runCatching {
+                    Crypto.unwrapChannelKey(
+                        Crypto.Wrapped(wrap.wrappedKey, wrap.iv),
+                        privateKey,
+                        wrap.senderPublicKey,
+                    )
+                }.getOrNull()
+                if (opened != null) return opened
+            }
+            // Not this half. An account-scoped wrap opens on a keyring
+            // generation; one a pre-vault client wrote opens on this device's
+            // own key; one addressed to another of our machines opens on
+            // neither, which is ordinary.
         }
         return null
     }
@@ -605,30 +972,89 @@ object E2ee {
             return
         }
 
+        promoteEpochs(channelId, state, latest.promotable)
         fillGaps(channelId, state, latest)
     }
 
     /**
-     * Hands every epoch this phone holds to the machines that are missing it.
+     * Re-seals epochs this device holds only as pre-vault, per-device wraps,
+     * addressing them to the account.
      *
-     * This is what lets a second machine read *history* rather than only what
-     * is written after it arrives. Re-wrapping the current epoch and nothing
-     * else left a machine that signed in today missing every epoch before
-     * today - it holds none of them so it cannot repair itself, and with nobody
-     * looking on its behalf it minted a fresh epoch and the whole conversation
-     * before that moment stayed a padlock for good.
+     * This is the rescue, and this device is the only thing that can perform
+     * it: those rows were sealed to *this installation's* key, so no server,
+     * no other machine and no machine that does not exist yet can open them.
+     * Re-addressing them to the account key costs one request and takes that
+     * epoch permanently out of reach of losing this phone.
      *
-     * The server only ever lists a machine whose *owner* already holds that
-     * epoch, so this repairs one person's own second machine and hands nothing
-     * to somebody who joined last week.
+     * It grants nothing to anybody: the wrap goes to the same account that
+     * already held it, and the server checks exactly that.
+     */
+    private suspend fun promoteEpochs(
+        channelId: String,
+        state: ChannelKeyState,
+        epochs: List<Int>,
+    ) {
+        val open = vault ?: return
+        val id = userId ?: return
+        val identity = open.current
+
+        for (epoch in epochs) {
+            val at = "$channelId#$epoch"
+            if (!promoted.add(at)) continue
+            // An epoch this device cannot open is not one it can promote -
+            // which is the honest boundary of the rescue: a pre-vault epoch
+            // whose only wrap went with a machine that no longer exists is not
+            // recoverable by anybody, and this is where that becomes visible
+            // rather than where it is fixed.
+            val key = state.keys[epoch] ?: run { promoted.remove(at); continue }
+            val done = runCatching {
+                shareKey(
+                    channelId,
+                    epoch,
+                    key,
+                    listOf(AccountKeyRecipient(id, identity.publicKey, identity.generation)),
+                )
+            }.isSuccess
+            if (!done) promoted.remove(at)
+        }
+    }
+
+    /**
+     * Promotes everything this device can, across every channel it can see.
      *
-     * Failures are per epoch and never fatal: a racing rotation or a device
-     * revoked between the read and the write fails one wrap, and neither is a
+     * Run once per sign-in rather than waiting for somebody to open each
+     * channel, because the window closes when this phone is wiped: a channel
+     * nobody has opened in six months is exactly the one most likely to go
+     * with it.
+     */
+    suspend fun promoteEverything() {
+        runCatching {
+            for (channelId in BetweenUsApi.channelsWithKeys()) {
+                runCatching {
+                    val state = ensureChannelKey(channelId)
+                    promoteEpochs(channelId, state, BetweenUsApi.channelKeys(channelId).promotable)
+                }
+                // One channel's failure is not a reason to stop rescuing the
+                // rest, and the next sign-in tries again.
+            }
+        }
+    }
+
+    /**
+     * Hands epochs this device holds to members who are owed them.
+     *
+     * Far smaller than it was. It used to hand every epoch to every *other
+     * machine of the same account*, one at a time, whenever this one happened
+     * to open the channel - which is why history arrived late, partially, or
+     * never. An account-scoped wrap needs no such repair, so what is left is
+     * the current epoch for anybody uncovered, and the one deliberate
+     * exception: a member let in *with* the history.
+     *
+     * Failures are per epoch and never fatal: a racing rotation or a member
+     * removed between the read and the write fails one wrap, and neither is a
      * reason to stop opening the channel.
      */
     private suspend fun fillGaps(channelId: String, state: ChannelKeyState, latest: ChannelKeys) {
-        // Belt and braces for a server older than `gaps`, where this is the
-        // only re-wrap that happens.
         state.keys[state.epoch]?.let { key ->
             if (latest.missingRecipients.isNotEmpty()) {
                 runCatching { shareKey(channelId, state.epoch, key, latest.missingRecipients) }
@@ -639,8 +1065,8 @@ object E2ee {
             // An epoch we cannot open is not ours to hand out, and the server
             // would refuse it anyway: only a holder may add to an existing one.
             val key = state.keys[gap.epoch] ?: continue
-            if (gap.devices.isEmpty()) continue
-            runCatching { shareKey(channelId, gap.epoch, key, gap.devices) }
+            if (gap.recipients.isEmpty()) continue
+            runCatching { shareKey(channelId, gap.epoch, key, gap.recipients) }
         }
     }
 
@@ -735,10 +1161,11 @@ object E2ee {
     /**
      * Drops every channel key this device holds, in memory and at rest.
      *
-     * Called when the identity changes under it - [restoreFromBackup]. The keys
-     * are still valid, but they are the *subset* the old identity could reach,
-     * and both caches would go on serving that subset while the wraps the new
-     * identity can open sat unread in the directory.
+     * Called when a machine that had forked takes the account identity back,
+     * and when the account identity rotates. The keys are still valid, but
+     * they are the *subset* the old identity could reach, and both caches
+     * would go on serving that subset while the wraps the new identity can
+     * open sat unread in the directory.
      */
     private fun forgetAllKeys() {
         channels.clear()
@@ -748,9 +1175,9 @@ object E2ee {
     }
 
     private suspend fun loadChannelKey(channelId: String): ChannelKeyState {
-        val self = currentIdentity()
+        currentVault()
         var response = BetweenUsApi.channelKeys(channelId)
-        var keys = openKeys(response.keys, self)
+        var keys = openKeys(response.keys)
 
         // We hold nothing for the current epoch. Either nobody has keyed the
         // channel yet, or it was keyed before we joined and every holder who
@@ -763,7 +1190,7 @@ object E2ee {
             // Re-read rather than trusting our own write: another member may
             // have won the race, and then theirs is the epoch that counts.
             response = BetweenUsApi.channelKeys(channelId)
-            keys = openKeys(response.keys, self)
+            keys = openKeys(response.keys)
         }
 
         if (!keys.containsKey(response.epoch)) throw MissingChannelKeyError()
@@ -776,25 +1203,41 @@ object E2ee {
             }
         }
 
-        return ChannelKeyState(response.epoch, keys)
+        val state = ChannelKeyState(response.epoch, keys)
+        // And whatever this device alone can still rescue on this channel.
+        runCatching { promoteEpochs(channelId, state, response.promotable) }
+        return state
     }
 
-    /** Opens every entry sealed for us, keyed by epoch. */
-    private fun openKeys(
-        entries: List<ChannelKeyEntry>,
-        self: Crypto.KeyPairJwk,
-    ): MutableMap<Int, String> {
+    /**
+     * Opens every entry sealed for us, keyed by epoch.
+     *
+     * Tried against every private half this device has, and the list is the
+     * design rather than a shotgun: every generation in the keyring, so a
+     * rotation leaves the history readable, and then this device's own key, so
+     * pre-vault rows addressed to this installation still open - which is what
+     * makes promoting them possible.
+     */
+    private fun openKeys(entries: List<ChannelKeyEntry>): MutableMap<Int, String> {
         val keys = mutableMapOf<Int, String>()
+        val halves = privateHalves()
         for (entry in entries) {
-            runCatching {
-                keys[entry.epoch] = Crypto.unwrapChannelKey(
-                    Crypto.Wrapped(entry.wrappedKey, entry.iv),
-                    self.privateKey,
-                    entry.senderPublicKey,
-                )
+            if (keys.containsKey(entry.epoch)) continue
+            for (privateKey in halves) {
+                val opened = runCatching {
+                    Crypto.unwrapChannelKey(
+                        Crypto.Wrapped(entry.wrappedKey, entry.iv),
+                        privateKey,
+                        entry.senderPublicKey,
+                    )
+                }.getOrNull()
+                if (opened != null) {
+                    keys[entry.epoch] = opened
+                    break
+                }
             }
-            // A key sealed for another of our machines, or for an identity we
-            // have since replaced. Both are rows this private half cannot open.
+            // A row addressed to another of our machines opens on none of
+            // them, which is ordinary: skip it, keep the rest.
         }
         return keys
     }
@@ -804,21 +1247,24 @@ object E2ee {
      * keyed, or one that was keyed before we were a member.
      */
     private suspend fun createChannelKey(channelId: String, epoch: Int) {
-        val self = currentIdentity()
+        val open = currentVault()
+        val identity = open.current
         val key = Crypto.generateChannelKey()
-        val devices = BetweenUsApi.channelDevices(channelId)
+        val members = BetweenUsApi.channelRecipients(channelId)
 
-        // Our own row may not be in the directory yet on a device that signed in
-        // a moment ago. Minting a key we cannot open - or, with an empty
-        // directory, publishing nothing at all - leaves the channel unkeyed and
-        // the sender told there is no key, so always seal one for ourselves.
-        // Being listed under our user id is no longer enough: the directory is a
-        // row per machine, and that row may be the other laptop.
-        val mine = DeviceIdentity.id()
-        val recipients = if (devices.any { it.userId == userId && it.deviceId == mine }) {
-            devices
+        // Our own entry may not be in the directory yet on an account whose
+        // vault was created a moment ago. Minting a key we cannot open - or,
+        // with an empty directory, publishing nothing at all - leaves the
+        // channel unkeyed and the sender told there is no key, so always seal
+        // one for ourselves.
+        val recipients = if (members.any { it.userId == userId }) {
+            members
         } else {
-            devices + DeviceKey(userId.orEmpty(), mine, self.publicKey)
+            members + AccountKeyRecipient(
+                userId.orEmpty(),
+                identity.publicKey,
+                identity.generation,
+            )
         }
 
         try {
@@ -833,23 +1279,34 @@ object E2ee {
         }
     }
 
+    /**
+     * Seals one channel key for every account that should hold it.
+     *
+     * One wrap per person rather than per machine, which is the change this
+     * whole file exists for: somebody signed in on a laptop and a phone gets
+     * one entry, openable by both, and by the tablet they set up next month.
+     */
     private suspend fun shareKey(
         channelId: String,
         epoch: Int,
         key: String,
-        recipients: List<DeviceKey>,
+        recipients: List<AccountKeyRecipient>,
     ) {
         if (recipients.isEmpty()) return
-        val self = currentIdentity()
+        val identity = currentVault().current
         val entries = recipients.mapNotNull { recipient ->
             runCatching {
-                val wrapped = Crypto.wrapChannelKey(key, self.privateKey, recipient.publicKey)
+                val wrapped = Crypto.wrapChannelKey(key, identity.privateKey, recipient.publicKey)
                 ChannelKeyEntry(
                     recipientUserId = recipient.userId,
-                    recipientDeviceId = recipient.deviceId,
+                    // Never a machine. The server refuses anything else, and a
+                    // client that wrote one would rebuild the old failure
+                    // channel by channel, invisibly, because it all reads
+                    // correctly on the device that wrote it.
+                    recipientDeviceId = ACCOUNT_SCOPE,
                     senderUserId = userId.orEmpty(),
                     senderDeviceId = DeviceIdentity.id(),
-                    senderPublicKey = self.publicKey,
+                    senderPublicKey = identity.publicKey,
                     wrappedKey = wrapped.wrappedKey,
                     iv = wrapped.iv,
                     epoch = epoch,
