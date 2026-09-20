@@ -1,5 +1,38 @@
 # Changelog
 
+## [1.0.7](https://github.com/aiyu-ayaan/BetweenUs/compare/v1.0.6...v1.0.7) (2026-09-20)
+
+### Features
+
+* Open the account vault, and lock rather than fork
+* Show the recovery code, and say plainly when a device is locked
+* Open the account vault on every device, and never fork
+* Collect objects the database has no reference to
+* Wrap channel and moment keys for accounts, not machines
+* Add the account vault schema and contracts
+
+### Bug fixes
+
+* Account vault E2EE keyring, storage reconciler, and screen share fixes
+* Point default emulator endpoint to dev gateway on 8090 with 8080 fallback
+* Improve CPU handling in share quality checks and ladder logic
+* Share system audio without the call in it
+* Keep the picture-in-picture overlay out of a screen share
+
+### Other changes
+
+* Update public docs for account vault, object reconciler, and new E2EE architecture
+* Stop dev postgres and redis from auto-starting on boot
+* Document share audio without the call and the hidden PiP overlay
+
+### Artifacts
+
+| Platform | This release |
+| --- | --- |
+| Server images | Built here |
+| Desktop | Built here |
+| Android | Built here |
+
 ## [1.0.6](https://github.com/aiyu-ayaan/BetweenUs/compare/v1.0.5...v1.0.6) (2026-09-19)
 
 ### Features
