@@ -2274,6 +2274,17 @@ export interface RegisterDeviceKeyRequest {
   deviceId: string;
   publicKey: string;
   label?: string;
+  /**
+   * This machine says it can open the vault.
+   *
+   * An assertion, not a proof, and it is safe to take at face value because
+   * of what it is *for*: the only thing it changes is how this account's own
+   * device list is drawn to this account. A machine that lied about it would
+   * mislabel its own row in its owner's settings panel and gain nothing -
+   * whether it can actually read anything is settled by whether the master
+   * key opens, which no flag can fake.
+   */
+  holdsVault?: boolean;
 }
 
 /**

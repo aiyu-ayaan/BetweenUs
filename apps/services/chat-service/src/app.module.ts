@@ -14,6 +14,7 @@ import { ScratchSweeper } from './modules/uploads/scratch-sweeper';
 import { AttachmentSweeper } from './modules/uploads/attachment-sweeper';
 import { E2eeController } from './modules/e2ee/e2ee.controller';
 import { E2eeService } from './modules/e2ee/e2ee.service';
+import { VaultService } from './modules/e2ee/vault.service';
 import {
   BlocksController,
   DirectChannelsController,
@@ -54,6 +55,7 @@ const SERVICE_NAME = 'chat-service';
     UnfurlService,
     ArrivalsService,
     E2eeService,
+    VaultService,
     FriendsService,
     WebhooksService,
     StatusService,

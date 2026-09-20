@@ -35,6 +35,7 @@ import { getStorage } from '@betweenus/storage';
 import {
   STATUS_TTL_MS,
   type CreateStatusRequest,
+  type AccountKeyRecipient,
   type DeviceKey,
   type StatusEntry,
   type StatusFeed,
@@ -406,14 +407,11 @@ export class StatusService {
   }
 
   /**
-   * Every device a post written now may be sealed for: the author's own, and
-   * every friend's the chosen audience allows, minus the revoked ones.
+   * Every device a post written now may be sealed for.
    *
-   * The same answer `devicesForChannel` gives for a channel, from the same
-   * directory - a status simply has a friend list where a channel has a
-   * membership. Revoked machines are filtered here rather than left to the
-   * client for the same reason they are there: "never seal for that laptop
-   * again" has to be enforced where the answer is produced.
+   * @deprecated A moment is sealed for accounts now - see `audienceAccounts`.
+   * Kept while clients that wrap per machine are still in the wild, so their
+   * posts keep being readable by the people they addressed.
    */
   async audienceDevices(userId: string): Promise<DeviceKey[]> {
     const audience = await this.postAudienceOf(userId);
@@ -422,6 +420,34 @@ export class StatusService {
       orderBy: { createdAt: 'asc' },
     });
     return rows.map(toDeviceKey);
+  }
+
+  /**
+   * Every account a post written now may be sealed for: the author's own, and
+   * every friend's the chosen audience allows.
+   *
+   * One entry per person, where the route above sends one per machine. A
+   * moment lives a day, so the bug this fixes was a day-long version of the
+   * one that lost conversations: a friend who signed in on a new phone after
+   * the post was written held no wrap for it and saw a padlock until it
+   * expired. Sealing for the account means it opens on whichever machine they
+   * happen to pick up, including one enrolled an hour later.
+   *
+   * An account with no vault is left out rather than guessed at - there is no
+   * key to seal to, and the server inventing one is the one thing it must
+   * never be able to do.
+   */
+  async audienceAccounts(userId: string): Promise<AccountKeyRecipient[]> {
+    const audience = await this.postAudienceOf(userId);
+    const rows = await prisma.accountVault.findMany({
+      where: { userId: { in: [userId, ...audience] } },
+      select: { userId: true, publicKey: true, generation: true },
+    });
+    return rows.map((row) => ({
+      userId: row.userId,
+      publicKey: row.publicKey,
+      generation: row.generation,
+    }));
   }
 
   /**

@@ -11,14 +11,18 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import { channelAudience, prisma } from '@betweenus/database';
 import { PERMISSIONS } from '@betweenus/permissions';
-import type {
-  BackupSecretKind,
-  ChannelKeysResponse,
-  DeviceKey,
-  IdentityBackup,
-  IdentityBackupResponse,
-  PublishChannelKeysRequest,
-  PutIdentityBackupRequest,
+import {
+  ACCOUNT_SCOPE,
+  isAccountScope,
+  type AccountKeyRecipient,
+  type BackupSecretKind,
+  type ChannelKeysResponse,
+  type DeviceKey,
+  type IdentityBackup,
+  type IdentityBackupResponse,
+  type KeyHealthResponse,
+  type PublishChannelKeysRequest,
+  type PutIdentityBackupRequest,
 } from '@betweenus/shared-types';
 import { MessagesService } from '../messages/messages.service';
 
@@ -54,10 +58,11 @@ export class E2eeService {
     deviceId: string,
     publicKey: string,
     label?: string,
+    holdsVault?: boolean,
   ): Promise<DeviceKey> {
     const existing = await prisma.deviceKey.findUnique({
       where: { userId_deviceId: { userId, deviceId } },
-      select: { revokedAt: true },
+      select: { revokedAt: true, grantedAt: true },
     });
     if (existing?.revokedAt) {
       throw new ForbiddenException({
@@ -66,10 +71,16 @@ export class E2eeService {
       });
     }
 
+    // `grantedAt` is only ever set, never cleared, and only by a machine
+    // saying it can open the vault. Clearing it on a launch that happened to
+    // start offline would put a working installation on the locked screen and
+    // ask its owner to approve a machine that needs no approving.
+    const granted = holdsVault ? { grantedAt: existing?.grantedAt ?? new Date() } : {};
+
     const row = await prisma.deviceKey.upsert({
       where: { userId_deviceId: { userId, deviceId } },
-      update: { publicKey, lastSeenAt: new Date(), ...(label ? { label } : {}) },
-      create: { userId, deviceId, publicKey, label: label ?? null },
+      update: { publicKey, lastSeenAt: new Date(), ...(label ? { label } : {}), ...granted },
+      create: { userId, deviceId, publicKey, label: label ?? null, ...granted },
     });
     return toDeviceKey(row);
   }
@@ -195,16 +206,35 @@ export class E2eeService {
     return rows.map(toDeviceKey);
   }
 
+  /**
+   * Who a channel key must be wrapped for: one entry per member account.
+   *
+   * One per *account*, where v1 sent one per machine. That is not a
+   * simplification, it is the fix: a list of machines is a list that grows
+   * after the key was minted, and every machine added to it after the fact was
+   * a person reading padlocks until somebody else's client noticed. A list of
+   * accounts is settled the moment the membership is.
+   *
+   * An account with no vault yet is left out, because there is nothing to wrap
+   * to. It reappears here the moment it sets one up, as an entry in
+   * `missingRecipients`, and the next client into the channel seals for it.
+   */
+  async recipientsForChannel(userId: string, channelId: string): Promise<AccountKeyRecipient[]> {
+    await this.messages.requireChannelAccess(userId, channelId, PERMISSIONS.VIEW_CHANNEL);
+    return this.recipients(await this.memberIds(channelId));
+  }
+
   /** Wrapped keys addressed to the caller, plus who still needs a re-wrap. */
   async keysForUser(userId: string, channelId: string): Promise<ChannelKeysResponse> {
     await this.messages.requireChannelAccess(userId, channelId, PERMISSIONS.VIEW_CHANNEL);
 
     const [rows, latest] = await Promise.all([
       prisma.channelKey.findMany({
-        // Every device of the caller, not only the one asking: a client holds
-        // one private key, tries each row against it, and keeps what opens.
-        // Filtering by device here would mean trusting a device id the caller
-        // supplied, which is a claim rather than a fact.
+        // Every row addressed to the caller's account, account-scoped and
+        // per-device alike: a client holds the account keyring plus this
+        // machine's own key, tries each row against both, and keeps what
+        // opens. Filtering by device here would mean trusting a device id the
+        // caller supplied, which is a claim rather than a fact.
         where: { channelId, recipientUserId: userId },
         orderBy: { epoch: 'asc' },
       }),
@@ -228,77 +258,98 @@ export class E2eeService {
       })),
       missingRecipients: epoch === 0 ? [] : await this.missingAtEpoch(channelId, epoch),
       rekeyNeeded: epoch === 0 ? false : await this.staleAtEpoch(channelId, epoch),
-      gaps: epoch === 0 ? [] : await this.gaps(channelId, epoch),
+      gaps: epoch === 0 ? [] : await this.gaps(channelId),
+      promotable: promotableEpochs(rows),
     };
   }
 
   /**
-   * Machines missing an epoch *their owner already holds on another machine*,
-   * across every epoch the channel has had.
+   * How much of this account's history survives losing every machine it owns.
    *
-   * `missingRecipients` answers a narrower question - the current epoch only -
-   * which keeps the next message readable and does nothing for the last year of
-   * them. A machine that signs in today is missing every earlier epoch, cannot
-   * re-wrap them for itself because it holds none of them, and had nothing
-   * looking on its behalf. So it minted a fresh epoch and everything written
-   * before it stayed sealed for good: the wall of padlocks a second device used
-   * to open on.
+   * The question v1 had no way to ask, and the one that decides whether any of
+   * this worked. `sealed` counts epochs whose key exists only as a wrap
+   * addressed to a machine - each of those is a conversation that a reinstall
+   * would have destroyed, and each is repaired by that machine promoting it.
+   * `lost` counts epochs with no wrap at all: nothing can repair those, and
+   * saying so plainly is better than a client drawing padlocks forever and
+   * implying somebody is coming.
+   */
+  async keyHealth(userId: string): Promise<KeyHealthResponse> {
+    const [rows, portableFactors] = await Promise.all([
+      prisma.channelKey.findMany({
+        where: { recipientUserId: userId },
+        select: { channelId: true, epoch: true, recipientDeviceId: true },
+      }),
+      prisma.accountVaultFactor.count({
+        where: { userId, kind: { in: ['password', 'passphrase', 'recovery-code'] } },
+      }),
+    ]);
+
+    const scoped = new Map<string, boolean>();
+    for (const row of rows) {
+      const at = `${row.channelId}#${row.epoch}`;
+      scoped.set(at, (scoped.get(at) ?? false) || isAccountScope(row.recipientDeviceId));
+    }
+
+    let portable = 0;
+    let sealed = 0;
+    for (const isPortable of scoped.values()) {
+      if (isPortable) portable += 1;
+      else sealed += 1;
+    }
+
+    // Every epoch of every channel the caller can see, minus the ones they
+    // hold something for. An epoch nobody ever wrapped for them is not a
+    // padlock that will open later; it is one that never will.
+    const channelIds = [...new Set(rows.map((row) => row.channelId))];
+    const reachable = await prisma.channelKey.groupBy({
+      by: ['channelId', 'epoch'],
+      where: { channelId: { in: channelIds } },
+    });
+    const lost = reachable.filter((at) => !scoped.has(`${at.channelId}#${at.epoch}`)).length;
+
+    return { portable, sealed, lost, recoverable: portableFactors > 0 };
+  }
+
+  /**
+   * Earlier epochs a member is owed an account wrap for.
    *
-   * The "their owner already holds it" condition is the whole of the boundary,
-   * and it is not a detail (but see `historySharedWith` for the one deliberate
-   * exception to it). Without it this would hand every past epoch to
-   * somebody who joined the channel yesterday, which is the opposite of the
-   * rule the rest of this file keeps: a member reads from when they joined.
-   * With it, the only thing being repaired is a person's own access on a second
-   * machine - they can read those messages already, on the laptop in the next
-   * room.
+   * Almost empty by construction now, and that is the point. v1's gap list
+   * existed to repair a person's own second machine, one epoch at a time,
+   * whenever another of their machines happened to open the channel - which is
+   * why history arrived late, arrived partially, or never arrived at all. A
+   * wrap addressed to the account needs no repair: the second machine opens
+   * the same row the first one does.
    *
-   * Two queries whatever the number of epochs. Publishing against it is
-   * governed as it always was: a caller may add to an existing epoch only while
-   * holding that epoch's key.
+   * What is left is the single deliberate exception - a member somebody with
+   * `MANAGE_MEMBER` let in *with* the history - and the rule around it is
+   * unchanged. The server writes nothing; it holds no key. It says who is
+   * owed, and a client that holds the epoch seals it.
    */
   private async gaps(
     channelId: string,
-    epoch: number,
-  ): Promise<Array<{ epoch: number; devices: DeviceKey[] }>> {
+  ): Promise<Array<{ epoch: number; recipients: AccountKeyRecipient[] }>> {
     const memberIds = await this.memberIds(channelId);
-    const [covered, devices, withHistory] = await Promise.all([
+    const withHistory = await this.historySharedWith(channelId, memberIds);
+    if (withHistory.size === 0) return [];
+
+    const [covered, recipients] = await Promise.all([
       prisma.channelKey.findMany({
-        where: { channelId },
-        select: { epoch: true, recipientUserId: true, recipientDeviceId: true },
+        where: { channelId, recipientDeviceId: ACCOUNT_SCOPE },
+        select: { epoch: true, recipientUserId: true },
       }),
-      prisma.deviceKey.findMany({
-        where: { userId: { in: memberIds }, revokedAt: null },
-      }),
-      this.historySharedWith(channelId, memberIds),
+      this.recipients([...withHistory]),
     ]);
 
-    const has = new Set(
-      covered.map((row) => `${row.epoch}:${row.recipientUserId}:${row.recipientDeviceId}`),
-    );
-    /** Who may be given epoch E at all: whoever already has it somewhere. */
-    const owners = new Set(covered.map((row) => `${row.epoch}:${row.recipientUserId}`));
-    // Only epochs that exist. An epoch nobody ever minted is not a gap, and
-    // inventing one here would ask a client to publish a key for it.
+    const has = new Set(covered.map((row) => `${row.epoch}:${row.recipientUserId}`));
     const epochs = [...new Set(covered.map((row) => row.epoch))].sort((a, b) => b - a);
 
     return epochs
       .map((at) => ({
         epoch: at,
-        devices: devices
-          .filter(
-            (device) =>
-              // Either they already hold this epoch somewhere of their own, or
-              // somebody deliberately let them in with the history - see
-              // `historySharedWith`. Everyone else is offered nothing they did
-              // not already have, which is the rule the whole of this file is
-              // built on.
-              (owners.has(`${at}:${device.userId}`) || withHistory.has(device.userId)) &&
-              !has.has(`${at}:${device.userId}:${device.deviceId}`),
-          )
-          .map(toDeviceKey),
+        recipients: recipients.filter((who) => !has.has(`${at}:${who.userId}`)),
       }))
-      .filter((gap) => gap.devices.length > 0)
+      .filter((gap) => gap.recipients.length > 0)
       // The newest epochs matter most - they are what the next message uses -
       // and a channel with a long history should not be one enormous response.
       .slice(0, MAX_GAP_EPOCHS);
@@ -307,18 +358,17 @@ export class E2eeService {
   /**
    * Members somebody deliberately let in with the history that predates them.
    *
-   * The rule everywhere else here is that a machine may only be handed an epoch
-   * its owner already holds somewhere - so a newcomer reads from the moment
-   * they arrive and no further back. That is still the default, and it is still
+   * The rule everywhere else here is that a member reads from the moment they
+   * arrive and no further back. That is still the default, and it is still
    * what happens unless a person with `MANAGE_MEMBER` said otherwise while
    * adding them.
    *
    * When they did, `server_members.historyShared` records it, and this is where
-   * that note is turned into an answer: those members' devices appear in the
-   * gap list for *every* epoch of every channel in the server, and the first
-   * machine that already holds them seals them across. The server hands over
-   * nothing itself - it holds no key - and the publish rules are unchanged: a
-   * caller may still only add to an epoch it holds.
+   * that note is turned into an answer: those members appear in the gap list
+   * for every epoch of every channel in the server, and the first client that
+   * already holds them seals them across. The server hands over nothing itself
+   * - it holds no key - and the publish rules are unchanged: a caller may still
+   * only add to an epoch it holds.
    *
    * A direct message has no server and therefore no such note. It also needs
    * none: both participants have been there since the first message.
@@ -357,24 +407,24 @@ export class E2eeService {
       this.memberIds(channelId),
       prisma.channelKey.findMany({
         where: { channelId, epoch },
-        select: { recipientUserId: true, createdAt: true },
+        select: { recipientUserId: true, recipientDeviceId: true, createdAt: true },
       }),
     ]);
 
     const members = new Set(memberIds);
     if (holders.some((holder) => !members.has(holder.recipientUserId))) return true;
 
-    // The second way to hold a key you should not: a machine that was trusted
-    // when the epoch was minted and has been revoked since.
+    // The second way to hold a key you should not: a *machine* that was
+    // trusted when the epoch was minted and has been revoked since.
     //
-    // It cannot be derived by looking for its wraps, because revoking deletes
-    // them - that is most of what revoking *is*. What is left is the timing: a
-    // device revoked after this epoch was created was a device this epoch was
-    // wrapped for, so the epoch is on a machine nobody trusts any more.
-    //
-    // Over-rotating is a re-wrap nobody notices. Under-rotating is a lost
-    // laptop reading the channel for as long as it stays on the same key, so
-    // where the two answers differ this takes the expensive one.
+    // Narrower than it was, and deliberately so. Under v1 every wrap was
+    // addressed to a machine, so revoking one meant the epoch was loose and
+    // every channel re-keyed. Under v2 the wrap is addressed to the account,
+    // and a revoked machine keeps whatever it decrypted and nothing else -
+    // but it may still hold the account keyring it was granted, so a revoked
+    // machine is still a reason to rotate. What changed is that rotation is
+    // now the account's to do (`POST /e2ee/vault/rotate`) as well as the
+    // channel's, and this flag is the channel half of it.
     if (holders.length === 0) return false;
     const mintedAt = holders.reduce(
       (earliest, holder) => (holder.createdAt < earliest ? holder.createdAt : earliest),
@@ -400,6 +450,17 @@ export class E2eeService {
    * could move the channel forward they would be locked out until one came
    * online. Nothing is given away by it - a member can read what is sent from
    * now on either way, and every earlier epoch stays sealed to whoever held it.
+   *
+   * Two v2 rules sit on top, and both exist to stop the account-scoped wrap
+   * being quietly downgraded back into the thing that lost data:
+   *
+   * - **A new wrap must be account-scoped.** `@account` or nothing. A client
+   *   that went on writing per-device rows would look like it was working and
+   *   would rebuild v1's failure a channel at a time, invisibly, because
+   *   everything reads correctly on the machine that wrote it.
+   * - **A per-device row may only be promoted by the account that holds it.**
+   *   That is the one exception above, and it is not a grant: the caller is
+   *   re-addressing a key it can already open to its own account key.
    */
   async publishKeys(
     userId: string,
@@ -446,24 +507,48 @@ export class E2eeService {
       }
     }
 
-    // And nothing is sealed for a device its owner has revoked. The client
-    // fetches a filtered directory, so this only catches a stale bundle or a
-    // client that decided to improvise - but it is the difference between a
-    // revocation and a suggestion.
-    const revoked = await prisma.deviceKey.findMany({
-      where: {
-        revokedAt: { not: null },
-        OR: dto.entries.map((entry) => ({
-          userId: entry.recipientUserId,
-          deviceId: entry.recipientDeviceId,
-        })),
-      },
-      select: { id: true },
+    // Everything written from here on is addressed to an account. The one way
+    // past this is the caller promoting its own v1 row, which is the migration
+    // and not a hole: `recipientUserId` is the caller, so it is re-addressing
+    // a key it already holds to a key it already holds.
+    for (const entry of dto.entries) {
+      if (isAccountScope(entry.recipientDeviceId)) continue;
+      throw new ForbiddenException({
+        code: 'DEVICE_SCOPED_WRAP',
+        message: 'Channel keys are wrapped for an account, not for a machine',
+      });
+    }
+
+    // Nothing is sealed for an account with no vault, because there is no
+    // account key to have sealed it to. A bundle claiming otherwise was built
+    // from a directory read that has since gone stale, or by a client
+    // improvising - and storing it would write a row nobody can ever open,
+    // which is indistinguishable from the data loss this all exists to end.
+    const vaults = await prisma.accountVault.findMany({
+      where: { userId: { in: [...new Set(dto.entries.map((entry) => entry.recipientUserId))] } },
+      select: { userId: true },
     });
-    if (revoked.length > 0) {
+    const hasVault = new Set(vaults.map((row) => row.userId));
+    for (const entry of dto.entries) {
+      if (!hasVault.has(entry.recipientUserId)) {
+        throw new ForbiddenException({
+          code: 'RECIPIENT_HAS_NO_VAULT',
+          message: 'That account has not published an identity to wrap for yet',
+        });
+      }
+    }
+
+    // The sealing machine must itself be one the account still trusts. A
+    // revoked laptop writing wraps would be revocation as a suggestion, and
+    // the machine in question is running this same code.
+    const sender = await prisma.deviceKey.findUnique({
+      where: { userId_deviceId: { userId, deviceId: dto.senderDeviceId } },
+      select: { revokedAt: true },
+    });
+    if (sender?.revokedAt) {
       throw new ForbiddenException({
         code: 'DEVICE_REVOKED',
-        message: 'One of those devices has been revoked',
+        message: 'This device was revoked',
       });
     }
 
@@ -495,30 +580,81 @@ export class E2eeService {
   }
 
   /**
-   * Devices that should hold this epoch and do not - one entry per machine.
+   * Turns a list of accounts into the public keys to wrap for.
    *
-   * Per device rather than per person, which is the whole change: somebody who
-   * signed in on a second laptop yesterday is not "covered" because their first
-   * laptop was wrapped for. The comparison is against every unrevoked device of
-   * every member.
+   * An account with no vault is dropped rather than guessed at. There is
+   * genuinely nothing to seal to - it has published no account identity - and
+   * inventing one would be the server minting a key, which is the one thing it
+   * must never be able to do. It reappears in `missingRecipients` the moment
+   * it sets a vault up.
    */
-  private async missingAtEpoch(channelId: string, epoch: number): Promise<DeviceKey[]> {
+  private async recipients(userIds: string[]): Promise<AccountKeyRecipient[]> {
+    if (userIds.length === 0) return [];
+    const rows = await prisma.accountVault.findMany({
+      where: { userId: { in: userIds } },
+      select: { userId: true, publicKey: true, generation: true },
+    });
+    return rows.map((row) => ({
+      userId: row.userId,
+      publicKey: row.publicKey,
+      generation: row.generation,
+    }));
+  }
+
+  /**
+   * Members who should hold this epoch and do not - one entry per account.
+   *
+   * Per account rather than per machine, which is the whole change. Under v1
+   * somebody who signed in on a second laptop yesterday was "missing" the
+   * epoch and had to wait for one of their own machines to notice; under v2
+   * there is nothing to notice, because the wrap their first laptop opens is
+   * the same row the second one reads.
+   *
+   * What this list is for now is narrower and more important: it is what a
+   * sender must clear *before* sealing a message. A message sent under an
+   * epoch a member has no wrap for is a message that member will never read,
+   * and nothing later repairs it.
+   */
+  private async missingAtEpoch(channelId: string, epoch: number): Promise<AccountKeyRecipient[]> {
     const memberIds = await this.memberIds(channelId);
-    const [covered, devices] = await Promise.all([
+    const [covered, recipients] = await Promise.all([
       prisma.channelKey.findMany({
-        where: { channelId, epoch },
-        select: { recipientUserId: true, recipientDeviceId: true },
+        where: { channelId, epoch, recipientDeviceId: ACCOUNT_SCOPE },
+        select: { recipientUserId: true },
       }),
-      prisma.deviceKey.findMany({
-        where: { userId: { in: memberIds }, revokedAt: null },
-      }),
+      this.recipients(memberIds),
     ]);
 
-    const has = new Set(covered.map((row) => `${row.recipientUserId}:${row.recipientDeviceId}`));
-    return devices
-      .filter((device) => !has.has(`${device.userId}:${device.deviceId}`))
-      .map(toDeviceKey);
+    const has = new Set(covered.map((row) => row.recipientUserId));
+    return recipients.filter((who) => !has.has(who.userId));
   }
+}
+
+/**
+ * Epochs the caller holds only as a v1 per-device wrap.
+ *
+ * The rescue path for every conversation written before the vault, and the
+ * whole of the migration: the client can open these rows *today*, on this
+ * machine, and nothing but this machine can. Re-sealing what it can already
+ * read to its own account key costs one request and takes that epoch
+ * permanently out of reach of every way v1 lost data - on every machine of the
+ * account, including the ones that do not exist yet.
+ *
+ * It grants nothing. The caller is re-addressing a key it already holds to
+ * itself, and `publishKeys` checks exactly that before storing it.
+ *
+ * Kept as a free function so the rule can be asserted on without a database.
+ */
+export function promotableEpochs(
+  rows: Array<{ epoch: number; recipientDeviceId: string }>,
+): number[] {
+  const perDevice = new Set<number>();
+  const perAccount = new Set<number>();
+  for (const row of rows) {
+    if (isAccountScope(row.recipientDeviceId)) perAccount.add(row.epoch);
+    else perDevice.add(row.epoch);
+  }
+  return [...perDevice].filter((epoch) => !perAccount.has(epoch)).sort((a, b) => a - b);
 }
 
 /** One row of the directory, as the contract has it. */
@@ -555,6 +691,7 @@ export function toDeviceKey(row: {
   publicKey: string;
   label: string | null;
   revokedAt: Date | null;
+  grantedAt: Date | null;
   lastSeenAt: Date;
   createdAt: Date;
 }): DeviceKey {
@@ -564,6 +701,11 @@ export function toDeviceKey(row: {
     publicKey: row.publicKey,
     label: row.label,
     revokedAt: row.revokedAt?.toISOString() ?? null,
+    // Null is what puts a machine on the locked screen, so it is carried
+    // rather than defaulted: a missing grant and a grant this response forgot
+    // to mention look identical to the client, and one of the two is a machine
+    // that sits waiting for an approval nobody was asked for.
+    grantedAt: row.grantedAt?.toISOString() ?? null,
     lastSeenAt: row.lastSeenAt.toISOString(),
     createdAt: row.createdAt.toISOString(),
   };

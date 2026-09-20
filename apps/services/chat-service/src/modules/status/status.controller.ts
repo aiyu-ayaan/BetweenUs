@@ -54,6 +54,7 @@ import {
   STATUS_VIDEO_MAX_MS,
   type CreateStatusRequest,
   type ReactToStatusRequest,
+  type AccountKeyRecipient,
   type DeviceKey,
   type StatusEntry,
   type StatusFeed,
@@ -241,16 +242,29 @@ export class StatusController {
   }
 
   /**
-   * Every device this account may seal a post for, right now: its own, and
+   * Every device this account may seal a post for.
+   *
+   * @deprecated A moment is sealed for accounts now - see `GET audience/accounts`.
+   */
+  @Get('audience')
+  audience(@CurrentUser() user: AuthenticatedUser): Promise<DeviceKey[]> {
+    return this.statuses.audienceDevices(user.id);
+  }
+
+  /**
+   * Every account this account may seal a post for, right now: its own, and
    * every friend's.
    *
    * Read immediately before posting rather than cached, because this list *is*
    * the audience - a friend added a minute ago should be in it, and one who
    * blocked the caller a minute ago should not.
+   *
+   * One entry per person rather than per machine, which is what makes a moment
+   * open on a phone somebody signed in on after it was written.
    */
-  @Get('audience')
-  audience(@CurrentUser() user: AuthenticatedUser): Promise<DeviceKey[]> {
-    return this.statuses.audienceDevices(user.id);
+  @Get('audience/accounts')
+  audienceAccounts(@CurrentUser() user: AuthenticatedUser): Promise<AccountKeyRecipient[]> {
+    return this.statuses.audienceAccounts(user.id);
   }
 
   /** Records that this account opened one. Idempotent. */
