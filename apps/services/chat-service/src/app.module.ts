@@ -11,6 +11,7 @@ import { ArrivalsService } from './modules/messages/arrivals.service';
 import { DisappearingSweeper } from './modules/messages/disappearing-sweeper';
 import { UploadsController } from './modules/uploads/uploads.controller';
 import { ScratchSweeper } from './modules/uploads/scratch-sweeper';
+import { StorageReconciler } from './modules/uploads/storage-reconciler';
 import { AttachmentSweeper } from './modules/uploads/attachment-sweeper';
 import { E2eeController } from './modules/e2ee/e2ee.controller';
 import { E2eeService } from './modules/e2ee/e2ee.service';
@@ -62,6 +63,7 @@ const SERVICE_NAME = 'chat-service';
     ChatGateway,
     ScratchSweeper,
     AttachmentSweeper,
+    StorageReconciler,
     DisappearingSweeper,
     StatusSweeper,
     {

@@ -312,10 +312,14 @@ export class MessagesService {
     // The blobs become this message's, so deleting it can take them with it.
     // Scoped to unclaimed uploads of this account: a key is not a capability,
     // and naming somebody else's must not move it.
+    //
+    // `state` moves with `messageId`, and it has to: a row left at `PENDING`
+    // is collected the moment its grace runs out, which would mean every
+    // photograph in the app being deleted a day after it was sent.
     if (attachmentKeys.length > 0) {
       await prisma.attachment.updateMany({
         where: { key: { in: attachmentKeys.slice(0, 50) }, uploaderId: userId, messageId: null },
-        data: { messageId: row.id },
+        data: { messageId: row.id, state: 'LINKED', stateAt: new Date() },
       });
     }
 

@@ -1,16 +1,23 @@
 /**
  * Removes attachment blobs nothing justifies keeping.
  *
- * Two kinds qualify. One is an upload nobody ever sent: a client that sealed a
- * file, uploaded it and then closed the composer leaves a paid-for object that
- * no message names. The other is a blob whose message is gone - deleted by its
- * author, deleted by a moderator, or destroyed with the channel, the server or
- * the account, all of which the null-on-delete foreign key turns into the same
- * unclaimed row.
+ * Two kinds qualify, and which is which is now a column rather than an
+ * inference. `PENDING` is an upload nobody ever sent - a client that sealed a
+ * file, uploaded it and then closed the composer - and it is collected once
+ * its grace has run. `ORPHANED` is a blob whose message is gone, deleted by
+ * its author, by a moderator, or with the channel, the server or the account,
+ * and it is collected at once however recently it was uploaded.
  *
- * A message is soft-deleted, so a claimed row is collected on `deletedAt`
- * rather than on the row disappearing. The tombstone stays; the ciphertext it
- * used to point at does not.
+ * Reading a state instead of re-deriving one is the change. The old query -
+ * `messageId IS NULL`, or a join onto the message's `deletedAt` - could not
+ * tell an upload still being composed from one abandoned an hour ago, nor a
+ * blob whose message was hard-deleted from one that was never claimed, and it
+ * resolved both ambiguities the same way: leave it. So objects accumulated
+ * that nothing would ever name again.
+ *
+ * What this pass still cannot see is an object with no row at all. That is
+ * `StorageReconciler`'s job, and it is the other direction entirely: it starts
+ * from the bucket rather than from the table.
  *
  * ponytail: a timer in the process, like the two sweeps either side of it.
  * Two replicas will overlap and both try to delete the same object, which is
@@ -61,18 +68,57 @@ function graceMs(): number {
  */
 export interface SweepWhere {
   OR: [
-    { messageId: null; createdAt: { lte: Date } },
-    { message: { deletedAt: { not: null } } },
+    { state: 'PENDING'; stateAt: { lte: Date } },
+    { state: 'ORPHANED' },
+    { state: 'LINKED'; messageId: null },
   ];
 }
 
 export function sweepWhere(now: Date = new Date(), grace: number = graceMs()): SweepWhere {
   return {
     OR: [
-      { messageId: null, createdAt: { lte: new Date(now.getTime() - grace) } },
-      { message: { deletedAt: { not: null } } },
+      { state: 'PENDING', stateAt: { lte: new Date(now.getTime() - grace) } },
+      { state: 'ORPHANED' },
+      // A row whose message was *hard*-deleted rather than tombstoned: a
+      // cascade from the channel, the server or the account nulls `messageId`
+      // and cannot run application code to update the state beside it. Without
+      // this arm those rows would sit at LINKED forever, which is the leak the
+      // state column would otherwise have introduced - a regression on the old
+      // `messageId IS NULL` query rather than an improvement on it.
+      { state: 'LINKED', messageId: null },
     ],
   };
+}
+
+/**
+ * Moves rows to `LINKED` as the message carrying them is written.
+ *
+ * The other half of the state column. Without it every claimed attachment
+ * would sit at `PENDING` and be collected the moment its grace ran out -
+ * which is to say every photograph in the app would be deleted a day after it
+ * was sent. The write happens in the same transaction as the message for that
+ * reason: a claim that can be half-applied is a claim that is worse than none.
+ */
+export function linkWhere(messageId: string, keys: string[]) {
+  return { key: { in: keys }, messageId: null as string | null, state: 'PENDING' as const };
+}
+
+/**
+ * Moves rows to `ORPHANED` when the message naming them is gone.
+ *
+ * Recorded rather than derived, which is what lets the sweep read one column.
+ * Deleting, burning and expiring all land here, and so does a cascade that
+ * nulls `messageId` out from under a row - the one case the old expression
+ * could not distinguish from an upload nobody had sent yet, so it waited a day
+ * before collecting a blob whose message a moderator had just removed.
+ */
+export async function orphanMessageAttachments(messageIds: string[]): Promise<number> {
+  if (messageIds.length === 0) return 0;
+  const result = await prisma.attachment.updateMany({
+    where: { messageId: { in: messageIds }, state: { not: 'ORPHANED' } },
+    data: { state: 'ORPHANED', stateAt: new Date() },
+  });
+  return result.count;
 }
 
 /**
@@ -92,6 +138,13 @@ export function sweepWhere(now: Date = new Date(), grace: number = graceMs()): S
  */
 export async function purgeMessageAttachments(messageIds: string[]): Promise<number> {
   if (messageIds.length === 0) return 0;
+
+  // Marked first, deleted second. The mark is the durable part: if the object
+  // store is down, or this process dies between the two, the rows are already
+  // `ORPHANED` and the next sweep finishes the job. Doing it the other way
+  // round - delete the objects, then notice you cannot write the state - is
+  // how a row ends up pointing at bytes that are no longer there.
+  await orphanMessageAttachments(messageIds);
 
   const rows = await prisma.attachment.findMany({
     where: { messageId: { in: messageIds } },
@@ -121,7 +174,7 @@ export async function sweepAttachments(now: Date = new Date()): Promise<number> 
   const doomed = await prisma.attachment.findMany({
     where: sweepWhere(now),
     select: { id: true, key: true },
-    orderBy: { createdAt: 'asc' },
+    orderBy: { stateAt: 'asc' },
     take: BATCH,
   });
 

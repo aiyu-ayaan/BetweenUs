@@ -6,7 +6,7 @@
  * driver writes under `LOCAL_STORAGE_PATH` instead; both drivers expose the
  * same interface, so nothing above this package knows which is active.
  */
-import { createReadStream, createWriteStream } from 'node:fs';
+import { createReadStream, createWriteStream, type Dirent } from 'node:fs';
 import { mkdir, readdir, rm, stat } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { dirname, extname, join, normalize, resolve, sep } from 'node:path';
@@ -41,6 +41,26 @@ export interface UploadedPart {
   etag: string;
 }
 
+/** One object as a walk of the store finds it. */
+export interface ListedObject {
+  key: string;
+  size: number;
+  /** When it was written, as the store records it. */
+  modifiedAt: Date;
+}
+
+/**
+ * One page of a walk of the store.
+ *
+ * Paged rather than whole, because a walk of a real bucket is millions of
+ * keys and the caller deletes as it goes.
+ */
+export interface ObjectPage {
+  objects: ListedObject[];
+  /** Pass back to continue. Undefined when the walk is finished. */
+  cursor?: string;
+}
+
 export interface StorageDriver {
   readonly name: 'local' | 's3';
   put(key: string, body: Buffer | Readable, contentType: string): Promise<StoredObject>;
@@ -48,6 +68,22 @@ export interface StorageDriver {
   delete(key: string): Promise<void>;
   exists(key: string): Promise<boolean>;
   urlFor(key: string): string;
+
+  /**
+   * Walks what is actually in the store.
+   *
+   * The one direction nothing could look before, and the reason objects
+   * accumulated that nothing would ever name again. Every sweep in this
+   * codebase started from a database row and asked whether its object should
+   * go - so an object whose row was never written (an avatar replaced by a
+   * newer one, a status media file whose post was abandoned, a completed
+   * upload whose `record` call lost a race) was invisible to all of them. It
+   * was not *kept*, it was *unreachable*: no query could produce its key, so
+   * no code could produce its delete.
+   *
+   * This is the other direction. See `StorageReconciler`.
+   */
+  list(prefix: string, cursor?: string): Promise<ObjectPage>;
 
   createMultipart(key: string, contentType: string): Promise<MultipartSession>;
   uploadPart(session: MultipartSession, partNumber: number, body: Buffer): Promise<UploadedPart>;
@@ -157,6 +193,46 @@ export class LocalStorageDriver implements StorageDriver {
 
   urlFor(key: string): string {
     return `${this.publicPrefix}/${key}`;
+  }
+
+  /**
+   * Walks the directory tree under `prefix`.
+   *
+   * Unpaged in practice - it reads the whole subtree and hands it back in one
+   * page - because the local driver is a development convenience and a
+   * developer's disk is not a bucket. The signature is the same as S3's so
+   * the reconciler above it is written once.
+   */
+  async list(prefix: string): Promise<ObjectPage> {
+    const root = this.pathFor(prefix === '' ? '.' : prefix);
+    const objects: ListedObject[] = [];
+
+    const walk = async (dir: string, relative: string): Promise<void> => {
+      let entries: Dirent[];
+      try {
+        entries = await readdir(dir, { withFileTypes: true, encoding: 'utf8' });
+      } catch {
+        return; // Nothing has been written under this prefix.
+      }
+      for (const entry of entries) {
+        const name = String(entry.name);
+        const child = join(dir, name);
+        const key = relative === '' ? name : `${relative}/${name}`;
+        if (entry.isDirectory()) {
+          await walk(child, key);
+          continue;
+        }
+        try {
+          const info = await stat(child);
+          objects.push({ key, size: info.size, modifiedAt: new Date(info.mtimeMs) });
+        } catch {
+          // Deleted between the listing and the stat. Not ours to report.
+        }
+      }
+    };
+
+    await walk(root, prefix === '' ? '' : prefix.replace(/\/+$/, ''));
+    return { objects };
   }
 
   // --- Multipart ------------------------------------------------------------
@@ -337,6 +413,40 @@ export class S3StorageDriver implements StorageDriver {
     const { DeleteObjectCommand } = await this.sdk();
     const client = await this.getClient();
     await client.send(new DeleteObjectCommand({ Bucket: this.config.bucket, Key: key }));
+  }
+
+  /**
+   * One page of `ListObjectsV2`, which is the bucket's own answer to "what is
+   * actually in here" rather than a database's guess at it.
+   *
+   * A thousand keys a page, which is the API's own maximum and is also about
+   * as much as the reconciler above wants to hold while it resolves
+   * references for them.
+   */
+  async list(prefix: string, cursor?: string): Promise<ObjectPage> {
+    const { ListObjectsV2Command } = await this.sdk();
+    const client = await this.getClient();
+    const result = await client.send(
+      new ListObjectsV2Command({
+        Bucket: this.config.bucket,
+        Prefix: prefix === '' ? undefined : prefix,
+        ContinuationToken: cursor,
+        MaxKeys: 1000,
+      }),
+    );
+
+    return {
+      objects: (result.Contents ?? [])
+        .filter((item): item is typeof item & { Key: string } => typeof item.Key === 'string')
+        .map((item) => ({
+          key: item.Key,
+          size: item.Size ?? 0,
+          modifiedAt: item.LastModified ?? new Date(0),
+        })),
+      ...(result.IsTruncated && result.NextContinuationToken
+        ? { cursor: result.NextContinuationToken }
+        : {}),
+    };
   }
 
   async exists(key: string): Promise<boolean> {
