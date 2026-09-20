@@ -7,33 +7,41 @@ import {
   type IdentityLike,
 } from './backup-warning';
 
-const ready = (backedUp: boolean): IdentityLike => ({ status: 'ready', backedUp });
+const ready = (recoverable: boolean): IdentityLike => ({ status: 'ready', recoverable });
 
 // --- the case the notice exists for -----------------------------------------
 
-// A key this machine holds and nothing else has a copy of. Lose the machine,
-// lose every conversation it could read - and no support route recovers it,
-// because the server holds ciphertext and no key.
+// An account whose only way in is a machine it still has: every portable
+// factor taken away deliberately. Lose the machines, lose every conversation
+// they could read - and no support route recovers it, because the server holds
+// ciphertext and no key.
 assert.equal(shouldWarnAboutBackup(ready(false), null), true);
 
 // --- and everybody it must not interrupt ------------------------------------
 
-// The common case by far: a password sign-in seals a backup on its own. A
-// warning shown to people who are already safe is one everybody learns to
-// scroll past, which costs the people who are not.
+// The common case by far, and far more common than it was: every vault is
+// created with a recovery code whether anybody asked for one or not. A warning
+// shown to people who are already safe is one everybody learns to scroll past,
+// which costs the people who are not.
 assert.equal(shouldWarnAboutBackup(ready(true), null), false);
 
 // No identity unlocked yet - that has its own screen, and there is nothing to
 // have lost.
 assert.equal(shouldWarnAboutBackup({ status: 'absent' }, null), false);
-assert.equal(shouldWarnAboutBackup({ status: 'absent', backedUp: false }, null), false);
+assert.equal(shouldWarnAboutBackup({ status: 'absent', recoverable: false }, null), false);
 
 // A machine shut out on purpose. Telling it to make a backup is advice about a
 // key it is not allowed to use.
 assert.equal(shouldWarnAboutBackup({ status: 'revoked' }, null), false);
-assert.equal(shouldWarnAboutBackup({ status: 'revoked', backedUp: false }, null), false);
+assert.equal(shouldWarnAboutBackup({ status: 'revoked', recoverable: false }, null), false);
 
-// An identity that never said either way is not assumed to be safe. `backedUp`
+// A machine waiting to be let into the vault. It has its own screen, with the
+// three ways in on it, and a banner about recovery underneath would be advice
+// about an account it cannot read yet.
+assert.equal(shouldWarnAboutBackup({ status: 'locked' }, null), false);
+assert.equal(shouldWarnAboutBackup({ status: 'locked', recoverable: false }, null), false);
+
+// A vault that never said either way is not assumed to be safe. `recoverable`
 // missing means unknown, and unknown here has to read as at-risk: the failure
 // of warning somebody unnecessarily is an ignored banner, and the failure of
 // staying quiet is somebody losing everything.

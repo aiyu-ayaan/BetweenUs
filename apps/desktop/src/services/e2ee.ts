@@ -1,35 +1,78 @@
 /**
- * Client side of end-to-end encryption: device identity, channel-key exchange,
- * and the encrypt/decrypt calls the chat and call features use.
+ * Client side of end-to-end encryption: the account vault, channel-key
+ * exchange, and the encrypt/decrypt calls the chat and call features use.
  *
- * The server is a courier here. It stores public keys and sealed blobs, decides
- * who may publish them, and never holds anything that opens a message.
+ * The server is a courier here. It stores public keys and sealed blobs,
+ * decides who may publish them, and never holds anything that opens a message.
+ *
+ * ## The one thing to understand before changing anything in this file
+ *
+ * A channel key is wrapped for an **account**, not for a machine. Every
+ * machine that can open the vault opens the same rows, which is why signing in
+ * somewhere new brings the whole history with it and needs nothing from
+ * anybody else.
+ *
+ * v1 wrapped per machine, and every conversation this project lost was that
+ * decision playing out: a machine that did not exist when an epoch was minted
+ * held nothing for it, only another machine already holding that epoch could
+ * seal one, and if none ever came online again those messages were ciphertext
+ * forever. Worse, a machine that could not open the account backup minted an
+ * identity of its own and carried on - so an account grew several identities,
+ * each reading a different slice of its own history.
+ *
+ * Three rules keep that from coming back, and each of them is load-bearing:
+ *
+ * 1. **This machine never mints an account identity.** If the vault will not
+ *    open, the machine is locked and says so. It has written nothing, so
+ *    nothing about the state is one-way.
+ * 2. **Every wrap this file publishes is account-scoped.** The server refuses
+ *    anything else, and the one exception - promoting a v1 row this machine
+ *    can already open - is re-addressing a key to itself.
+ * 3. **A message is not sealed until every member can open the epoch.** The
+ *    coverage check runs before the seal, not after it. Under v1 it ran after,
+ *    so a message could be written under an epoch a member had no wrap for -
+ *    and nothing ever repaired that.
  */
 import type {
+  AccountKeyRecipient,
+  AccountVaultResponse,
   BackupSecretKind,
   ChannelKeyEntry,
   ChannelKeysResponse,
-  DeviceKey,
   EncryptedEnvelope,
-  IdentityBackup,
+  KeyHealthResponse,
+  PortableFactorKind,
   StatusEntry,
   StatusKeyEntry,
+  VaultFactor,
+  VaultGrantRequest,
 } from '@betweenus/shared-types';
+import { ACCOUNT_SCOPE } from '@betweenus/shared-types';
 import { ApiError, api } from './api';
 import { setIdentityStatus } from '../stores/identity';
 import {
+  currentIdentityOf,
   decryptBytes,
   decryptMessage,
   encryptBytes,
   encryptMessage,
   generateChannelKey,
   generateIdentity,
-  openIdentity,
+  generateMasterKey,
+  generateRecoveryCode,
+  keyFingerprint,
+  openKeyring,
+  openMasterKeyFromGrant,
+  openMasterKeyWithSecret,
   parseEnvelope,
-  sealIdentity,
+  sealKeyring,
+  sealMasterKeyForDevice,
+  sealMasterKeyWithSecret,
   unwrapChannelKey,
   wrapChannelKey,
   type IdentityKeyPair,
+  type KeyringEntry,
+  type OpenVault,
 } from './e2ee-crypto';
 
 /**
@@ -49,218 +92,325 @@ export class MissingChannelKeyError extends Error {
 }
 
 
-/** What opens the backup. Held only for the moment a sign-in needs it. */
-export interface BackupSecret {
-  value: string;
-  kind: BackupSecretKind;
+/**
+ * Thrown when this machine cannot open the vault.
+ *
+ * Distinct from `MissingChannelKeyError` because the two need different
+ * screens: one is a channel nobody has keyed yet, the other is this machine
+ * not being in the account yet, and conflating them is how v1 came to tell
+ * people to go and open the app on another laptop.
+ */
+export class VaultLockedError extends Error {
+  constructor() {
+    super('This machine has not been let into the account vault yet');
+    this.name = 'VaultLockedError';
+  }
 }
+
+/** What opens the vault. Held only for the moment a sign-in needs it. */
+export interface VaultSecret {
+  value: string;
+  kind: PortableFactorKind;
+}
+
+/** @deprecated The v1 name for {@link VaultSecret}, kept for callers. */
+export type BackupSecret = { value: string; kind: BackupSecretKind };
 
 interface ChannelKeyState {
   epoch: number;
-  /** Every epoch this device can open, so old history stays readable. */
+  /** Every epoch this account can open, so old history stays readable. */
   keys: Map<number, string>;
 }
 
-let identity: IdentityKeyPair | null = null;
-let identityUserId: string | null = null;
+/** The open vault: the master key, and every identity generation it seals. */
+let vault: OpenVault | null = null;
+/**
+ * This machine's own key pair. Not the account identity - it receives vault
+ * grants and opens the v1 rows addressed to this installation, and that second
+ * job is the whole of how history written before the vault is rescued.
+ */
+let deviceKeys: IdentityKeyPair | null = null;
+let vaultUserId: string | null = null;
 /** Set by initIdentity; everything that needs a key awaits it. */
-let identityReady: Promise<IdentityKeyPair> | null = null;
+let vaultReady: Promise<OpenVault> | null = null;
 const channels = new Map<string, ChannelKeyState>();
 const inFlight = new Map<string, Promise<ChannelKeyState>>();
 /**
- * Channels this session has already tried to re-key for itself. Without it, a
- * device that cannot open its own wrapped keys - a corrupt identity, a public
- * key in the directory that is not ours - would mint a fresh epoch every time
+ * Channels this session has already re-keyed for itself. Without it, a machine
+ * that cannot open its own wrapped keys would mint a fresh epoch every time
  * the channel is opened and drag the whole channel along with it.
  */
 const rekeyed = new Set<string>();
 
+/** Channel-and-epoch pairs already promoted, so a re-open does not re-send. */
+const promoted = new Set<string>();
+
 /**
  * The secret this session signed in with, kept for the length of the session.
  *
- * It used to be an argument and nothing else, so a sign-in whose identity setup
- * failed once - the network dropped, the token was a moment late - lost it. The
- * retry then ran with no secret at all, could not open the account backup, and
- * minted a machine-local key instead, which is permanent (see `loadIdentity`).
- * A password typed into a login form is dropped when the session ends, and that
- * is the only thing keeping it here has to guarantee.
+ * It used to be an argument and nothing else, so a sign-in whose setup failed
+ * once - the network dropped, the token was a moment late - lost it, and the
+ * retry ran with no secret at all. Under v1 that retry minted a machine-local
+ * key and forked the account permanently. It cannot do that now, but it would
+ * still lock a machine whose owner typed the right password, which is its own
+ * small betrayal. A password typed into a login form is dropped when the
+ * session ends, and that is the only thing keeping it here has to guarantee.
  */
-let signInSecret: BackupSecret | null = null;
+let signInSecret: VaultSecret | null = null;
 
 /**
- * What the keychain holds. `provisional` marks a key this machine minted for
- * itself *while the account had a backup it could not open* - the fork
- * described in `loadIdentity`. It is the flag that makes the fork recoverable:
- * without it the stored key short-circuits every later launch and the backup is
- * never tried again, on any sign-in, ever.
- */
-interface StoredIdentity extends IdentityKeyPair {
-  provisional?: boolean;
-}
-
-/**
- * Loads this device's identity key and publishes the public half. Called once
- * per sign-in, with the password when there is one to hand.
+ * Opens this account's vault and publishes this machine's device key. Called
+ * once per sign-in, with the password when there is one to hand.
  *
- * It never fails for want of a secret, and it never asks for one. See
- * `loadIdentity` for why a machine that cannot open the account backup mints
- * its own key rather than stopping to ask.
+ * It resolves in one of two states and never in a third. Either the vault is
+ * open - and then *everything* the account has ever been wrapped for opens,
+ * including history from before this machine existed - or this machine is
+ * locked and says so.
+ *
+ * What it will not do, under any circumstance, is mint an identity of its own.
+ * That is the change. v1 did exactly that whenever it could not open a backup,
+ * because stopping to ask for a secret is a question a provider sign-in cannot
+ * answer - and the cost was an account with several identities, each able to
+ * read a different slice of its own history, permanently. A locked machine has
+ * written nothing, so nothing about it is one-way.
  */
-export function initIdentity(userId: string, secret?: BackupSecret): Promise<IdentityKeyPair> {
-  if (identityReady && identityUserId === userId) return identityReady;
+export function initIdentity(userId: string, secret?: VaultSecret): Promise<OpenVault> {
+  if (vaultReady && vaultUserId === userId) return vaultReady;
 
-  identityUserId = userId;
-  // Held past this call on purpose: the retry below has no secret of its own,
-  // and a retry without one forks the identity permanently.
+  vaultUserId = userId;
+  // Held past this call on purpose: a retry below has no secret of its own,
+  // and under v1 a retry without one forked the identity permanently. It
+  // cannot do that any more, but a retry that silently locks a machine whose
+  // owner typed the right password is its own small betrayal.
   if (secret) signInSecret = secret;
+
   // A failure here - the network was down, the token had not been minted yet -
-  // must not be remembered. Keeping the rejected promise left the device
+  // must not be remembered. Keeping the rejected promise left the machine
   // unregistered for the whole session, and every channel it tried to key
-  // afterwards ended in "No channel key on this device yet".
-  identityReady = loadIdentity(userId, secret ?? signInSecret ?? undefined).catch((error: unknown) => {
-    if (identityUserId === userId) identityReady = null;
+  // afterwards ended in "no channel key on this device yet".
+  vaultReady = openVault(userId, secret ?? signInSecret ?? undefined).catch((error: unknown) => {
+    if (vaultUserId === userId) vaultReady = null;
     throw error;
   });
-  return identityReady;
+  return vaultReady;
 }
 
-async function loadIdentity(userId: string, secret?: BackupSecret): Promise<IdentityKeyPair> {
-  const storageKey = `identity:${userId}`;
-  const stored = await secureGet(storageKey);
+/**
+ * The sequence, in the order it has to happen.
+ *
+ * Every branch here is a former bug written as a rule, so the order is not
+ * incidental:
+ *
+ * 1. **This machine's device key first.** It is needed to receive a grant and
+ *    to open the v1 rows this machine already holds, and it is not the
+ *    account's identity - publishing it takes nothing away from anybody.
+ * 2. **Read the vault, and treat a failure as a failure.** Only a definite
+ *    "this account has no vault" is allowed to create one. A network error
+ *    read as "no vault" would publish a second identity over a standing one
+ *    and orphan every key wrapped for the first.
+ * 3. **No vault: create one, and show the recovery code.** This is the only
+ *    moment an account is created into a recoverable state, so the code is
+ *    minted here rather than offered later in a settings panel nobody opens.
+ * 4. **A vault, and a way in: open it.** The cached master key first (a
+ *    relaunch should not ask), then the typed secret, then a grant somebody
+ *    approved.
+ * 5. **A vault and no way in: lock, and ask.** Never mint.
+ */
+async function openVault(userId: string, secret?: VaultSecret): Promise<OpenVault> {
+  const device = await deviceIdentity(userId);
 
-  if (stored) {
-    const saved = JSON.parse(stored) as StoredIdentity;
-    const pair: IdentityKeyPair = { publicKey: saved.publicKey, privateKey: saved.privateKey };
+  // Throws on a failed request, which is the point: the caller retries, and
+  // nothing has been written.
+  const { vault } = await api.vault();
 
-    // A machine that forked gets another go, every time a secret is at hand.
-    // This is the whole of "sign in on a new phone and your messages are
-    // there": the fork below is silent and one-way, so the only thing that
-    // makes it recoverable is trying the backup again on the next sign-in
-    // rather than short-circuiting on the key the fork left behind.
-    if (saved.provisional && secret) {
-      const recovered = await restoreFromBackup(storageKey, secret);
-      if (recovered) return recovered;
-    }
-
-    await adopt(pair, false, saved.provisional === true);
-    // A machine that already worked may still have no backup - it predates
-    // this, or nobody could supply a secret at the time. Fix it quietly when a
-    // secret is at hand rather than waiting for the next reinstall to notice.
-    void ensureBackup(pair, secret);
-    return pair;
+  if (!vault) {
+    return adoptOrCreateVault(userId, device, secret);
   }
 
-  // A failed fetch must not be read as "there is no backup": that would seal a
-  // fresh key over one that exists. It throws, and the sign-in retries.
-  const { backups } = await identityBackups();
+  const opened = await unlock(userId, vault, device, secret);
+  if (opened) {
+    await adopt(userId, device, opened, vault.factors);
+    return opened;
+  }
 
-  // The account's own key, when the secret that opens it is at hand. This is
-  // the good path and the only instant one: every epoch already sealed for
-  // that identity opens the moment it lands, with nothing to wait for.
+  // Locked. Ask to be let in from a machine that already is, and say so.
+  await requestGrant(device);
+  setIdentityStatus({
+    status: 'locked',
+    reason: secret ? 'wrong-secret' : 'no-secret',
+    grantRequested: true,
+  });
+  throw new VaultLockedError();
+}
+
+/**
+ * Tries every way this machine might already be entitled to the master key.
+ *
+ * Null is an ordinary outcome, not a failure: it is what a machine signing in
+ * for the first time with no password looks like.
+ */
+async function unlock(
+  userId: string,
+  vault: NonNullable<AccountVaultResponse['vault']>,
+  device: IdentityKeyPair,
+  secret?: VaultSecret,
+): Promise<OpenVault | null> {
+  // 1. The master key this machine already opened, from the keychain. A
+  //    relaunch must not ask for a password that a launch already took.
+  const cached = await secureGet(masterKeyStore(userId));
+  if (cached) {
+    const opened = await openWith(vault, cached);
+    if (opened) return opened;
+    // The cached key does not open the current keyring: the account rotated,
+    // or this is a stale key from a vault that was replaced. Drop it and carry
+    // on rather than failing - the other routes below are still open.
+    await secureSet(masterKeyStore(userId), '');
+  }
+
+  // 2. A secret somebody typed or a sign-in carried.
   if (secret) {
-    const recovered = await restoreFromBackup(storageKey, secret, backups);
-    if (recovered) return recovered;
+    for (const factor of vault.factors.filter((it) => it.kind === secret.kind)) {
+      const masterKey = await tryOpen(() => openMasterKeyWithSecret(factor, secret.value));
+      if (!masterKey) continue;
+      const opened = await openWith(vault, masterKey);
+      if (opened) {
+        await secureSet(masterKeyStore(userId), masterKey);
+        return opened;
+      }
+    }
   }
 
-  // Otherwise this machine gets a key of its own, and the sign-in carries on.
-  //
-  // It used to stop here and ask - and asking is not something every sign-in
-  // can answer. A GitHub sign-in has no account password to offer, and an
-  // account that has only ever signed in that way has no password at all, so
-  // the question had no answer and the app sat behind a box nobody could fill.
-  //
-  // Minting is safe because a channel key is wrapped per *device*, not per
-  // account: this machine publishes its own public key under its own device id
-  // and takes nothing away from the machines already in the directory. History
-  // arrives from them - `fillGaps` hands every epoch a machine holds to the
-  // owner's machines that are missing it - so the account converges without
-  // anyone typing anything.
-  //
-  // What it costs: history is not instant. It appears as the other machines
-  // open those channels. An account whose only other machine is offline, or
-  // which has none, reads what arrives from now on until one of them is back.
-  // Settings -> Encryption is where somebody who wants it sooner can say so.
-  //
-  // The fork is marked when the account *had* a backup this machine could not
-  // open, and that mark is what lets the next sign-in undo it. Unmarked means
-  // there was nothing to restore from, so this key is the account's own.
-  const provisional = backups.length > 0;
-  const pair = await generateIdentity();
-  await secureSet(storageKey, JSON.stringify({ ...pair, provisional } satisfies StoredIdentity));
-  await adopt(pair, false, provisional);
-  await ensureBackup(pair, secret);
-  return pair;
+  // 3. A grant somebody approved for this machine, possibly while it was
+  //    sitting on the locked screen.
+  const grant = vault.factors.find(
+    (it) => it.kind === 'device' && it.deviceId === deviceId(),
+  );
+  if (grant) {
+    const masterKey = await tryOpen(() => openMasterKeyFromGrant(grant, device.privateKey));
+    if (masterKey) {
+      const opened = await openWith(vault, masterKey);
+      if (opened) {
+        await secureSet(masterKeyStore(userId), masterKey);
+        return opened;
+      }
+    }
+  }
+
+  return null;
 }
 
-/**
- * Opens whichever backup `secret` fits and makes it this machine's identity.
- *
- * Null means "not this secret" - a wrong password, or a passphrase-only account
- * signing in with a password - which is an ordinary outcome, not a failure.
- *
- * Every channel key held on this machine is dropped on the way out. They are
- * still valid, but they are the *subset* a forked identity could reach, and the
- * caches in front of them would keep serving that subset while the wraps this
- * identity can now open sat unread in the directory. Dropping them costs one
- * re-read of a directory we have just been talking to.
- */
-async function restoreFromBackup(
-  storageKey: string,
-  secret: BackupSecret,
-  known?: IdentityBackup[],
-): Promise<IdentityKeyPair | null> {
-  const backups = known ?? (await identityBackups()).backups;
-  const sealed = backups.find((it) => it.kind === secret.kind);
-  if (!sealed) return null;
-
-  const pair = await openBackup(sealed, secret);
-  if (!pair) return null;
-
-  await secureSet(storageKey, JSON.stringify({ ...pair } satisfies StoredIdentity));
-  channels.clear();
-  inFlight.clear();
-  rekeyed.clear();
-  missedEpochs.clear();
-  await adopt(pair, true);
-  return pair;
-}
-
-/**
- * The account's sealed identities. Reads the list, falling back to the single
- * blob a server older than per-kind backups sends.
- */
-async function identityBackups(): Promise<{ backups: IdentityBackup[] }> {
-  const response = await api.identityBackup();
-  if (response.backups) return { backups: response.backups };
-  return { backups: response.backup ? [response.backup] : [] };
-}
-
-/** The wrong secret is an ordinary outcome here, not an error: null, and on. */
-async function openBackup(
-  backup: IdentityBackup,
-  secret: BackupSecret,
-): Promise<IdentityKeyPair | null> {
+/** The keyring behind a master key, or null when that key is not the one. */
+async function openWith(
+  vault: NonNullable<AccountVaultResponse['vault']>,
+  masterKey: string,
+): Promise<OpenVault | null> {
   try {
-    return await openIdentity(backup, secret.value);
+    return { masterKey, keyring: await openKeyring(vault.keyring, masterKey) };
   } catch {
     return null;
   }
 }
 
-/** Publishes the public half and marks this machine ready. */
+/** A wrong secret is an ordinary outcome here, not an error: null, and on. */
+async function tryOpen(open: () => Promise<string>): Promise<string | null> {
+  try {
+    return await open();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * An account with no vault: either one that predates it, or a brand-new one.
+ *
+ * The two are handled the same way and deliberately so. The v1 identity is
+ * *not* promoted into the keyring even when this machine holds it, because
+ * generation 1 of an account identity and the private key of one laptop are
+ * different things, and conflating them would mean every future rotation had
+ * to reason about a key that a machine also holds outside the vault. What
+ * rescues the old history is promotion of the wraps, not reuse of the key -
+ * see `promoteEpochs`.
+ *
+ * The recovery code is minted here, once, and handed to the caller to show.
+ * Offering it later in a settings panel is offering it to the small number of
+ * people who go looking, and the whole value of the factor is that everybody
+ * has one.
+ */
+async function adoptOrCreateVault(
+  userId: string,
+  device: IdentityKeyPair,
+  secret?: VaultSecret,
+): Promise<OpenVault> {
+  const identity = await generateIdentity();
+  const masterKey = generateMasterKey();
+  const keyring: KeyringEntry[] = [{ generation: 1, ...identity }];
+
+  const code = generateRecoveryCode();
+  const factors = [await sealMasterKeyWithSecret(masterKey, code, 'recovery-code')];
+  // The password factor as well when there is one, because it is what makes
+  // signing in on a new machine need nothing typed beyond the password.
+  if (secret && secret.kind !== 'recovery-code') {
+    factors.push(await sealMasterKeyWithSecret(masterKey, secret.value, secret.kind));
+  }
+
+  const created = await api.createVault({
+    publicKey: identity.publicKey,
+    keyring: await sealKeyring(keyring, masterKey),
+    factors,
+  });
+
+  // Somebody else's machine created it a moment ago - two sign-ins at once, or
+  // a retry after a response that was lost on the way back. Read theirs rather
+  // than insisting on ours: the server refuses the second create for exactly
+  // this reason, and the alternative is two identities again.
+  if (!created.vault) {
+    const { vault } = await api.vault();
+    if (!vault) throw new Error('The vault could not be created or read');
+    const opened = await unlock(userId, vault, device, secret);
+    if (!opened) {
+      await requestGrant(device);
+      setIdentityStatus({ status: 'locked', reason: 'no-secret', grantRequested: true });
+      throw new VaultLockedError();
+    }
+    await adopt(userId, device, opened, vault.factors);
+    return opened;
+  }
+
+  await secureSet(masterKeyStore(userId), masterKey);
+  const opened: OpenVault = { masterKey, keyring };
+  await adopt(userId, device, opened, created.vault.factors);
+  // Shown once, by whoever is listening. Nothing stores it: a recovery code
+  // kept anywhere this app can read is a recovery code that goes with the
+  // machine, which is the thing it exists not to do.
+  recoveryCodeListeners.forEach((listener) => listener(code));
+  return opened;
+}
+
+/**
+ * Publishes this machine's device key and marks the vault open.
+ *
+ * `holdsVault` is what stops the owner's own settings panel describing a
+ * working machine as one waiting for approval. It is an assertion rather than
+ * a proof, and it is safe to be: the only thing it changes is how this
+ * account's device list is drawn to this account.
+ */
 async function adopt(
-  pair: IdentityKeyPair,
-  backedUp = false,
-  provisional = false,
+  userId: string,
+  device: IdentityKeyPair,
+  opened: OpenVault,
+  factors: VaultFactor[],
 ): Promise<void> {
-  identity = pair;
+  vault = opened;
+  deviceKeys = device;
+
   try {
     // Idempotent: re-publishing keeps the directory correct if the row was
     // lost, and refreshes when this machine was last seen.
     await api.registerDeviceKey({
       deviceId: deviceId(),
-      publicKey: pair.publicKey,
+      publicKey: device.publicKey,
       label: deviceLabel(),
+      holdsVault: true,
     });
   } catch (error) {
     // Revoked from another machine. Not an error to retry and not a reason to
@@ -272,7 +422,222 @@ async function adopt(
     }
     throw error;
   }
-  setIdentityStatus({ status: 'ready', backedUp, provisional });
+
+  setIdentityStatus({ status: 'ready', recoverable: factors.some(isPortableFactor2) });
+  // Everything this machine can still rescue from v1, in the background. It is
+  // the only thing that can: those rows are addressed to this machine's device
+  // key and nothing else in the world opens them.
+  void promoteEverything();
+}
+
+/** `isPortableFactor` over a stored factor, named apart to keep imports flat. */
+function isPortableFactor2(factor: VaultFactor): boolean {
+  return factor.kind !== 'device';
+}
+
+/**
+ * Asks to be let in from a machine that already is.
+ *
+ * Sent even when nobody is likely to be watching, because the alternative is a
+ * screen with a button somebody has to find, and the request costs nothing: it
+ * carries a public key and a label, and approving it is a deliberate act on
+ * another machine with a fingerprint to compare first.
+ */
+async function requestGrant(device: IdentityKeyPair): Promise<void> {
+  try {
+    await api.requestVaultGrant({
+      deviceId: deviceId(),
+      publicKey: device.publicKey,
+      label: deviceLabel(),
+      fingerprint: await keyFingerprint(device.publicKey),
+    });
+  } catch {
+    // Offline, or the queue is full. The locked screen offers the two routes
+    // that need nobody else, and asks again on the next attempt.
+  }
+}
+
+/**
+ * Opens the vault with a secret typed on the locked screen.
+ *
+ * Separate from `initIdentity` because it is a second attempt rather than a
+ * first: the sign-in has already happened, the session is live, and what is
+ * missing is one string.
+ */
+export async function unlockWithSecret(secret: VaultSecret): Promise<void> {
+  const userId = vaultUserId;
+  if (!userId) throw new Error('Nobody is signed in');
+
+  signInSecret = secret;
+  vaultReady = null;
+  await initIdentity(userId, secret);
+}
+
+/**
+ * Whether a machine waiting for approval has been let in yet.
+ *
+ * Polled by the locked screen. Cheap on purpose - one row by primary key - so
+ * that a machine somebody approved from the next room comes to life without
+ * anybody restarting anything.
+ */
+export async function checkForGrant(): Promise<boolean> {
+  const userId = vaultUserId;
+  if (!userId) return false;
+  try {
+    const { factor } = await api.vaultGrant(deviceId());
+    if (!factor) return false;
+    vaultReady = null;
+    await initIdentity(userId);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Machines of this account waiting to be let in, for the approval screen. */
+export function pendingGrants(): Promise<VaultGrantRequest[]> {
+  return api.vaultGrants().then((response) => response.requests);
+}
+
+/**
+ * Lets one machine in.
+ *
+ * The fingerprint is recomputed here from the key that is about to be sealed
+ * for, and compared against the one the request carried. That is not
+ * belt-and-braces: the request's own `fingerprint` field arrived over the
+ * wire beside the key, so trusting it would be checking a claim against
+ * itself. What the person on this screen read aloud has to be a digest of
+ * *this* key, computed on *this* machine.
+ */
+export async function approveGrant(request: VaultGrantRequest): Promise<void> {
+  const open = await currentVault();
+  const identity = currentIdentityOf(open);
+  const fingerprint = await keyFingerprint(request.publicKey);
+  if (fingerprint !== request.fingerprint) {
+    throw new Error('That machine’s fingerprint does not match the key it published');
+  }
+
+  await api.putVaultFactor(
+    await sealMasterKeyForDevice(
+      open.masterKey,
+      identity.privateKey,
+      identity.publicKey,
+      request.deviceId,
+      request.publicKey,
+    ),
+  );
+}
+
+/** Withdraws a request, for somebody who did not recognise the machine. */
+export function denyGrant(deviceId: string): Promise<void> {
+  return api.denyVaultGrant(deviceId).then(() => undefined);
+}
+
+/**
+ * Adds or replaces a door into the vault.
+ *
+ * Replacing is the ordinary case: a changed password re-seals the same master
+ * key under a new derivation, and nothing that history depends on is touched -
+ * which is the whole reason the master key is a layer of its own rather than
+ * the identity being sealed four times.
+ */
+export async function setVaultFactor(secret: VaultSecret): Promise<void> {
+  const open = await currentVault();
+  await api.putVaultFactor(await sealMasterKeyWithSecret(open.masterKey, secret.value, secret.kind));
+}
+
+/**
+ * Takes a door away. The server refuses the last portable one.
+ *
+ * Refused by the server rather than here, because this is the check that must
+ * hold for every client that will ever exist - including one somebody writes
+ * next year against the same six routes.
+ */
+export function removeVaultFactor(kind: PortableFactorKind): Promise<void> {
+  return api.deleteVaultFactor(kind).then(() => undefined);
+}
+
+/**
+ * Mints a fresh recovery code and replaces the old one.
+ *
+ * Returned rather than stored, for the same reason it is shown at creation and
+ * never again: a recovery code this app can read is a recovery code that goes
+ * with the machine.
+ */
+export async function regenerateRecoveryCode(): Promise<string> {
+  const open = await currentVault();
+  const code = generateRecoveryCode();
+  await api.putVaultFactor(await sealMasterKeyWithSecret(open.masterKey, code, 'recovery-code'));
+  return code;
+}
+
+/**
+ * Appends an identity generation, after a machine was lost.
+ *
+ * Nothing is taken away by it, and that is what makes it usable. Every earlier
+ * private half stays in the ring, so every channel key ever wrapped to an
+ * older public half still opens; what changes is only what other people wrap
+ * *next*. v1 could not do this at all - rotating an identity there meant
+ * abandoning every row sealed for the old one, which is to say abandoning the
+ * history - so a lost laptop was something an account simply lived with.
+ */
+export async function rotateAccountIdentity(): Promise<void> {
+  const open = await currentVault();
+  const next = currentIdentityOf(open).generation + 1;
+  const identity = await generateIdentity();
+  const keyring: KeyringEntry[] = [...open.keyring, { generation: next, ...identity }];
+
+  await api.rotateVault({
+    publicKey: identity.publicKey,
+    generation: next,
+    keyring: await sealKeyring(keyring, open.masterKey),
+  });
+  vault = { masterKey: open.masterKey, keyring };
+}
+
+/** Who is listening for the one-time recovery code, at account creation. */
+const recoveryCodeListeners = new Set<(code: string) => void>();
+
+/**
+ * Subscribes to the recovery code minted when an account's vault is created.
+ *
+ * A callback rather than a return value because the vault is created deep
+ * inside a sign-in, several frames below anything that can draw a dialog, and
+ * the code has to be shown or it may as well not exist.
+ */
+export function onRecoveryCode(listener: (code: string) => void): () => void {
+  recoveryCodeListeners.add(listener);
+  return () => recoveryCodeListeners.delete(listener);
+}
+
+/**
+ * This machine's own key pair: for receiving a vault grant, and for opening
+ * the v1 rows addressed to it.
+ *
+ * Stored where the v1 identity was, and reusing whatever is there. That is
+ * deliberate and it is what makes promotion possible at all: the key in that
+ * slot is the one `channel_keys` rows were sealed to before the vault existed,
+ * and generating a fresh one here would throw away the only thing in the world
+ * that can open them.
+ */
+async function deviceIdentity(userId: string): Promise<IdentityKeyPair> {
+  const slot = `identity:${userId}`;
+  const stored = await secureGet(slot);
+  if (stored) {
+    const saved = JSON.parse(stored) as IdentityKeyPair;
+    if (typeof saved.publicKey === 'string' && typeof saved.privateKey === 'string') {
+      return { publicKey: saved.publicKey, privateKey: saved.privateKey };
+    }
+  }
+
+  const pair = await generateIdentity();
+  await secureSet(slot, JSON.stringify(pair));
+  return pair;
+}
+
+/** Where this machine keeps the master key once it has opened the vault. */
+function masterKeyStore(userId: string): string {
+  return `vault:${userId}`;
 }
 
 const DEVICE_ID_KEY = 'betweenus.deviceId';
@@ -286,8 +651,9 @@ const DEVICE_ID_KEY = 'betweenus.deviceId';
  * a secret: it is published beside a public key.
  *
  * Losing it (a cleared profile, a fresh container) means the next launch looks
- * like a new device and gets wrapped for as one, which is the correct answer
- * rather than a failure.
+ * like a new machine and has to be let into the vault again. That is now a
+ * prompt rather than a catastrophe: under v1 it meant a new identity and a
+ * history nobody could open.
  */
 export function deviceId(): string {
   try {
@@ -322,123 +688,108 @@ function deviceLabel(): string {
 }
 
 /**
- * Uploads a backup when the account has none for this identity and a secret is
- * available to seal it with. Never throws into a sign-in: an account without a
- * backup still works, it is only unrecoverable, and the settings panel says so.
- */
-async function ensureBackup(pair: IdentityKeyPair, secret?: BackupSecret): Promise<void> {
-  try {
-    const { backups } = await identityBackups();
-    const backedUp = backups.some((it) => it.publicKey === pair.publicKey);
-
-    // A backup that already stands is not this machine's to replace unless it
-    // is this machine's key in it. Since a machine that could not open one
-    // mints its own, sealing over it here would take the account's recoverable
-    // identity away from every machine still restoring from it - quietly, and
-    // for good. Deliberately re-sealing is `backupIdentity`'s job, not this.
-    //
-    // Scoped to the *kind* now. An account that has a passphrase backup and no
-    // password one is exactly the account that cannot recover on a fresh
-    // sign-in, so filling that gap when the password is at hand is the point
-    // rather than an overreach - and it only ever seals the key this machine
-    // already holds, which is the identity the other machines restore from
-    // whenever `backedUp` says so.
-    if (!secret || backups.some((it) => it.kind === secret.kind) || !backedUp) {
-      setIdentityStatus({
-        status: 'ready',
-        backedUp,
-        provisional: backups.length > 0 && !backedUp,
-      });
-      return;
-    }
-    await api.putIdentityBackup(await sealIdentity(pair, secret.value, secret.kind));
-    setIdentityStatus({ status: 'ready', backedUp: true });
-  } catch {
-    // Offline, or the server is older than this client. Nothing is lost that
-    // was not already missing.
-  }
-}
-
-/**
- * Seals the current identity under a secret the user chose, for an account that
- * has no password to derive from - a provider sign-in - or for anyone who would
- * rather not tie the two together.
- */
-export async function backupIdentity(secret: BackupSecret): Promise<void> {
-  const pair = await currentIdentity();
-  await api.putIdentityBackup(await sealIdentity(pair, secret.value, secret.kind));
-  setIdentityStatus({ status: 'ready', backedUp: true });
-}
-
-/**
- * Whether the account password can still recover this identity on a machine
- * that has never seen it.
+ * Whether the account password can still open the vault on a machine that has
+ * never seen it.
  *
  * The one thing a settings panel has to be able to say plainly, because it is
- * the difference between "sign in anywhere" and "sign in anywhere and type a
- * passphrase you wrote down once".
+ * the difference between "sign in anywhere" and "sign in anywhere and find the
+ * piece of paper".
  */
 export async function passwordRecoveryEnabled(): Promise<boolean> {
-  const { backups } = await identityBackups();
-  return backups.some((it) => it.kind === 'password');
+  const { vault: stored } = await api.vault();
+  return stored?.factors.some((it) => it.kind === 'password') ?? false;
 }
 
 /**
  * Turns the password path off, for somebody who set a recovery passphrase
- * *because* a live server sees the password at sign-in and they would rather it
- * could not open anything.
+ * *because* a live server sees the password at sign-in and they would rather
+ * it could not open anything.
  *
- * Refuses when it would leave the account with no backup at all, which is not a
- * security setting - it is losing every message on the next reinstall.
+ * The server refuses this when it would leave the account with no portable
+ * factor at all, which is not a security setting - it is losing every message
+ * on the next reinstall.
  */
-export async function setPasswordRecovery(
-  enabled: boolean,
-  password?: string,
-): Promise<void> {
+export async function setPasswordRecovery(enabled: boolean, password?: string): Promise<void> {
   if (enabled) {
-    if (!password) throw new Error('The account password is needed to seal a backup with it');
-    await backupIdentity({ value: password, kind: 'password' });
+    if (!password) throw new Error('The account password is needed to seal a factor with it');
+    await setVaultFactor({ value: password, kind: 'password' });
     return;
   }
-  const { backups } = await identityBackups();
-  if (!backups.some((it) => it.kind === 'passphrase')) {
-    throw new Error('Set a recovery passphrase first, or this account has no way back at all');
-  }
-  await api.deleteIdentityBackup('password');
+  await removeVaultFactor('password');
 }
 
 /**
- * Re-seals the backup after a password change. Skipped silently when the backup
- * is keyed to a passphrase instead, which a password change does not touch.
+ * Re-seals the password factor after a password change. Silently skipped when
+ * the account does not have one.
  */
 export async function rewrapBackupForPassword(newPassword: string): Promise<void> {
-  const { backups } = await identityBackups();
-  if (!backups.some((it) => it.kind === 'password')) return;
-  await backupIdentity({ value: newPassword, kind: 'password' });
+  if (!(await passwordRecoveryEnabled())) return;
+  await setVaultFactor({ value: newPassword, kind: 'password' });
   // The secret this session holds is now the old one, and a retry that used it
-  // would fail to open the blob it just re-sealed.
+  // would fail to open the factor it has just re-sealed.
   signInSecret = { value: newPassword, kind: 'password' };
+}
+
+/** How much of this account's history survives losing every machine it owns. */
+export function keyHealth(): Promise<KeyHealthResponse> {
+  return api.keyHealth();
 }
 
 export function resetE2ee(): void {
   // Key material is per-user; a sign-out must not leak it into the next session.
-  identity = null;
-  identityUserId = null;
-  identityReady = null;
+  vault = null;
+  deviceKeys = null;
+  vaultUserId = null;
+  vaultReady = null;
   signInSecret = null;
   channels.clear();
   inFlight.clear();
   rekeyed.clear();
+  promoted.clear();
   missedEpochs.clear();
   setIdentityStatus({ status: 'absent' });
 }
 
+/**
+ * Seals a message, but not before every member can open the epoch it is
+ * sealed under.
+ *
+ * The order is the fix. v1 fired the re-wrap for missing members in the
+ * background and sent regardless, so a message could be - and routinely was -
+ * written under an epoch somebody had no wrap for. Nothing ever repaired
+ * that: the epoch was already minted, the message already stored, and the
+ * member read a padlock until the channel happened to rotate. Waiting costs
+ * one request on the rare send where somebody is genuinely uncovered, and it
+ * is the difference between "encrypted" and "encrypted for the people it was
+ * addressed to".
+ */
 export async function encryptForChannel(channelId: string, plaintext: string): Promise<string> {
   const state = await ensureChannelKey(channelId);
   const key = state.keys.get(state.epoch);
   if (!key) throw new MissingChannelKeyError();
+  await coverEveryone(channelId, state.epoch, key);
   const envelope = await encryptMessage(plaintext, key, state.epoch);
   return JSON.stringify(envelope);
+}
+
+/**
+ * Seals the current epoch for any member who has no wrap for it yet.
+ *
+ * Quiet about its own failure and deliberately so: the alternative is a
+ * message somebody cannot send because a third party joined the channel a
+ * second ago and the directory has not caught up. What it must not do is
+ * *skip* the attempt, which is what running it in the background amounted to.
+ */
+async function coverEveryone(channelId: string, epoch: number, key: string): Promise<void> {
+  try {
+    const latest = await api.channelKeys(channelId);
+    if (latest.epoch !== epoch || latest.missingRecipients.length === 0) return;
+    await shareKey(channelId, epoch, key, latest.missingRecipients);
+  } catch {
+    // Offline, or somebody rotated underneath us. The send goes ahead: the
+    // epoch is the one this client holds and the members who do have a wrap
+    // read it. The next open asks again for the ones who do not.
+  }
 }
 
 /** Never throws: undecryptable content renders as a placeholder. */
@@ -501,10 +852,20 @@ export async function callKeyForChannel(channelId: string, refresh = false): Pro
 }
 
 /**
- * Re-wraps the keys this machine holds for the machines that hold none. Called
- * when a channel is opened, so a member who joined after a key was minted -
- * and a second machine somebody signed in on yesterday - becomes able to read
- * without anyone restarting anything.
+ * Brings a channel's key distribution up to date. Called when a channel is
+ * opened.
+ *
+ * Three jobs, and the middle one is the migration:
+ *
+ * - rotate when somebody who is no longer a member holds the current key
+ * - **promote** every epoch this machine holds only as a v1 per-device wrap
+ * - fill the gaps of members who were let in with the history
+ *
+ * Much smaller than v1's version of this, because most of what it did is no
+ * longer necessary. It used to hand every epoch this machine held to every
+ * *other machine of the same account*, one at a time, whenever this one
+ * happened to open the channel - which is why history arrived late, arrived
+ * partially, or never arrived. An account-scoped wrap needs no such repair.
  */
 export async function syncChannelKeys(channelId: string): Promise<void> {
   const state = await ensureChannelKey(channelId);
@@ -523,22 +884,101 @@ export async function syncChannelKeys(channelId: string): Promise<void> {
     return;
   }
 
+  await promoteEpochs(channelId, state, latest.promotable);
   await fillGaps(channelId, state, latest);
 }
 
 /**
- * Hands every epoch this machine holds to the machines that are missing it.
+ * Re-seals epochs this machine holds only as v1 per-device wraps, addressing
+ * them to the account.
  *
- * This is what makes a second device able to read *history* rather than only
- * what is written after it arrives. The old answer re-wrapped the current epoch
- * and nothing else, so a machine signing in today was missing every epoch
- * before today, could not re-wrap them for itself (it holds none of them), and
- * had nobody looking on its behalf - it minted a fresh epoch and the whole
- * conversation before that moment stayed a padlock for good.
+ * This is the rescue, and it is the only thing that can perform it. Those rows
+ * were sealed to *this installation's* key; no server, no other machine and no
+ * future machine can open them. Re-addressing them to the account key costs
+ * one request and takes that epoch permanently out of reach of every way v1
+ * lost data - readable from then on by every machine of the account, including
+ * ones that do not exist yet.
  *
- * Failures are per epoch and never fatal. A racing rotation, a device revoked
- * between the read and the write, a member removed - each of them fails one
- * wrap, and none of them is a reason to stop opening the channel.
+ * It grants nothing to anybody. The wrap goes to the same account that already
+ * held it, and the server checks exactly that.
+ *
+ * Failures are per epoch and never fatal: a racing rotation or a moment
+ * offline costs one epoch this pass, and the next open asks again.
+ */
+async function promoteEpochs(
+  channelId: string,
+  state: ChannelKeyState,
+  epochs: number[],
+): Promise<void> {
+  const open = vault;
+  const userId = vaultUserId;
+  if (!open || !userId || epochs.length === 0) return;
+  const identity = currentIdentityOf(open);
+
+  for (const epoch of epochs) {
+    const at = `${channelId}#${epoch}`;
+    if (promoted.has(at)) continue;
+    const key = state.keys.get(epoch);
+    // An epoch this machine cannot open is not one it can promote - which is
+    // the honest boundary of the rescue, and worth being plain about: a v1
+    // epoch whose only wrap was addressed to a machine that no longer exists
+    // is not recoverable by anybody, and this loop is where that becomes
+    // visible rather than where it is fixed.
+    if (!key) continue;
+
+    try {
+      await shareKey(channelId, epoch, key, [
+        { userId, publicKey: identity.publicKey, generation: identity.generation },
+      ]);
+      promoted.add(at);
+    } catch {
+      // Tried again on the next open.
+    }
+  }
+}
+
+/**
+ * Promotes everything this machine can, across every channel it can see.
+ *
+ * Run once per sign-in, in the background, rather than waiting for somebody to
+ * open each channel. The reason is that the window is closing: these wraps
+ * exist only on this installation, and every day one of them is not promoted
+ * is a day a reinstall would take that conversation with it. A channel nobody
+ * has opened in six months is exactly the one most likely to be lost.
+ */
+async function promoteEverything(): Promise<void> {
+  try {
+    const health = await api.keyHealth();
+    if (health.sealed === 0) return;
+
+    for (const channelId of await api.channelsWithKeys()) {
+      try {
+        const state = await ensureChannelKey(channelId);
+        const latest = await api.channelKeys(channelId);
+        await promoteEpochs(channelId, state, latest.promotable);
+      } catch {
+        // One channel's worth of failure is not a reason to stop rescuing the
+        // rest, and the next sign-in tries again.
+      }
+    }
+  } catch {
+    // A server older than this client, or an offline launch. Opening a channel
+    // still promotes it - this pass only makes it happen sooner.
+  }
+}
+
+/**
+ * Hands epochs this machine holds to members who were let in with the history.
+ *
+ * All that is left of v1's gap filling, and it is the one case that was never
+ * about repairing somebody's own second machine: a member somebody with
+ * `MANAGE_MEMBER` deliberately added *with* the conversation that predates
+ * them. The server says who is owed; it holds no key and can hand over
+ * nothing itself.
+ *
+ * Failures are per epoch and never fatal. A racing rotation, or a member
+ * removed between the read and the write, each fail one wrap, and none of them
+ * is a reason to stop opening the channel.
  */
 async function fillGaps(
   channelId: string,
@@ -549,12 +989,12 @@ async function fillGaps(
     const key = state.keys.get(gap.epoch);
     // An epoch we cannot open is not ours to hand out, and the server would
     // refuse it anyway: only a holder may add to an existing epoch.
-    if (!key || gap.devices.length === 0) continue;
+    if (!key || gap.recipients.length === 0) continue;
     try {
-      await shareKey(channelId, gap.epoch, key, gap.devices);
+      await shareKey(channelId, gap.epoch, key, gap.recipients);
     } catch {
-      // Somebody else got there first, or one of those devices has just been
-      // revoked. Either way the next open asks again.
+      // Somebody else got there first, or a member was removed. Either way the
+      // next open asks again.
     }
   }
 }
@@ -650,9 +1090,9 @@ function ensureChannelKey(channelId: string): Promise<ChannelKeyState> {
 }
 
 async function loadChannelKey(channelId: string): Promise<ChannelKeyState> {
-  const self = await currentIdentity();
+  await currentVault();
   let response = await api.channelKeys(channelId);
-  let keys = await openKeys(response.keys, self);
+  let keys = await openKeys(response.keys, privateHalves());
 
   // We hold nothing for the current epoch. Either nobody has keyed the channel
   // yet, or - the case that used to leave a member stuck on "no channel key on
@@ -671,7 +1111,7 @@ async function loadChannelKey(channelId: string): Promise<ChannelKeyState> {
     // Re-read rather than trusting our own write: another member may have won
     // the race, and then theirs is the epoch that counts.
     response = await api.channelKeys(channelId);
-    keys = await openKeys(response.keys, self);
+    keys = await openKeys(response.keys, privateHalves());
   }
 
   const state: ChannelKeyState = { epoch: response.epoch, keys };
@@ -683,37 +1123,79 @@ async function loadChannelKey(channelId: string): Promise<ChannelKeyState> {
   // holder re-wraps it for them. We hold it, so we do it. Older epochs are
   // `syncChannelKeys`' job - opening a channel is where that belongs, and
   // doing it here as well would publish every gap twice.
+  //
+  // Still fire-and-forget here, and that is now safe where it was not: a send
+  // no longer relies on this having finished, because `encryptForChannel`
+  // clears the same list itself before it seals. This is the read path getting
+  // ahead of the write path, rather than the write path hoping.
   if (response.missingRecipients.length > 0) {
     const key = keys.get(response.epoch);
     if (key) void shareKey(channelId, response.epoch, key, response.missingRecipients);
   }
 
+  // And whatever this machine alone can still rescue on this channel.
+  void promoteEpochs(channelId, state, response.promotable);
+
   return state;
 }
 
-/** Opens every entry sealed for us, keyed by epoch. */
+/**
+ * Opens every entry sealed for us, keyed by epoch.
+ *
+ * Tried against every private half this machine has, and the list is the
+ * design rather than a shotgun:
+ *
+ * - **every generation in the keyring**, so a rotation after a lost laptop
+ *   leaves the history readable. This is what makes rotating safe at all.
+ * - **this machine's device key**, so v1 rows addressed to this installation
+ *   still open - which is what makes promoting them possible.
+ *
+ * An account-scoped row opens on the first; a v1 row opens on the last; and
+ * a row addressed to *another* machine of this account opens on neither, which
+ * is exactly as ordinary as it sounds and is skipped without comment.
+ */
 async function openKeys(
   entries: Array<ChannelKeyEntry & { epoch: number }>,
-  self: IdentityKeyPair,
+  privateKeys: string[],
 ): Promise<Map<number, string>> {
   const keys = new Map<number, string>();
   for (const entry of entries) {
-    try {
-      keys.set(
-        entry.epoch,
-        await unwrapChannelKey(
-          { wrappedKey: entry.wrappedKey, iv: entry.iv },
-          self.privateKey,
-          entry.senderPublicKey,
-        ),
-      );
-    } catch {
-      // A key sealed for another of our machines, or for an identity we have
-      // since replaced. Both are rows this private half cannot open, and both
-      // are ordinary: skip it, keep the rest.
+    if (keys.has(entry.epoch)) continue;
+    for (const privateKey of privateKeys) {
+      try {
+        keys.set(
+          entry.epoch,
+          await unwrapChannelKey(
+            { wrappedKey: entry.wrappedKey, iv: entry.iv },
+            privateKey,
+            entry.senderPublicKey,
+          ),
+        );
+        break;
+      } catch {
+        // Not this half. Try the next.
+      }
     }
   }
   return keys;
+}
+
+/**
+ * Every private half this machine can try a wrap against, newest identity
+ * first.
+ *
+ * Order matters only for speed - the newest generation opens almost
+ * everything - but the *device key going last* is worth keeping: it is the one
+ * that opens the rows this machine has a duty to promote, and having it fail
+ * first on every account-scoped row would be a wasted AES operation per
+ * message on a busy channel.
+ */
+function privateHalves(): string[] {
+  const halves = [...(vault?.keyring ?? [])]
+    .sort((left, right) => right.generation - left.generation)
+    .map((entry) => entry.privateKey);
+  if (deviceKeys) halves.push(deviceKeys.privateKey);
+  return halves;
 }
 
 /**
@@ -725,25 +1207,24 @@ async function openKeys(
  * made an empty channel unusable until its owner typed into it first.
  */
 async function createChannelKey(channelId: string, epoch: number): Promise<void> {
-  const self = await currentIdentity();
+  const open = await currentVault();
+  const identity = currentIdentityOf(open);
   const key = generateChannelKey();
-  const devices = await api.channelDevices(channelId);
+  const members = await api.channelRecipients(channelId);
 
-  // Our own row may not be in the directory yet on a device that signed in a
-  // moment ago. Minting a key we cannot open (or, with an empty directory,
-  // publishing nothing at all) leaves the channel unkeyed and the sender told
-  // there is no key - so we always seal one for ourselves.
-  // Our own row may not be in the directory yet on a machine that signed in a
-  // moment ago, and it is now a row per *device* - being listed under our user
-  // id is no longer enough, because that may be the other laptop.
-  const mine = deviceId();
-  const recipients = devices.some(
-    (device) => device.userId === identityUserId && device.deviceId === mine,
-  )
-    ? devices
+  // Our own entry may not be in the directory yet on an account whose vault
+  // was created a moment ago. Minting a key we cannot open - or, with an empty
+  // directory, publishing nothing at all - leaves the channel unkeyed and the
+  // sender told there is no key, so we always seal one for ourselves.
+  const recipients = members.some((who) => who.userId === vaultUserId)
+    ? members
     : [
-        ...devices,
-        { userId: identityUserId ?? '', deviceId: mine, publicKey: self.publicKey },
+        ...members,
+        {
+          userId: vaultUserId ?? '',
+          publicKey: identity.publicKey,
+          generation: identity.generation,
+        },
       ];
 
   try {
@@ -761,28 +1242,38 @@ async function createChannelKey(channelId: string, epoch: number): Promise<void>
 }
 
 /**
- * Seals one channel key for every device that should hold it.
+ * Seals one channel key for every account that should hold it.
  *
- * One wrap per machine rather than per person. Somebody signed in on a laptop
- * and a phone gets two entries, each sealed to that machine's own key, which is
- * what makes revoking one of them mean anything: the wraps addressed to it are
- * deleted, and it is never sealed for again.
+ * One wrap per person rather than per machine, which is the change the whole
+ * of this file exists for. Somebody signed in on a laptop and a phone gets one
+ * entry, openable by both, and by the tablet they set up next month.
+ *
+ * Revocation still means something, and it means something different: the
+ * wraps are not addressed to a machine, so revoking one does not delete them.
+ * What it takes away is the machine's standing in the directory and its
+ * ability to be granted the vault again; what closes the door on the copy it
+ * already holds is rotating the account identity, which is
+ * `rotateAccountIdentity` and is offered beside revoking.
  */
 async function shareKey(
   channelId: string,
   epoch: number,
   key: string,
-  recipients: Array<{ userId: string; deviceId: string; publicKey: string }>,
+  recipients: AccountKeyRecipient[],
 ): Promise<void> {
-  const self = await currentIdentity();
+  const open = await currentVault();
+  const identity = currentIdentityOf(open);
 
   const entries = await Promise.all(
     recipients.map(async (recipient) => {
-      const wrapped = await wrapChannelKey(key, self.privateKey, recipient.publicKey);
+      const wrapped = await wrapChannelKey(key, identity.privateKey, recipient.publicKey);
       return {
         recipientUserId: recipient.userId,
-        recipientDeviceId: recipient.deviceId,
-        senderPublicKey: self.publicKey,
+        // Never a machine. The server refuses anything else, and a client that
+        // wrote one would rebuild v1's failure channel by channel, invisibly,
+        // because it all reads correctly on the machine that wrote it.
+        recipientDeviceId: ACCOUNT_SCOPE,
+        senderPublicKey: identity.publicKey,
         wrappedKey: wrapped.wrappedKey,
         iv: wrapped.iv,
       };
@@ -797,15 +1288,21 @@ async function shareKey(
 // --- Statuses ---------------------------------------------------------------
 //
 // A status has no channel, so it has no epoch and nothing to rotate: one key
-// per post, wrapped once per device that may read it, and gone in a day. That
-// is why none of the machinery above applies - there is no `ChannelKeyState`
-// to load, no gap to fill, and no rekey.
+// per post, wrapped once per *account* that may read it, and gone in a day.
+// That is why none of the machinery above applies - there is no
+// `ChannelKeyState` to load, no gap to fill, and no rekey.
 //
 // The wrap list is the audience. It is built from the directory *at the moment
 // of posting*, so a friendship made afterwards adds nothing to a post already
 // written, and the person who made friends today cannot open yesterday's - the
 // same rule every app with this feature has, kept here by arithmetic rather
 // than by trusting a server to filter.
+//
+// Per account rather than per machine, for a day-long version of the reason
+// channels changed: a friend who signed in on a new phone after the post was
+// written held no wrap for it and saw a padlock until it expired. Freezing the
+// *audience* at post time is the design; freezing the set of machines those
+// people happened to own at post time never was.
 
 /** A post, sealed and ready to send. */
 export interface SealedStatus {
@@ -819,38 +1316,35 @@ export interface SealedStatus {
 /**
  * Seals one post for one audience.
  *
- * Our own devices are included by the server's directory, but this machine may
- * not be in it yet - a laptop that signed in a moment ago has not been listed -
- * so we always wrap for ourselves. Posting something we cannot open is the one
- * failure with no way back.
+ * Our own account is included by the server's directory, but may not be there
+ * yet on a vault created a moment ago, so we always wrap for ourselves.
+ * Posting something we cannot open is the one failure with no way back.
  */
 export async function sealStatus(
   plain: { caption?: string; media?: Uint8Array<ArrayBuffer> },
-  devices: DeviceKey[],
+  audience: AccountKeyRecipient[],
 ): Promise<SealedStatus> {
-  const self = await currentIdentity();
+  const open = await currentVault();
+  const identity = currentIdentityOf(open);
   const key = generateChannelKey();
-  const mine = deviceId();
-  const recipients = devices.some(
-    (device) => device.userId === identityUserId && device.deviceId === mine,
-  )
-    ? devices
+  const recipients = audience.some((who) => who.userId === vaultUserId)
+    ? audience
     : [
-        ...devices,
+        ...audience,
         {
-          userId: identityUserId ?? '',
-          deviceId: mine,
-          publicKey: self.publicKey,
-        } as DeviceKey,
+          userId: vaultUserId ?? '',
+          publicKey: identity.publicKey,
+          generation: identity.generation,
+        },
       ];
 
   const keys = await Promise.all(
-    recipients.map(async (device) => {
-      const wrapped = await wrapChannelKey(key, self.privateKey, device.publicKey);
+    recipients.map(async (who) => {
+      const wrapped = await wrapChannelKey(key, identity.privateKey, who.publicKey);
       return {
-        recipientUserId: device.userId,
-        recipientDeviceId: device.deviceId,
-        senderPublicKey: self.publicKey,
+        recipientUserId: who.userId,
+        recipientDeviceId: ACCOUNT_SCOPE,
+        senderPublicKey: identity.publicKey,
         wrappedKey: wrapped.wrappedKey,
         iv: wrapped.iv,
       };
@@ -866,7 +1360,7 @@ export async function sealStatus(
     ...(caption ? { caption } : {}),
     ...(media ? { media: { ciphertext: media.ciphertext, iv: media.iv } } : {}),
     keys,
-    senderDeviceId: mine,
+    senderDeviceId: deviceId(),
   };
 }
 
@@ -879,17 +1373,20 @@ export async function sealStatus(
  */
 export async function statusKey(entry: StatusEntry): Promise<string | null> {
   if (entry.keys.length === 0) return null;
-  const self = await currentIdentity();
+  await currentVault();
   for (const wrap of entry.keys) {
-    try {
-      return await unwrapChannelKey(
-        { wrappedKey: wrap.wrappedKey, iv: wrap.iv },
-        self.privateKey,
-        wrap.senderPublicKey,
-      );
-    } catch {
-      // Sealed for another of our machines, or for an identity we have since
-      // replaced. Ordinary: try the next.
+    for (const privateKey of privateHalves()) {
+      try {
+        return await unwrapChannelKey(
+          { wrappedKey: wrap.wrappedKey, iv: wrap.iv },
+          privateKey,
+          wrap.senderPublicKey,
+        );
+      } catch {
+        // Not this half. An account-scoped wrap opens on a keyring
+        // generation; a wrap a v1 client wrote opens on this machine's device
+        // key; one addressed to another of our machines opens on neither.
+      }
     }
   }
   return null;
@@ -922,13 +1419,13 @@ export async function openStatusMedia(
 }
 
 /** Waits for sign-in key setup instead of racing it, and retries a failed one. */
-async function currentIdentity(): Promise<IdentityKeyPair> {
-  if (identityReady) return identityReady;
-  // With the session's secret, not without it. A retry that dropped it opened
-  // no backup, minted a machine-local key, and forked the account for good.
-  if (identityUserId) return initIdentity(identityUserId, signInSecret ?? undefined);
-  if (identity) return identity;
-  throw new MissingChannelKeyError();
+async function currentVault(): Promise<OpenVault> {
+  if (vaultReady) return vaultReady;
+  // With the session's secret, not without it. A retry that dropped it used to
+  // open no backup, mint a machine-local key, and fork the account for good.
+  if (vaultUserId) return initIdentity(vaultUserId, signInSecret ?? undefined);
+  if (vault) return vault;
+  throw new VaultLockedError();
 }
 
 /**

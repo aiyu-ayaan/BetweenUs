@@ -106,9 +106,12 @@ export const useStatusStore = create<StatusState>((set, get) => ({
     // and it is the list as it stands at the moment of posting - which is what
     // makes a friendship made afterwards not a way into what was posted before
     // it. See `sealStatus`.
-    const devices = await api.statusAudience();
+    // One entry per account, not per machine: a friend who signs in on a new
+    // phone an hour from now still opens this post, where under the machine
+    // list they saw a padlock until it expired.
+    const audience = await api.statusAudienceAccounts();
     const bytes = media ? new Uint8Array(await media.arrayBuffer()) : undefined;
-    const sealed = await sealStatus({ caption: draft.caption, media: bytes }, devices);
+    const sealed = await sealStatus({ caption: draft.caption, media: bytes }, audience);
 
     const entry = await api.postStatus(
       {

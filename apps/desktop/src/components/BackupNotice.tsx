@@ -59,8 +59,9 @@ export function BackupNotice({ onOpenSettings }: { onOpenSettings: () => void })
       className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 bg-amber-500/15 px-3 py-1.5 text-sm text-amber-200"
     >
       <span>
-        This computer holds the only copy of your encryption key. If you lose it, these
-        conversations cannot be recovered — not by us either.
+        Your account has no recovery code, passphrase or password recovery set up. If you
+        lose the devices you are signed in on, these conversations cannot be recovered —
+        not by us either.
       </span>
       <span className="flex items-center gap-2">
         <button

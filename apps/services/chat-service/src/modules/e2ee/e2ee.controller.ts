@@ -247,6 +247,15 @@ export class E2eeController {
     return this.e2ee.recipientsForChannel(user.id, channelId);
   }
 
+  /**
+   * Channels this account holds any wrap for, so a client that has just
+   * unlocked the vault can sweep them all and promote what only it can open.
+   */
+  @Get('channels')
+  channels(@CurrentUser() user: AuthenticatedUser): Promise<string[]> {
+    return this.e2ee.channelsWithKeys(user.id);
+  }
+
   @Get('keys/:channelId')
   keys(
     @CurrentUser() user: AuthenticatedUser,

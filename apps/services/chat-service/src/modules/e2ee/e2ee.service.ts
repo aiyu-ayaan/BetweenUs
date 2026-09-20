@@ -82,6 +82,16 @@ export class E2eeService {
       update: { publicKey, lastSeenAt: new Date(), ...(label ? { label } : {}), ...granted },
       create: { userId, deviceId, publicKey, label: label ?? null, ...granted },
     });
+
+    // A machine that got in by itself - somebody typed a recovery code on it -
+    // withdraws the request it made while it was locked. Leaving it would put
+    // a machine that needs nothing on the approval screen of every other
+    // machine of the account, and an approval prompt that is not asking for
+    // anything is how people learn to approve without looking.
+    if (holdsVault) {
+      await prisma.vaultGrantRequest.deleteMany({ where: { userId, deviceId, grantedAt: null } });
+    }
+
     return toDeviceKey(row);
   }
 
@@ -309,6 +319,24 @@ export class E2eeService {
     const lost = reachable.filter((at) => !scoped.has(`${at.channelId}#${at.epoch}`)).length;
 
     return { portable, sealed, lost, recoverable: portableFactors > 0 };
+  }
+
+  /**
+   * Channels this account holds any wrap for.
+   *
+   * Exists for one job: a client that has just unlocked the vault sweeping
+   * every channel to promote the v1 rows only it can open. Waiting for
+   * somebody to open each channel would work eventually, and "eventually" is
+   * the wrong word for a rescue whose window closes when this installation is
+   * wiped - the channel nobody has opened in six months is exactly the one
+   * most likely to be lost with it.
+   */
+  async channelsWithKeys(userId: string): Promise<string[]> {
+    const rows = await prisma.channelKey.groupBy({
+      by: ['channelId'],
+      where: { recipientUserId: userId },
+    });
+    return rows.map((row) => row.channelId);
   }
 
   /**

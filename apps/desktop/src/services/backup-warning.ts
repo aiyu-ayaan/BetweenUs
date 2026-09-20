@@ -1,33 +1,34 @@
 /**
  * Whether to tell somebody their account cannot be recovered.
  *
- * `ensureBackup` in `e2ee.ts` ends with a comment that is exactly right and
- * exactly the problem: *"an account without a backup still works, it is only
- * unrecoverable, and the settings panel says so."* The settings panel does say
- * so. Nothing brings anybody to the settings panel.
+ * Much rarer than it used to be, and worth saying why rather than leaving the
+ * narrower rule to look like an oversight.
  *
- * So this is the rule for the one notice that does. It is deliberately narrow -
- * it fires for the accounts that genuinely have no way back in, and for nobody
- * else, because a warning shown to people who are already safe is a warning
- * everybody learns to scroll past.
+ * Under v1 this fired for any machine whose key was not in a backup, which was
+ * every machine of every provider account and a good many others besides -
+ * because "backed up" was a fact about *this laptop's* key rather than about
+ * the account. Under the vault, every account is created with a recovery code
+ * whether anybody asked for one or not, so the ordinary state is recoverable
+ * and the warning is for the case somebody has taken every portable factor
+ * away deliberately.
  *
- * ## Who is actually at risk
+ * It is still worth having, and it is the same justification as before: if the
+ * last portable factor is gone and the machines are lost, every conversation
+ * goes with them. The server holds ciphertext and no key, and there is no
+ * support route that recovers it.
  *
- * Signing in with a password seals a backup on its own, so most accounts are
- * covered without anybody doing anything. The accounts that are not are the
- * ones with no password to derive from - a Google or GitHub sign-in - and they
- * are never told. If that machine is lost, every conversation it could read
- * goes with it, and there is no support route that recovers it: the server
- * holds ciphertext and no key.
- *
- * That is the whole justification for interrupting somebody at all.
+ * The notice stays narrow for the same reason it always did - one shown to
+ * people who are already safe is one everybody learns to scroll past.
  */
 
 /** The shape this needs of the identity store. */
 export interface IdentityLike {
-  status: 'absent' | 'ready' | 'revoked';
-  /** Whether *this machine's* key is in a backup the account can restore from. */
-  backedUp?: boolean;
+  status: 'absent' | 'ready' | 'locked' | 'revoked';
+  /**
+   * Whether a portable factor stands: a password, a passphrase or a recovery
+   * code. False means the account's only way in is a machine it still has.
+   */
+  recoverable?: boolean;
 }
 
 export function shouldWarnAboutBackup(
@@ -40,10 +41,11 @@ export function shouldWarnAboutBackup(
   now: number = Date.now(),
 ): boolean {
   // Nothing to lose yet, or nothing this notice can help with. `absent` is a
-  // client that has not unlocked an identity - it has its own screen - and
-  // `revoked` is a machine that has been shut out deliberately.
+  // client with nobody signed in, `locked` is a machine that has not been let
+  // into the vault - both have their own screen - and `revoked` is a machine
+  // shut out deliberately.
   if (identity.status !== 'ready') return false;
-  if (identity.backedUp) return false;
+  if (identity.recoverable) return false;
   // A stamp in the future is a dismissal that has not run out. A stamp in the
   // past, or none, is a notice that is due.
   return dismissedUntil === null || now >= dismissedUntil;
@@ -65,9 +67,9 @@ export function shouldWarnAboutBackup(
  * same one again, and it stops for good the moment a backup exists - which is
  * the only thing that actually changes the fact it is describing.
  *
- * Nothing here overrides that last part: `backedUp` short-circuits above the
- * snooze, so setting up recovery removes the notice immediately whatever is
- * stored.
+ * Nothing here overrides that last part: `recoverable` short-circuits above
+ * the snooze, so setting up recovery removes the notice immediately whatever
+ * is stored.
  */
 export const SNOOZE_MS = 30 * 24 * 60 * 60 * 1000;
 

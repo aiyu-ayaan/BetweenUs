@@ -24,7 +24,16 @@ import type {
   DeviceKey,
   DirectChannel,
   Friend,
+  AccountKeyRecipient,
+  AccountVaultResponse,
+  CreateVaultRequest,
   IdentityBackupResponse,
+  KeyHealthResponse,
+  PortableFactorKind,
+  PutVaultFactorRequest,
+  RotateVaultRequest,
+  VaultFactor,
+  VaultGrantsResponse,
   LinkPreview,
   Message,
   NotificationPreferences,
@@ -619,7 +628,15 @@ export const api = {
    * rather than cached: this list is the audience, and a friend added a minute
    * ago belongs in it.
    */
+  /** @deprecated A moment is sealed for accounts - see `statusAudienceAccounts`. */
   statusAudience: (): Promise<DeviceKey[]> => request('/api/v1/statuses/audience'),
+
+  /**
+   * Every account a post written now may be sealed for. Read immediately
+   * before posting rather than cached, because this list *is* the audience.
+   */
+  statusAudienceAccounts: (): Promise<AccountKeyRecipient[]> =>
+    request('/api/v1/statuses/audience/accounts'),
 
   /**
    * Posts one. The media, where there is any, travels with the caption in the
@@ -724,6 +741,58 @@ export const api = {
       body: JSON.stringify({ userId }),
     }),
 
+  // --- The account vault ---
+  //
+  // One identity keyring per account, sealed under a master key the server
+  // never sees, with one row per way of opening it. This is what replaced the
+  // per-machine identity backup, and the reason a new device now reads the
+  // whole history instead of the part somebody's other laptop got round to
+  // re-wrapping for it.
+
+  /**
+   * The caller's sealed vault, or an explicit null.
+   *
+   * A *failed* call must never be read as "this account has no vault": that
+   * would publish a second identity over a standing one and orphan every key
+   * wrapped for the first, with no undo. It throws, and `initIdentity`
+   * retries.
+   */
+  vault: (): Promise<AccountVaultResponse> => request('/api/v1/e2ee/vault'),
+
+  createVault: (body: CreateVaultRequest): Promise<AccountVaultResponse> =>
+    request('/api/v1/e2ee/vault', { method: 'POST', body: JSON.stringify(body) }),
+
+  rotateVault: (body: RotateVaultRequest): Promise<AccountVaultResponse> =>
+    request('/api/v1/e2ee/vault/rotate', { method: 'POST', body: JSON.stringify(body) }),
+
+  putVaultFactor: (body: PutVaultFactorRequest): Promise<{ ok: true }> =>
+    request('/api/v1/e2ee/vault/factors', { method: 'PUT', body: JSON.stringify(body) }),
+
+  /** Refused by the server when it would leave no portable way back in. */
+  deleteVaultFactor: (kind: PortableFactorKind): Promise<{ ok: true }> =>
+    request(`/api/v1/e2ee/vault/factors/${kind}`, { method: 'DELETE' }),
+
+  requestVaultGrant: (body: {
+    deviceId: string;
+    publicKey: string;
+    label: string;
+    fingerprint: string;
+  }): Promise<{ ok: true }> =>
+    request('/api/v1/e2ee/vault/grants', { method: 'POST', body: JSON.stringify(body) }),
+
+  /** Machines of this account waiting to be let in. Never anybody else's. */
+  vaultGrants: (): Promise<VaultGrantsResponse> => request('/api/v1/e2ee/vault/grants'),
+
+  /** Whether this machine has been let in - what the locked screen polls. */
+  vaultGrant: (deviceId: string): Promise<{ factor: VaultFactor | null }> =>
+    request(`/api/v1/e2ee/vault/grants/${encodeURIComponent(deviceId)}`),
+
+  denyVaultGrant: (deviceId: string): Promise<{ ok: true }> =>
+    request(`/api/v1/e2ee/vault/grants/${encodeURIComponent(deviceId)}`, { method: 'DELETE' }),
+
+  /** How much of this account's history survives losing every machine. */
+  keyHealth: (): Promise<KeyHealthResponse> => request('/api/v1/e2ee/health'),
+
   // --- End-to-end encryption key directory ---
 
   registerDeviceKey: (body: RegisterDeviceKeyRequest): Promise<DeviceKey> =>
@@ -745,8 +814,19 @@ export const api = {
   deleteIdentityBackup: (kind: BackupSecretKind): Promise<{ ok: true }> =>
     request(`/api/v1/e2ee/backup/${kind}`, { method: 'DELETE' }),
 
+  /** @deprecated Channel keys are wrapped for accounts - see `channelRecipients`. */
   channelDevices: (channelId: string): Promise<DeviceKey[]> =>
     request(`/api/v1/e2ee/devices?channelId=${encodeURIComponent(channelId)}`),
+
+  /** Who a channel key must be wrapped for: one entry per member account. */
+  channelRecipients: (channelId: string): Promise<AccountKeyRecipient[]> =>
+    request(`/api/v1/e2ee/recipients?channelId=${encodeURIComponent(channelId)}`),
+
+  /**
+   * Channels this account holds any wrap for, so a client that has just
+   * unlocked the vault can sweep them and promote what only it can open.
+   */
+  channelsWithKeys: (): Promise<string[]> => request('/api/v1/e2ee/channels'),
 
   channelKeys: (channelId: string): Promise<ChannelKeysResponse> =>
     request(`/api/v1/e2ee/keys/${encodeURIComponent(channelId)}`),

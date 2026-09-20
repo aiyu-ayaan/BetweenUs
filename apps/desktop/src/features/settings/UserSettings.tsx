@@ -64,7 +64,7 @@ import {
 } from '../../services/notifications';
 import { serverUrl } from '../../services/endpoint';
 import {
-  backupIdentity,
+  setVaultFactor,
   deviceId,
   passwordRecoveryEnabled,
   rewrapBackupForPassword,
@@ -1210,7 +1210,7 @@ function EncryptionSection(): JSX.Element {
     setSaving(true);
     setNote(null);
     try {
-      await backupIdentity({ value: passphrase, kind: 'passphrase' });
+      await setVaultFactor({ value: passphrase, kind: 'passphrase' });
       // Deliberately after the passphrase is stored, and only when asked: the
       // whole reason to turn the password path off is a server that sees the
       // password at sign-in, and dropping it before the replacement exists
@@ -1234,16 +1234,17 @@ function EncryptionSection(): JSX.Element {
     <>
       <h1 className="text-xl font-semibold text-slate-50">Encryption key</h1>
       <p className="mt-1 text-sm text-slate-400">
-        Messages are encrypted with a key this account owns. A sealed copy lives on the server so
-        the account works on any machine you sign in on - the server cannot open it.
+        Messages are encrypted with a key this account owns, sealed on the server under a key the
+        server does not have. Every device you sign in on opens the same one, so your whole
+        history is there the moment you sign in - nothing is left behind on the last machine.
       </p>
       <p className="mt-2 text-sm text-slate-300">
-        {identity.status === 'ready' && identity.backedUp
-          ? 'This machine holds the account key, and it is backed up. Signing in elsewhere restores it.'
-          : identity.status === 'ready' && identity.provisional
-            ? 'This machine could not open the account key, so it made one of its own and reads only what has arrived since. Sign out and back in with your account password to recover the account key and every conversation sealed for it.'
-            : identity.status === 'ready'
-              ? 'This machine has a key of its own, and no backup of it. Your other machines fill in older conversations as they open them. Set a recovery passphrase - or sign in once with your account password - to make this machine hold the account key instead.'
+        {identity.status === 'ready' && identity.recoverable
+          ? 'This device has your account key, and the account can be recovered without it. Signing in somewhere new brings every conversation with it.'
+          : identity.status === 'ready'
+            ? 'This device has your account key and nothing else does. Set a recovery passphrase, or keep a recovery code, or these conversations end with your devices.'
+            : identity.status === 'locked'
+              ? 'This device has not been let into your account yet. Enter your recovery code or passphrase, or approve it from a device that is already signed in.'
               : 'Waiting for the account key.'}
       </p>
       {byPassword !== null && (

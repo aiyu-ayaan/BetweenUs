@@ -1,26 +1,46 @@
 /**
- * Channel-key distribution, checked against a stand-in key directory that
- * enforces the same publish rules the chat service does.
+ * Channel-key distribution and the account vault, checked against a stand-in
+ * directory that enforces the same publish rules the chat service does.
  *
- * The bug this pins down: the owner creates a server, keys #general for the one
- * member that exists (themselves), invites somebody and closes the app. The
- * invitee holds no key, nobody is online to wrap one for them, and every
- * message they try to send comes back "No channel key on this device yet".
+ * The bug this file exists for, in the words it was reported in: *"the images
+ * and chats are all gone."* A second machine signed in, read a wall of
+ * padlocks, and was told to go and open the app on the laptop it was replacing
+ * - which, if that laptop had been wiped or lost, was advice about a machine
+ * that no longer existed. Those conversations were not delayed. They were
+ * gone, and no server, support route or later sign-in could bring them back,
+ * because every key was addressed to a machine rather than to the account.
+ *
+ * So the assertions below are mostly about *absence*: an epoch that must not
+ * be minted, a padlock that must not appear, a fork that must not happen.
  *
  * Run with: pnpm --filter @betweenus/desktop check
  */
 import assert from 'node:assert/strict';
-import type { ChannelKeyEntry, DeviceKey, PublishChannelKeysRequest } from '@betweenus/shared-types';
-import { configureApi } from './api';
+import {
+  ACCOUNT_SCOPE,
+  type AccountKeyRecipient,
+  type ChannelKeyEntry,
+  type PublishChannelKeysRequest,
+  type PutVaultFactorRequest,
+  type VaultFactor,
+} from '@betweenus/shared-types';
+import { api, configureApi } from './api';
+import { encryptMessage, generateChannelKey, wrapChannelKey } from './e2ee-crypto';
 import {
   UNDECRYPTABLE,
-  backupIdentity,
+  VaultLockedError,
+  approveGrant,
   decryptForChannel,
   encryptForChannel,
   initIdentity,
+  onRecoveryCode,
+  pendingGrants,
   resetE2ee,
+  rotateAccountIdentity,
+  setVaultFactor,
   syncChannelKeys,
-  type BackupSecret,
+  unlockWithSecret,
+  type VaultSecret,
 } from './e2ee';
 
 const CHANNEL = 'channel-general';
@@ -28,74 +48,63 @@ const CHANNEL = 'channel-general';
 /**
  * Members of the channel, whether or not they have signed in anywhere yet.
  *
- * Mutable, because losing a member is half of what is checked here: the server
+ * Mutable, because losing a member is part of what is checked here: the server
  * decides who a key may be wrapped for by asking who is a member *now*.
  */
 let MEMBERS = ['alice', 'bob'];
 
 type StoredKey = ChannelKeyEntry & { epoch: number; createdAt: number };
 
-/**
- * Public keys, wrapped keys, and who is making the call.
- *
- * Keyed by `userId:deviceId` since the directory became a list per user: one
- * person signed in on a laptop and a phone is two rows, two public keys and two
- * wraps of every channel key.
- */
+/** Device rows, keyed `userId:deviceId`. Still one per machine. */
 const devices = new Map<string, { userId: string; deviceId: string; publicKey: string }>();
-/**
- * Devices whose owner has revoked them, and when.
- *
- * The clock is a counter rather than a date: what matters is only whether a
- * revocation came after the epoch was minted, and two real timestamps a
- * millisecond apart would make that a flaky assertion rather than a clear one.
- */
 const revoked = new Map<string, number>();
-/**
- * Sealed identities, keyed `userId:kind`.
- *
- * Per kind rather than per account, the way the table is: a recovery passphrase
- * used to overwrite the password-sealed blob, and the password blob is the only
- * one a fresh sign-in holds the secret for.
- */
-const backups = new Map<string, Record<string, unknown>>();
 
-/** Every backup an account holds, as `GET /e2ee/backup` returns them. */
-function backupsFor(userId: string): Record<string, unknown>[] {
-  return [...backups.entries()]
-    .filter(([key]) => key.startsWith(`${userId}:`))
-    .map(([, value]) => value);
+/** One vault per account, and its factors. The server holds only ciphertext. */
+interface StoredVault {
+  publicKey: string;
+  generation: number;
+  keyring: { v: 1; iv: string; ct: string };
+  factors: VaultFactor[];
 }
+const vaults = new Map<string, StoredVault>();
+
+/** Machines waiting to be let in, keyed `userId:deviceId`. */
+const grantRequests = new Map<
+  string,
+  { deviceId: string; publicKey: string; label: string | null; fingerprint: string }
+>();
+
 let tick = 0;
 let stored: StoredKey[] = [];
 let caller = 'alice';
 /** Every epoch that was published, in order, so a re-key loop is visible. */
 let published: number[] = [];
-/** One-shot fault: the next publish behaves like a dropped request. */
-let failNextPublish = false;
+/** Recovery codes the client handed out, keyed by account. */
+const recoveryCodes = new Map<string, string>();
 
 function latestEpoch(): number {
   return stored.reduce((max, row) => Math.max(max, row.epoch), 0);
 }
 
-function knownDevices(): DeviceKey[] {
-  return [...devices.values()]
-    .filter(
-      (device) =>
-        MEMBERS.includes(device.userId) && !revoked.has(`${device.userId}:${device.deviceId}`),
-    )
-    .map((device) => ({
-      userId: device.userId,
-      deviceId: device.deviceId,
-      publicKey: device.publicKey,
-      label: null,
-      revokedAt: null,
-      lastSeenAt: '2026-08-18T00:00:00.000Z',
-      createdAt: '2026-08-18T00:00:00.000Z',
-    }));
+/** Member accounts with a vault, which is who a key may be wrapped for. */
+function recipients(): AccountKeyRecipient[] {
+  return MEMBERS.flatMap((userId) => {
+    const vault = vaults.get(userId);
+    return vault
+      ? [{ userId, publicKey: vault.publicKey, generation: vault.generation }]
+      : [];
+  });
 }
 
-/** Mirrors E2eeService.publishKeys, including the two rules that guard it. */
+/**
+ * Mirrors `E2eeService.publishKeys`, including the rules that guard it.
+ *
+ * The account-scope rule is the one worth having here rather than trusting
+ * the client for: a client that quietly went back to per-device wraps would
+ * pass every other assertion in this file, because everything reads correctly
+ * on the machine that wrote it. It only fails on the *next* machine, which is
+ * the failure mode this whole redesign is about.
+ */
 function publish(dto: PublishChannelKeysRequest): Response {
   const current = latestEpoch();
 
@@ -105,16 +114,16 @@ function publish(dto: PublishChannelKeysRequest): Response {
     return forbidden('EPOCH_NOT_HELD');
   }
 
-  // Every entry is checked before any of them is written, which is what the
-  // service does - it validates, then `createMany`. Storing as it went left a
-  // half-published epoch behind on a rejected bundle, and a half-published
-  // epoch is a channel key nobody can open and an epoch number nobody minted.
+  // Everything is checked before anything is written, which is what the
+  // service does. Storing as it went left a half-published epoch behind on a
+  // rejected bundle: a channel key nobody can open under an epoch number
+  // nobody minted.
   for (const entry of dto.entries) {
     if (!MEMBERS.includes(entry.recipientUserId)) return forbidden('RECIPIENT_NOT_MEMBER');
-    if (revoked.has(`${entry.recipientUserId}:${entry.recipientDeviceId}`)) {
-      return forbidden('DEVICE_REVOKED');
-    }
+    if (entry.recipientDeviceId !== ACCOUNT_SCOPE) return forbidden('DEVICE_SCOPED_WRAP');
+    if (!vaults.has(entry.recipientUserId)) return forbidden('RECIPIENT_HAS_NO_VAULT');
   }
+  if (revoked.has(`${caller}:${dto.senderDeviceId}`)) return forbidden('DEVICE_REVOKED');
 
   for (const entry of dto.entries) {
     const duplicate = stored.some(
@@ -137,28 +146,19 @@ function publish(dto: PublishChannelKeysRequest): Response {
   return json({ epoch: dto.epoch, stored: dto.entries.length });
 }
 
-/**
- * Machines missing an epoch their owner already holds somewhere else, over
- * every epoch that exists. Mirrors `E2eeService.gaps`, including the condition
- * that makes it safe: a person's second machine is repaired, and a member who
- * joined last week is still not handed the year before that.
- */
-function gapsNow(): Array<{ epoch: number; devices: DeviceKey[] }> {
-  const held = new Set(
-    stored.map((row) => `${row.epoch}:${row.recipientUserId}:${row.recipientDeviceId}`),
+/** Epochs the caller holds only as a v1 per-device wrap. */
+function promotableNow(): number[] {
+  const mine = stored.filter((row) => row.recipientUserId === caller);
+  const perAccount = new Set(
+    mine.filter((row) => row.recipientDeviceId === ACCOUNT_SCOPE).map((row) => row.epoch),
   );
-  const owners = new Set(stored.map((row) => `${row.epoch}:${row.recipientUserId}`));
-  const epochs = [...new Set(stored.map((row) => row.epoch))].sort((a, b) => b - a);
-  return epochs
-    .map((epoch) => ({
-      epoch,
-      devices: knownDevices().filter(
-        (device) =>
-          owners.has(`${epoch}:${device.userId}`) &&
-          !held.has(`${epoch}:${device.userId}:${device.deviceId}`),
-      ),
-    }))
-    .filter((gap) => gap.devices.length > 0);
+  return [
+    ...new Set(
+      mine
+        .filter((row) => row.recipientDeviceId !== ACCOUNT_SCOPE && !perAccount.has(row.epoch))
+        .map((row) => row.epoch),
+    ),
+  ].sort((a, b) => a - b);
 }
 
 /** Is the current epoch on a machine that should not have it? */
@@ -193,40 +193,153 @@ function stubDirectory(): void {
     const method = init?.method ?? 'GET';
     const body: unknown = init?.body ? JSON.parse(String(init.body)) : null;
 
+    // --- The vault ---------------------------------------------------------
+
+    if (url.pathname === '/api/v1/e2ee/vault' && method === 'GET') {
+      const vault = vaults.get(caller);
+      return Promise.resolve(
+        json({
+          vault: vault
+            ? {
+                publicKey: vault.publicKey,
+                generation: vault.generation,
+                keyring: vault.keyring,
+                factors: vault.factors,
+                createdAt: '2026-09-20T00:00:00.000Z',
+                updatedAt: '2026-09-20T00:00:00.000Z',
+              }
+            : null,
+        }),
+      );
+    }
+
+    if (url.pathname === '/api/v1/e2ee/vault' && method === 'POST') {
+      // Refused when one stands, never replaced: overwriting has no undo and
+      // orphans every key wrapped for the identity it replaced.
+      if (vaults.has(caller)) return Promise.resolve(forbidden('VAULT_EXISTS'));
+      const dto = body as { publicKey: string; keyring: StoredVault['keyring']; factors: VaultFactor[] };
+      if (!dto.factors.some((it) => it.kind !== 'device')) {
+        return Promise.resolve(forbidden('NO_PORTABLE_FACTOR'));
+      }
+      vaults.set(caller, {
+        publicKey: dto.publicKey,
+        generation: 1,
+        keyring: dto.keyring,
+        factors: dto.factors,
+      });
+      return Promise.resolve(json({ vault: { ...vaults.get(caller)!, createdAt: '', updatedAt: '' } }));
+    }
+
+    if (url.pathname === '/api/v1/e2ee/vault/rotate') {
+      const vault = vaults.get(caller);
+      if (!vault) return Promise.resolve(forbidden('NO_VAULT'));
+      const dto = body as { publicKey: string; generation: number; keyring: StoredVault['keyring'] };
+      if (dto.generation !== vault.generation + 1) {
+        return Promise.resolve(forbidden('GENERATION_OUT_OF_ORDER'));
+      }
+      vault.publicKey = dto.publicKey;
+      vault.generation = dto.generation;
+      vault.keyring = dto.keyring;
+      return Promise.resolve(json({ vault: { ...vault, createdAt: '', updatedAt: '' } }));
+    }
+
+    if (url.pathname === '/api/v1/e2ee/vault/factors' && method === 'PUT') {
+      const vault = vaults.get(caller);
+      if (!vault) return Promise.resolve(forbidden('NO_VAULT'));
+      const dto = body as PutVaultFactorRequest;
+      const deviceId = dto.kind === 'device' ? dto.deviceId : '';
+      vault.factors = [
+        ...vault.factors.filter((it) => !(it.kind === dto.kind && it.deviceId === deviceId)),
+        { ...dto, deviceId },
+      ];
+      if (dto.kind === 'device') grantRequests.delete(`${caller}:${deviceId}`);
+      return Promise.resolve(json({ ok: true }));
+    }
+
+    if (url.pathname.startsWith('/api/v1/e2ee/vault/factors/') && method === 'DELETE') {
+      const vault = vaults.get(caller);
+      if (!vault) return Promise.resolve(forbidden('NO_VAULT'));
+      const kind = url.pathname.split('/').pop() ?? '';
+      const portable = vault.factors.filter((it) => it.kind !== 'device');
+      // The invariant: an account may never be left with nothing but machines.
+      if (portable.length <= 1 && portable.some((it) => it.kind === kind)) {
+        return Promise.resolve(forbidden('LAST_PORTABLE_FACTOR'));
+      }
+      vault.factors = vault.factors.filter((it) => it.kind !== kind);
+      return Promise.resolve(json({ ok: true }));
+    }
+
+    if (url.pathname === '/api/v1/e2ee/vault/grants' && method === 'POST') {
+      const dto = body as { deviceId: string; publicKey: string; label: string; fingerprint: string };
+      grantRequests.set(`${caller}:${dto.deviceId}`, { ...dto });
+      return Promise.resolve(json({ ok: true }));
+    }
+
+    if (url.pathname === '/api/v1/e2ee/vault/grants' && method === 'GET') {
+      return Promise.resolve(
+        json({
+          requests: [...grantRequests.entries()]
+            .filter(([key]) => key.startsWith(`${caller}:`))
+            .map(([, value]) => ({ ...value, requestedAt: '2026-09-20T00:00:00.000Z' })),
+        }),
+      );
+    }
+
+    if (url.pathname.startsWith('/api/v1/e2ee/vault/grants/')) {
+      const deviceId = decodeURIComponent(url.pathname.split('/').pop() ?? '');
+      if (method === 'DELETE') {
+        grantRequests.delete(`${caller}:${deviceId}`);
+        return Promise.resolve(json({ ok: true }));
+      }
+      const factor = vaults
+        .get(caller)
+        ?.factors.find((it) => it.kind === 'device' && it.deviceId === deviceId);
+      return Promise.resolve(json({ factor: factor ?? null }));
+    }
+
+    if (url.pathname === '/api/v1/e2ee/health') {
+      const mine = stored.filter((row) => row.recipientUserId === caller);
+      const perAccount = new Set(
+        mine.filter((row) => row.recipientDeviceId === ACCOUNT_SCOPE).map((row) => row.epoch),
+      );
+      return Promise.resolve(
+        json({
+          portable: perAccount.size,
+          sealed: promotableNow().length,
+          lost: 0,
+          recoverable: (vaults.get(caller)?.factors ?? []).some((it) => it.kind !== 'device'),
+        }),
+      );
+    }
+
+    if (url.pathname === '/api/v1/e2ee/channels') {
+      return Promise.resolve(json(stored.some((row) => row.recipientUserId === caller) ? [CHANNEL] : []));
+    }
+
+    // --- Devices and keys ---------------------------------------------------
+
     if (url.pathname === '/api/v1/e2ee/devices' && method === 'POST') {
       const { publicKey, deviceId } = body as { publicKey: string; deviceId: string };
       // A revoked id stays revoked: a machine that could un-revoke itself makes
       // revocation a suggestion, and the machine in question runs this code.
       if (revoked.has(`${caller}:${deviceId}`)) return Promise.resolve(forbidden('DEVICE_REVOKED'));
       devices.set(`${caller}:${deviceId}`, { userId: caller, deviceId, publicKey });
+      // A machine that got in by itself withdraws the request it made while it
+      // was locked. Leaving it would put a machine that needs nothing on every
+      // other machine's approval screen, and an approval prompt that is not
+      // asking for anything is how people learn to approve without looking.
+      if ((body as { holdsVault?: boolean }).holdsVault) grantRequests.delete(`${caller}:${deviceId}`);
       return Promise.resolve(json({ userId: caller, deviceId, publicKey }));
     }
-    if (url.pathname === '/api/v1/e2ee/devices') return Promise.resolve(json(knownDevices()));
 
-    // Sealed identities, so a machine that cannot open the one that is there
-    // can be told apart from an account that has none.
-    if (url.pathname === '/api/v1/e2ee/backup') {
-      if (method === 'GET') {
-        const held = backupsFor(caller);
-        return Promise.resolve(
-          json({ backups: held, backup: held.find((it) => it.kind === 'password') ?? held[0] ?? null }),
-        );
-      }
-      const blob = body as Record<string, unknown>;
-      backups.set(`${caller}:${String(blob.kind)}`, blob);
-      return Promise.resolve(json({ ok: true }));
-    }
-    if (url.pathname.startsWith('/api/v1/e2ee/backup/')) {
-      backups.delete(`${caller}:${url.pathname.split('/').pop() ?? ''}`);
-      return Promise.resolve(json({ ok: true }));
-    }
+    if (url.pathname === '/api/v1/e2ee/recipients') return Promise.resolve(json(recipients()));
 
     if (url.pathname.startsWith('/api/v1/e2ee/keys/')) {
       const epoch = latestEpoch();
       const covered = new Set(
         stored
-          .filter((row) => row.epoch === epoch)
-          .map((row) => `${row.recipientUserId}:${row.recipientDeviceId}`),
+          .filter((row) => row.epoch === epoch && row.recipientDeviceId === ACCOUNT_SCOPE)
+          .map((row) => row.recipientUserId),
       );
       return Promise.resolve(
         json({
@@ -234,28 +347,17 @@ function stubDirectory(): void {
           epoch,
           keys: stored.filter((row) => row.recipientUserId === caller),
           missingRecipients:
-            epoch === 0
-              ? []
-              : knownDevices().filter(
-                  (device) => !covered.has(`${device.userId}:${device.deviceId}`),
-                ),
-          // The same derivation the service does, and the same two reasons: a
-          // holder who is no longer a member, or a machine revoked since this
-          // epoch was minted. The second cannot be found by looking for its
-          // wraps - revoking deletes them - so it is found by the clock.
+            epoch === 0 ? [] : recipients().filter((who) => !covered.has(who.userId)),
           rekeyNeeded: staleNow(epoch),
-          // The same question asked of every epoch, which is what lets a
-          // machine that signed in today be handed the history.
-          gaps: gapsNow(),
+          // Only the deliberate exception is left here. Repairing somebody's
+          // own second machine is no longer a thing that has to happen.
+          gaps: [],
+          promotable: promotableNow(),
         }),
       );
     }
 
     if (url.pathname === '/api/v1/e2ee/keys' && method === 'POST') {
-      if (failNextPublish) {
-        failNextPublish = false;
-        return Promise.reject(new Error('network down'));
-      }
       return Promise.resolve(publish(body as PublishChannelKeysRequest));
     }
 
@@ -266,12 +368,10 @@ function stubDirectory(): void {
 /**
  * `secureGet`/`secureSet` fall back to localStorage, which Node has not got.
  *
- * One store, with the sealed identity partitioned by device id. Two machines
- * are two keychains, and sharing one here would have made every "different
- * laptop" in this file the same laptop under another name - it would open every
- * wrap addressed to the other one and prove nothing. The device id is the same
- * value the client reads, so switching machines switches keychains without
- * anything else having to know.
+ * One store, with secrets partitioned by device id. Two machines are two
+ * keychains, and sharing one here would make every "different laptop" in this
+ * file the same laptop under another name - it would hold the master key
+ * already and prove nothing.
  */
 function stubBrowserGlobals(): void {
   const store = new Map<string, string>();
@@ -290,38 +390,29 @@ function stubBrowserGlobals(): void {
 }
 
 /**
- * Signs an account in on one machine.
- *
- * `deviceId` is read out of localStorage by the client, so putting a value
- * there is how this stand-in says "a different laptop". Clearing the identity
- * store alongside it is what makes it a different laptop rather than the same
- * one with a new name: a machine that kept the private half would open every
- * wrap addressed to the other one and prove nothing.
- */
-/**
  * Lets the work a sign-in started but did not wait for finish.
  *
  * Generous, because the slowest of it is a 600k-round PBKDF2 seal. A shorter
  * wait does not make the check faster, it makes it pass for the wrong reason.
  */
 function settle(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 2000));
+  return new Promise((resolve) => setTimeout(resolve, 2500));
 }
 
-/** Wipes the key a machine holds, so the next sign-in is a machine without one. */
-function forgetIdentity(userId: string): void {
-  localStorage.removeItem(`betweenus.secure.identity:${userId}`);
-}
-
-async function signIn(
-  userId: string,
-  device = 'device-1',
-  secret?: BackupSecret,
-): Promise<void> {
+/** Signs an account in on one machine. A new `device` is a new machine. */
+async function signIn(userId: string, device = 'device-1', secret?: VaultSecret): Promise<void> {
   resetE2ee();
   caller = userId;
   localStorage.setItem('betweenus.deviceId', `${userId}-${device}`);
   await initIdentity(userId, secret);
+}
+
+/** Signs in expecting to be locked out, which is now a first-class outcome. */
+async function signInLocked(userId: string, device: string, secret?: VaultSecret): Promise<void> {
+  resetE2ee();
+  caller = userId;
+  localStorage.setItem('betweenus.deviceId', `${userId}-${device}`);
+  await assert.rejects(initIdentity(userId, secret), VaultLockedError);
 }
 
 async function main(): Promise<void> {
@@ -332,21 +423,43 @@ async function main(): Promise<void> {
     async () => 'test-token',
   );
 
-  // Alice creates the server and keys #general while she is its only member.
-  await signIn('alice');
+  // Every vault is created with a recovery code, whether anybody asked for one
+  // or not. That is the factor the "no data is lost" promise rests on: it is
+  // not derived from anything somebody can change, forget on a password reset,
+  // or lose with a machine.
+  onRecoveryCode((code) => recoveryCodes.set(caller, code));
+
+  const PASSWORD: VaultSecret = { value: 'alice-account-password', kind: 'password' };
+
+  // --- One account, one identity, however many machines ---------------------
+
+  await signIn('alice', 'device-1', PASSWORD);
+  assert.ok(vaults.has('alice'), 'the first machine creates the vault');
+  assert.ok(
+    recoveryCodes.get('alice'),
+    'and hands out a recovery code, once, rather than offering one in a settings panel',
+  );
+  assert.deepEqual(
+    (vaults.get('alice')?.factors ?? []).map((it) => it.kind).sort(),
+    ['password', 'recovery-code'],
+    'the password seals a second door, so signing in elsewhere needs nothing extra typed',
+  );
+
   const beforeBob = await encryptForChannel(CHANNEL, 'before bob arrived');
   assert.deepEqual(published, [1], 'alice should have minted exactly the first epoch');
   assert.equal(stored.length, 1, 'the first key is wrapped for alice alone');
+  assert.equal(
+    stored[0]?.recipientDeviceId,
+    ACCOUNT_SCOPE,
+    'and it is addressed to the account, never to the machine that minted it',
+  );
 
   // Bob is invited and opens the channel with alice long since offline.
-  await signIn('bob');
+  await signIn('bob', 'device-1', { value: 'bob-password', kind: 'password' });
   const fromBob = await encryptForChannel(CHANNEL, 'hi');
   assert.deepEqual(published, [1, 2], 'bob should have minted the next epoch, once');
   assert.deepEqual(
-    stored
-      .filter((row) => row.epoch === 2)
-      .map((row) => row.recipientUserId)
-      .sort(),
+    stored.filter((row) => row.epoch === 2).map((row) => row.recipientUserId).sort(),
     ['alice', 'bob'],
     'the new epoch must be wrapped for every member, not just its author',
   );
@@ -355,315 +468,259 @@ async function main(): Promise<void> {
   resetE2ee();
   await initIdentity('bob');
   await encryptForChannel(CHANNEL, 'again');
-  assert.deepEqual(published, [1, 2], 'a device that holds the key must not re-key');
+  assert.deepEqual(published, [1, 2], 'a machine that holds the key must not re-key');
 
-  // What alice wrote before bob was a member stays closed to him.
+  // What alice wrote before bob was a member stays closed to him. Nothing
+  // about the vault widens who may read what: it changes *which machines of a
+  // member* can, and the answer is now all of them.
   assert.equal(
     await decryptForChannel(CHANNEL, beforeBob),
     UNDECRYPTABLE,
     'history from before the join must not become readable',
   );
 
-  // And alice, back online, reads bob without either of them doing anything.
-  await signIn('alice');
+  await signIn('alice', 'device-1');
   assert.equal(await decryptForChannel(CHANNEL, fromBob), 'hi');
   assert.equal(await decryptForChannel(CHANNEL, beforeBob), 'before bob arrived');
 
-  // Bob is dropped from the channel. His key still opens everything sent up to
-  // now - a key on somebody's machine cannot be taken back - but the channel
-  // has to stop using it, and only a holder can arrange that.
-  MEMBERS = ['alice'];
-  await syncChannelKeys(CHANNEL);
-  assert.deepEqual(published, [1, 2, 3], 'a stale holder must produce exactly one re-key');
-  assert.deepEqual(
-    stored
-      .filter((row) => row.epoch === 3)
-      .map((row) => row.recipientUserId)
-      .sort(),
-    ['alice'],
-    'the new epoch is wrapped for the members who remain, and nobody else',
-  );
+  // --- The reported bug -----------------------------------------------------
+  //
+  // A second machine, signed in with the account password, and nothing else
+  // happening anywhere. Under v1 this read a wall of padlocks and a line
+  // telling its owner to go and open the app on the first laptop; if that
+  // laptop was gone, so was the conversation. Here it reads everything, at
+  // once, with no other machine online and nothing to wait for.
 
-  const afterBob = await encryptForChannel(CHANNEL, 'after bob left');
-  assert.ok(
-    JSON.parse(afterBob).epoch === 3,
-    'the next message must be sealed under the new epoch',
-  );
+  const epochsBeforePhone = latestEpoch();
+  await signIn('alice', 'phone', PASSWORD);
 
-  // Nothing to re-key now, so opening the channel again is quiet.
-  await syncChannelKeys(CHANNEL);
-  assert.deepEqual(published, [1, 2, 3], 'a channel with no stale holder must not re-key');
-
-  // And bob gets nothing newer. A device that signs in again after being
-  // removed cannot even reach the directory in the real service - the keys
-  // endpoint checks channel access first - so what is asserted here is the part
-  // that survives either way: the message written after he left does not open
-  // with anything he has.
-  await signIn('bob');
-  assert.equal(
-    await decryptForChannel(CHANNEL, afterBob),
-    UNDECRYPTABLE,
-    'what was sent after he left must not open',
-  );
-
-  // --- A second machine, and taking one away -------------------------------
-
-  // Alice signs in on a phone. It is a different device id and a different key
-  // pair, so it holds nothing yet: the phone must be wrapped for rather than
-  // assumed covered because "alice" already had a key. That assumption is what
-  // the per-account directory made, and it is why a second machine used to
-  // read nothing until the channel happened to re-key.
-  MEMBERS = ['alice'];
-  await signIn('alice', 'phone');
-  await syncChannelKeys(CHANNEL);
-
-  const phoneWraps = stored.filter(
-    (row) => row.epoch === latestEpoch() && row.recipientDeviceId === 'alice-phone',
-  );
-  assert.equal(phoneWraps.length, 1, 'a new machine must be wrapped for, once');
-
-  // And it reads nothing yet. The phone holds one epoch - the one it had to
-  // mint for itself, because no machine holding the older ones was online to
-  // wrap them for it - so the whole conversation up to this moment is a
-  // padlock. That is the wall of them a second device opens on, and what the
-  // next few lines exist to repair.
-  assert.equal(
-    await decryptForChannel(CHANNEL, afterBob),
-    UNDECRYPTABLE,
-    'a brand new machine starts with no history, before anyone repairs it',
-  );
-  assert.equal(await decryptForChannel(CHANNEL, beforeBob), UNDECRYPTABLE);
-
-  // The laptop still reads its own history.
-  await signIn('alice', 'device-1');
-  assert.equal(await decryptForChannel(CHANNEL, afterBob), 'after bob left');
-
-  // And opening the channel on the laptop hands the phone every epoch the
-  // laptop holds. This is the repair: it is the same person, who can read
-  // those messages on the machine in front of them, and the server offers the
-  // gap only for a machine whose *owner* already holds that epoch.
-  const epochBeforeRepair = latestEpoch();
-  await syncChannelKeys(CHANNEL);
   assert.equal(
     latestEpoch(),
-    epochBeforeRepair,
-    'every device is covered, so nothing needs re-keying',
+    epochsBeforePhone,
+    'a new machine must not mint an epoch: it holds the account key already',
   );
-  assert.deepEqual(
-    stored
-      .filter((row) => row.recipientDeviceId === 'alice-phone')
-      .map((row) => row.epoch)
-      .sort((a, b) => a - b),
-    [1, 2, 3, 4],
-    'the phone is handed every epoch the laptop holds, not only the newest',
-  );
-
-  // So the phone now reads the whole conversation, including what was written
-  // three epochs before it existed.
-  await signIn('alice', 'phone');
   assert.equal(
     await decryptForChannel(CHANNEL, beforeBob),
     'before bob arrived',
-    'the second machine reads history once a machine that holds it has been online',
+    'the whole history opens on a machine that did not exist when it was written',
   );
-  assert.equal(await decryptForChannel(CHANNEL, afterBob), 'after bob left');
+  assert.equal(await decryptForChannel(CHANNEL, fromBob), 'hi');
+  assert.deepEqual(published, [1, 2], 'and it published nothing at all to get there');
 
-  // And bob, who was never a member when that was written, is still not handed
-  // it. The repair is one person's own second machine and nothing wider: the
-  // gap list names a device only when its owner already holds that epoch.
-  const bobDevices = new Set(
-    stored.filter((row) => row.recipientUserId === 'bob').map((row) => row.epoch),
+  // --- A machine with no secret is locked, never forked ---------------------
+  //
+  // The provider sign-in: no password to offer and nothing on screen to ask
+  // with. v1 minted an identity of its own here and carried on, which is what
+  // split accounts in two - each identity reading a different slice of the
+  // same history, permanently, with nothing saying so.
+
+  const publicKeyBefore = vaults.get('alice')?.publicKey;
+  await signInLocked('alice', 'tablet');
+
+  assert.equal(
+    vaults.get('alice')?.publicKey,
+    publicKeyBefore,
+    'a locked machine must not publish an identity of its own',
   );
-  assert.equal(bobDevices.has(3), false, 'a former member gains nothing from a repair');
-  assert.equal(bobDevices.has(4), false, 'a former member gains nothing from a repair');
+  assert.deepEqual(published, [1, 2], 'and must not mint an epoch it alone could read');
+  assert.ok(
+    grantRequests.has('alice:alice-tablet'),
+    'it asks to be let in instead, which is the thing v1 had no way to express',
+  );
 
-  await signIn('alice', 'device-1');
-  const beforeRevoke = latestEpoch();
+  // The first route out: the recovery code, typed on the locked screen. No
+  // other machine has to be online, which is the whole reason the factor
+  // exists.
+  await unlockWithSecret({ value: recoveryCodes.get('alice')!, kind: 'recovery-code' });
+  assert.equal(
+    await decryptForChannel(CHANNEL, beforeBob),
+    'before bob arrived',
+    'a recovery code alone brings back every conversation the account has',
+  );
 
-  // Alice loses the phone and revokes it. Its wraps go with it, and the channel
-  // has to move past the key it was holding - the same rule as a member who
-  // left, for the same reason: what it already decrypted is on a machine
-  // nobody trusts any more.
-  revoked.set('alice:alice-phone', (tick += 1));
-  // Revoking deletes the wraps addressed to it, which is most of what revoking
-  // is - and is exactly why the staleness of the epoch cannot be derived from
-  // them afterwards.
-  stored = stored.filter((row) => row.recipientDeviceId !== 'alice-phone');
+  // The second route out: approval from a machine that is already in.
+  await signInLocked('alice', 'work-laptop');
+  assert.ok(grantRequests.has('alice:alice-work-laptop'));
 
+  await signIn('alice', 'device-1', PASSWORD);
+  const waiting = await pendingGrants();
+  assert.equal(waiting.length, 1, 'the machine that is in can see the one that is not');
+  await approveGrant(waiting[0]!);
+
+  await signIn('alice', 'work-laptop');
+  assert.equal(
+    await decryptForChannel(CHANNEL, beforeBob),
+    'before bob arrived',
+    'an approved machine reads the whole history, with no secret typed on it',
+  );
+
+  // A grant is sealed to the key in the request, so a fingerprint that does
+  // not match the key it is about is refused. Recomputed here rather than
+  // trusted from the wire: the field arrived beside the key it describes, so
+  // believing it would be checking a claim against itself.
+  await signIn('alice', 'device-1', PASSWORD);
+  await assert.rejects(
+    approveGrant({
+      deviceId: 'alice-imposter',
+      publicKey: vaults.get('bob')!.publicKey,
+      label: null,
+      fingerprint: '0000 0000 0000',
+      requestedAt: '2026-09-20T00:00:00.000Z',
+    }),
+    /fingerprint/,
+  );
+
+  // --- A message is not sealed until every member can open the epoch --------
+  //
+  // v1 fired the re-wrap in the background and sent regardless, so a message
+  // could be written under an epoch a member had no wrap for - and nothing
+  // ever repaired it.
+
+  MEMBERS = ['alice', 'bob', 'carol'];
+  await signIn('carol', 'device-1', { value: 'carol-password', kind: 'password' });
+  await signIn('alice', 'device-1', PASSWORD);
+
+  const forCarol = await encryptForChannel(CHANNEL, 'welcome carol');
+  const carolHasEpoch = stored.some(
+    (row) => row.recipientUserId === 'carol' && row.epoch === JSON.parse(forCarol).epoch,
+  );
+  assert.ok(
+    carolHasEpoch,
+    'the sender covers every member before it seals, not after it has sent',
+  );
+
+  await signIn('carol', 'device-1');
+  assert.equal(await decryptForChannel(CHANNEL, forCarol), 'welcome carol');
+
+  // --- Rotation keeps the history readable ----------------------------------
+  //
+  // v1 could not rotate an account identity at all: doing so abandoned every
+  // row sealed for the old one, which is to say the history. A ring means a
+  // rotation appends rather than replaces.
+
+  await signIn('alice', 'device-1', PASSWORD);
+  const generationBefore = vaults.get('alice')!.generation;
+  await rotateAccountIdentity();
+  assert.equal(vaults.get('alice')!.generation, generationBefore + 1);
+
+  assert.equal(
+    await decryptForChannel(CHANNEL, beforeBob),
+    'before bob arrived',
+    'every key wrapped to an older generation still opens after a rotation',
+  );
+
+  // And a machine unlocking *after* the rotation gets the whole ring, so it
+  // reads the old generations too. A rotation that only the rotating machine
+  // survived would be the same data loss under a new name.
+  await signIn('alice', 'phone-2', PASSWORD);
+  assert.equal(
+    await decryptForChannel(CHANNEL, beforeBob),
+    'before bob arrived',
+    'the keyring travels with the vault, so a later machine reads pre-rotation history',
+  );
+
+  // --- The last way in cannot be taken away ---------------------------------
+
+  await signIn('alice', 'device-1', PASSWORD);
+  await setVaultFactor({ value: 'alice-passphrase', kind: 'passphrase' });
+
+  // With three portable factors, dropping one is somebody's own business.
+  await api.deleteVaultFactor('password');
+  await api.deleteVaultFactor('passphrase');
+
+  // With one left it is not: this is the difference between a security setting
+  // and losing every message on the next reinstall, and it is the server's
+  // call rather than this client's so that it holds for every client there
+  // will ever be.
+  await assert.rejects(api.deleteVaultFactor('recovery-code'), /LAST_PORTABLE_FACTOR/);
+  assert.ok(
+    (vaults.get('alice')?.factors ?? []).some((it) => it.kind !== 'device'),
+    'a vault always keeps a door that is not a machine',
+  );
+
+  // --- Rescuing what v1 left behind -----------------------------------------
+  //
+  // A row sealed to one installation's device key, which is what every
+  // pre-vault wrap is. Only that machine can open it and only that machine can
+  // promote it, so the client does - on every channel open, and once across
+  // every channel at sign-in, because the window closes when the machine is
+  // wiped.
+
+  MEMBERS = ['alice'];
+  stored = [];
+  published = [];
+  // The section above took the password factor away; put it back, because the
+  // point of what follows is a machine signing in the ordinary way.
+  await signIn('alice', 'device-1', { value: recoveryCodes.get('alice')!, kind: 'recovery-code' });
+  await setVaultFactor(PASSWORD);
+  await signIn('alice', 'device-1', PASSWORD);
+
+  // A v1 world, built exactly as v1 left one: a channel key sealed to one
+  // installation's device key, and a message under it. Nothing but that
+  // machine can open either, and nothing but that machine ever will be able
+  // to - the server holds no key and no other machine was ever wrapped for.
+  const devicePublicKey = devices.get('alice:alice-device-1')!.publicKey;
+  const devicePrivateKey = JSON.parse(
+    localStorage.getItem('betweenus.secure.identity:alice')!,
+  ).privateKey as string;
+
+  const legacyKey = generateChannelKey();
+  const legacyMessage = JSON.stringify(await encryptMessage('written under v1', legacyKey, 1));
+  const legacyWrap = await wrapChannelKey(legacyKey, devicePrivateKey, devicePublicKey);
+  stored.push({
+    epoch: 1,
+    recipientUserId: 'alice',
+    recipientDeviceId: 'alice-device-1',
+    senderUserId: 'alice',
+    senderDeviceId: 'alice-device-1',
+    senderPublicKey: devicePublicKey,
+    wrappedKey: legacyWrap.wrappedKey,
+    iv: legacyWrap.iv,
+    createdAt: (tick += 1),
+  });
+
+  assert.deepEqual(promotableNow(), [1], 'the server names the v1 row as promotable');
+
+  // This is the state the bug report was written from: a second machine, with
+  // the right password, reading a padlock - because the only key in existence
+  // is addressed to a laptop rather than to the account.
+  await signIn('alice', 'fresh-laptop', PASSWORD);
+  assert.equal(
+    await decryptForChannel(CHANNEL, legacyMessage),
+    UNDECRYPTABLE,
+    'before promotion, a v1 row is readable by exactly one machine in the world',
+  );
+
+  // The machine that holds it opens the channel once.
+  await signIn('alice', 'device-1', PASSWORD);
+  assert.equal(
+    await decryptForChannel(CHANNEL, legacyMessage),
+    'written under v1',
+    'the machine that holds the v1 key still reads it',
+  );
   await syncChannelKeys(CHANNEL);
-  assert.equal(latestEpoch(), beforeRevoke + 1, 'a revoked device forces exactly one re-key');
-
-  const newest = latestEpoch();
-  assert.deepEqual(
-    stored
-      .filter((row) => row.epoch === newest)
-      .map((row) => row.recipientDeviceId)
-      .sort(),
-    ['alice-device-1'],
-    'the new epoch is wrapped for the machines that remain, and not the revoked one',
-  );
-
-  const afterRevoke = await encryptForChannel(CHANNEL, 'after the phone was lost');
-  assert.equal(JSON.parse(afterRevoke).epoch, newest);
-
-  // And the phone, when it comes back, is turned away at the directory rather
-  // than quietly re-admitted - then reads nothing written since.
-  resetE2ee();
-  caller = 'alice';
-  localStorage.setItem('betweenus.deviceId', 'alice-phone');
-  await assert.rejects(initIdentity('alice'), /DEVICE_REVOKED/);
-  assert.equal(
-    await decryptForChannel(CHANNEL, afterRevoke),
-    UNDECRYPTABLE,
-    'a revoked machine must not read what was sent after it was revoked',
-  );
-
-  // --- A dropped request during self-heal must not brick the channel -------
-  //
-  // Dave joins a channel alice already keyed, offline. Opening it makes his
-  // client mint its own epoch the same way bob's did above - but this time the
-  // publish call itself fails (a network blip), not a race another member won.
-  // The old code marked the channel "already tried" before that call returned,
-  // so every later attempt this session skipped straight to "no key" instead
-  // of trying again. It must retry instead.
-  const CHANNEL_2 = 'channel-random';
-  MEMBERS = ['alice', 'dave'];
-  await signIn('alice');
-  const beforeDave = await encryptForChannel(CHANNEL_2, 'hello before dave');
-
-  await signIn('dave');
-  failNextPublish = true;
-  assert.equal(
-    await decryptForChannel(CHANNEL_2, beforeDave),
-    UNDECRYPTABLE,
-    'a dropped request during self-heal still renders as undecryptable, not a crash',
-  );
-  assert.equal(
-    await decryptForChannel(CHANNEL_2, beforeDave),
-    UNDECRYPTABLE,
-    'the message dave was never sealed for stays closed - that part is by design',
-  );
-  const fromDave = await encryptForChannel(CHANNEL_2, 'hi from dave');
-  assert.notEqual(
-    fromDave,
-    undefined,
-    'a retry after the dropped request must mint dave a working epoch, not stay locked out',
-  );
-
-  await signIn('alice');
-  assert.equal(
-    await decryptForChannel(CHANNEL_2, fromDave),
-    'hi from dave',
-    'alice must read what dave sent once his self-heal succeeded on retry',
-  );
-
-  // A sign-in that cannot open the account backup must still sign in.
-  //
-  // This is the GitHub case: the account has a backup sealed under a password,
-  // the provider sign-in has no password to offer, and there is nothing on
-  // screen to ask with. It mints a key of its own and carries on - and it must
-  // not seal that key over the backup the other machines restore from.
-  MEMBERS = [...MEMBERS, 'erin'];
-  await signIn('erin');
-  await backupIdentity({ value: 'erin-account-password', kind: 'password' });
-  const erinsBackup = backups.get('erin:password');
-  assert.notEqual(erinsBackup, undefined, 'erin has an account backup to be locked out of');
-
-  // A machine with nothing of its own on it, which is what a new one is. The
-  // identity is stored per account rather than per device id, so it has to go
-  // for this to be a second laptop rather than the first one renamed.
-  forgetIdentity('erin');
-  await signIn('erin', 'device-2');
-  assert.deepEqual(
-    backups.get('erin:password'),
-    erinsBackup,
-    'a machine that could not open the backup must never replace it',
-  );
-  const fromErin = await encryptForChannel(CHANNEL_2, 'sent from the new laptop');
-  assert.notEqual(
-    fromErin,
-    undefined,
-    'a provider sign-in with no secret must reach a usable key rather than stop and ask',
-  );
-
-  const forkedKey = devices.get('erin:erin-device-2')?.publicKey;
-  assert.notEqual(
-    forkedKey,
-    erinsBackup?.publicKey,
-    'a machine that could not open the backup is on a key of its own - that is the fork',
-  );
-
-  // The same laptop, signed in later with the account password. Two things at
-  // once, and both are the reported bug.
-  //
-  // It must *recover*: the fork was permanent, because the minted key sat in
-  // the keychain and every later launch short-circuited on it without ever
-  // asking for the backup again. A phone signed in with the right password read
-  // every message it had ever been sent as a padlock, for the life of the
-  // install, with no way back and nothing on screen to say so.
-  //
-  // And the password must still not quietly promote the minted key to the
-  // account's backup: every machine still restoring from the real one would be
-  // locked out of everything, and nothing would say so.
-  await signIn('erin', 'device-2', { value: 'erin-account-password', kind: 'password' });
   await settle();
+
+  assert.ok(
+    stored.some(
+      (row) =>
+        row.epoch === 1 &&
+        row.recipientUserId === 'alice' &&
+        row.recipientDeviceId === ACCOUNT_SCOPE,
+    ),
+    'it re-addresses the key it alone could open to the account',
+  );
+  assert.deepEqual(promotableNow(), [], 'and does not do it again on the next open');
+
+  // And the rescue is real. The same fresh machine, which has never held that
+  // device key and never will, now reads the message - and so will every
+  // machine this account ever signs in on, including after this laptop is
+  // wiped. That is the whole of what changed.
+  await signIn('alice', 'fresh-laptop', PASSWORD);
   assert.equal(
-    devices.get('erin:erin-device-2')?.publicKey,
-    erinsBackup?.publicKey,
-    'a forked machine must take the account key back on the next sign-in that can open the backup',
-  );
-
-  // And the secret, when there is one, still puts the account key on the
-  // machine that asks with it.
-  forgetIdentity('erin');
-  await signIn('erin', 'device-3', { value: 'erin-account-password', kind: 'password' });
-  const fromErinsThird = await encryptForChannel(CHANNEL_2, 'sent from the third');
-  assert.equal(
-    await decryptForChannel(CHANNEL_2, fromErin),
-    'sent from the new laptop',
-    'a machine restored from the backup reads what the account key already opened',
-  );
-
-  // The backup is still the one erin sealed, byte for byte. `ensureBackup` runs
-  // on every sign-in and is not awaited by any of them, so this is checked last,
-  // once all of them have had their chance to overwrite it: the laptop holding a
-  // key of its own must not promote that key to the account's, or every machine
-  // restoring from the real one is locked out of everything and nothing says so.
-  await settle();
-  assert.deepEqual(
-    backups.get('erin:password'),
-    erinsBackup,
-    'no sign-in may replace the account backup with a key of its own',
-  );
-  assert.notEqual(fromErinsThird, undefined, 'the restored machine can seal too');
-
-  // A recovery passphrase must not take the password path away.
-  //
-  // The table was keyed on the account, so setting one overwrote the
-  // password-sealed blob - and that blob is the only thing a fresh sign-in
-  // holds the secret for. Losing it turned every later "sign in on a new
-  // device" into the fork above, which is a padlock on the whole account.
-  await backupIdentity({ value: 'erin-recovery-passphrase', kind: 'passphrase' });
-  assert.deepEqual(
-    backups.get('erin:password'),
-    erinsBackup,
-    'setting a recovery passphrase must leave the password backup standing',
-  );
-  assert.notEqual(
-    backups.get('erin:passphrase'),
-    undefined,
-    'the passphrase backup is stored alongside it, not instead of it',
-  );
-
-  // And a new machine still recovers with the password alone, which is the
-  // whole promise: sign in anywhere, read everything, type nothing extra.
-  forgetIdentity('erin');
-  await signIn('erin', 'device-4', { value: 'erin-account-password', kind: 'password' });
-  await settle();
-  assert.equal(
-    devices.get('erin:erin-device-4')?.publicKey,
-    erinsBackup?.publicKey,
-    'the account password must still restore the account key after a passphrase was set',
+    await decryptForChannel(CHANNEL, legacyMessage),
+    'written under v1',
+    'a machine that never held the v1 key reads the promoted history',
   );
 
   console.log('e2ee.check.ts: ok');
