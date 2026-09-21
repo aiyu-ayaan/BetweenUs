@@ -81,6 +81,7 @@ import {
 } from '../../services/voice-note';
 import { OVERFLOW_CHARS, overflowFile, replyPreview } from '../../services/message-body';
 import { reactorNames } from '../../services/reactions';
+import { clearDraft, draftFor, loadDrafts, saveDraft } from '../../services/drafts';
 import {
   CHANNEL_LEVELS,
   channelLevel,
@@ -586,7 +587,9 @@ export function ChatView({
         channel={channel}
       />
       <TypingIndicator channelId={channel.id} />
-      <MessageComposer channel={channel} takeFiles={takeFiles} />
+      {/* Keyed by channel: each conversation's box starts from its own draft,
+          rather than carrying the last one's half-written text across. */}
+      <MessageComposer key={channel.id} channel={channel} takeFiles={takeFiles} />
     </section>
   );
 }
@@ -2178,7 +2181,9 @@ function MessageComposer({
   const replyTo = useChatStore((state) => state.replyingTo[channel.id] ?? null);
   const setReplyTo = useChatStore((state) => state.setReplyTo);
   const notifyTyping = usePresenceStore((state) => state.notifyTyping);
-  const [content, setContent] = useState('');
+  // Whatever was left here last time, read synchronously so the box never
+  // opens empty and fills a frame later. See `services/drafts.ts`.
+  const [content, setContent] = useState(() => draftFor(channel.id)?.text ?? '');
   const [files, setFiles] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
   /**
@@ -2281,6 +2286,45 @@ function MessageComposer({
         ? `#${channel.name}`
         : `Message #${channel.name}`;
 
+  /**
+   * A draft from before a restart, once the disk has answered.
+   *
+   * The text only fills a box that is still empty - anything typed while the
+   * read was in flight is newer. The reply comes back only for a channel this
+   * session has not touched: one dismissed a minute ago stays dismissed.
+   */
+  useEffect(() => {
+    let live = true;
+    void loadDrafts().then(() => {
+      const draft = draftFor(channel.id);
+      if (!live || !draft) return;
+      setContent((current) => (current === '' ? draft.text : current));
+      const { replyingTo } = useChatStore.getState();
+      if (draft.replyTo && !(channel.id in replyingTo)) {
+        useChatStore.setState({ replyingTo: { ...replyingTo, [channel.id]: draft.replyTo } });
+      }
+    });
+    return () => {
+      live = false;
+    };
+  }, [channel.id]);
+
+  /**
+   * Everything typed is a draft until it is sent.
+   *
+   * Only on a change from what the box opened with. The first render is the
+   * box being filled from the draft rather than anybody typing - and its reply
+   * has not been put back yet, so saving then would drop it. A ref rather than
+   * a "first run" flag because strict mode runs every effect twice on mount.
+   */
+  const lastSaved = useRef({ content, replyTo });
+  useEffect(() => {
+    const last = lastSaved.current;
+    if (last.content === content && last.replyTo === replyTo) return;
+    lastSaved.current = { content, replyTo };
+    saveDraft(channel.id, content, replyTo);
+  }, [channel.id, content, replyTo]);
+
   // Choosing "Reply" in the menu is choosing to type, so the caret goes to the
   // box rather than leaving one more click between the two.
   useEffect(() => {
@@ -2380,7 +2424,12 @@ function MessageComposer({
         // to open once, and the text is in everybody's history either way.
         viewOnce && attachments.length > 0,
       );
-      if (!recorded) setContent('');
+      if (!recorded) {
+        setContent('');
+        // Now rather than after the pause: a crash in the next half second
+        // must not bring back a message that has already gone.
+        clearDraft(channel.id);
+      }
       setFiles([]);
       setReplyTo(null);
       setPreviewing(false);

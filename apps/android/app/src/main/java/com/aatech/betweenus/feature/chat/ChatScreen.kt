@@ -66,6 +66,7 @@ import com.aatech.betweenus.core.data.PresenceStatus
 import com.aatech.betweenus.core.data.PublicUser
 import com.aatech.betweenus.core.data.UserSummary
 import com.aatech.betweenus.core.store.Conversation
+import com.aatech.betweenus.core.store.Drafts
 import com.aatech.betweenus.core.store.LastSeen
 import com.aatech.betweenus.core.store.Receipts
 import com.aatech.betweenus.core.store.PendingShare
@@ -155,7 +156,15 @@ fun ChatScreen(
 
     var acting by remember { mutableStateOf<ReadableMessage?>(null) }
     var editing by remember { mutableStateOf<ReadableMessage?>(null) }
-    var replyingTo by remember(channelId) { mutableStateOf<MessageReply?>(null) }
+    var replyingTo by remember(channelId) {
+        mutableStateOf(Drafts.draftFor(channelId)?.replyTo)
+    }
+    // The reply target from before a restart, once the disk has answered. Only
+    // into a conversation this session has not replied in yet.
+    LaunchedEffect(channelId) {
+        Drafts.load()
+        if (replyingTo == null) replyingTo = Drafts.draftFor(channelId)?.replyTo
+    }
     /** A quoted message that has just been jumped to, flashed so it is findable. */
     var highlighted by remember { mutableStateOf<String?>(null) }
     var showPins by remember { mutableStateOf(false) }

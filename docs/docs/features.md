@@ -78,6 +78,7 @@ BetweenUs guarantees absolute message privacy. Messages and uploaded files are e
 - **Rich Markdown Formatting**: Full support for headings, bold/italic inline marks, blockquotes, ordered/unordered lists, code snippets, and syntax-highlighted code blocks.
 - **Interactive Messaging**: Real-time typing indicators, emoji reactions with custom pickers, threaded replies, message pinning, and edit histories.
 - **Encrypted Media & Attachments**: Images, videos, PDFs, and archives up to 100 MB are encrypted in memory prior to upload and decrypted on the recipient device.
+- **Drafts That Survive a Restart**: Unsent text and the message you were replying to are kept per channel and direct message on desktop, web, and Android. Switching away and back, or quitting and relaunching, restores them; sending clears them, and signing out wipes them. Drafts are stored on your own device in the same local cache as the ciphertext, and are never sent to the server. Conversations with a draft show a quiet "Draft" label in the list.
 - **Local Persistence & Search**: Decrypted messages are indexed into encrypted SQLite/Room storage for instant full-text search.
 
 ---

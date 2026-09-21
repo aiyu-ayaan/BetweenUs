@@ -581,6 +581,14 @@ tapped, which tells the far side exactly what the design was avoiding.
 rather than waiting for that announcement to come back round, because the screen
 the button was pressed on has to be right immediately.
 
+**Drafts live in the same Room table.** `Drafts` keeps unsent composer text and
+the reply target per conversation in memory first, and writes one `drafts` row
+to `Cache` after a 500 ms pause. Because it is a row beside the lists,
+`Cache.clear()` and `Cache.claim()` take it with them; sign-out also calls
+`Drafts.forget()` first so a write still waiting cannot land in the next
+account's cache. Unlike everything else in the cache this is plaintext - the
+person's own words on their own phone - and it never touches the network.
+
 **`chats.cleared` reaches Room, not only memory.** The cache is what makes
 opening the app not a spinner, and after a clear it holds envelopes the server
 will no longer return — so `Conversation` drops the database, the decrypted

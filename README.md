@@ -1246,6 +1246,10 @@ All three clients have all of it.
   stays where they were reading.
 - **A local cache** on desktop and web - servers, channels, conversations and
   the last few hundred messages per channel, as the ciphertext the server sent.
+- **Drafts that survive a restart**: unsent text and the pending reply are kept
+  per channel and DM in that same local store (plaintext on your own device,
+  never sent to the server), cleared on send and on sign-out, with a "Draft"
+  label in the list. Also on Android.
 - **An unread line that survives a restart**, with a bar to jump to it.
 - **Media preview before sending**, drag-and-drop anywhere in the conversation,
   and video that loads itself rather than waiting for a click.

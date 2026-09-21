@@ -80,6 +80,7 @@ import com.aatech.betweenus.core.data.EmojiNames
 import com.aatech.betweenus.core.data.Markup
 import com.aatech.betweenus.core.data.ServerMember
 import com.aatech.betweenus.core.data.ServerRole
+import com.aatech.betweenus.core.store.Drafts
 import com.aatech.betweenus.core.store.Presence
 import com.aatech.betweenus.core.store.Workspace
 import com.aatech.betweenus.core.store.ReadableMessage
@@ -134,7 +135,12 @@ fun Composer(
     // A caret position, not just a string: the `:` menu has to know what is
     // behind the cursor, and inserting an emoji mid-sentence has to put it
     // where the cursor is rather than at the end.
-    var field by remember(channelId) { mutableStateOf(TextFieldValue("")) }
+    // Starts from whatever was left here last time - read synchronously, so the
+    // box never opens empty and fills a moment later. See `Drafts`.
+    var field by remember(channelId) {
+        val left = Drafts.draftFor(channelId)?.text.orEmpty()
+        mutableStateOf(TextFieldValue(left, TextRange(left.length)))
+    }
     var showEmojiPicker by remember { mutableStateOf(false) }
     val text = field.text
 
@@ -207,6 +213,30 @@ fun Composer(
         // but a banner that stayed up after it had been acted on would be
         // asking the same question for the rest of the conversation.
         clipboardImage = false
+    }
+
+    // A draft from before a restart, once the disk has answered. It only fills
+    // a box that is still empty: anything typed while it was reading is newer.
+    LaunchedEffect(channelId) {
+        Drafts.load()
+        val left = Drafts.draftFor(channelId)?.text.orEmpty()
+        if (field.text.isEmpty() && editing == null && left.isNotEmpty()) {
+            field = TextFieldValue(left, TextRange(left.length))
+        }
+    }
+
+    // Everything typed is a draft until it is sent. An edit is not: its text
+    // belongs to a message that exists, and must not become this box's draft.
+    // Only a change from what the box opened with is saved, so opening a
+    // conversation does not drop the reply it is about to be handed.
+    var opened by remember(channelId) { mutableStateOf(false) }
+    LaunchedEffect(channelId, text, replyingTo, editing?.id) {
+        if (editing != null) return@LaunchedEffect
+        if (!opened) {
+            opened = true
+            return@LaunchedEffect
+        }
+        Drafts.save(channelId, text, replyingTo)
     }
 
     LaunchedEffect(editing?.id) {
@@ -623,6 +653,9 @@ fun Composer(
                         else -> {
                             val payload = text.trim()
                             field = TextFieldValue("")
+                            // Now, not after the pause: a crash in the next half
+                            // second must not bring back a sent message.
+                            Drafts.clear(channelId)
                             onSend(payload)
                         }
                     }

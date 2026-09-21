@@ -421,6 +421,9 @@ object Session {
         clear()
         // Only a deliberate sign-out empties the cache. A session that expired
         // on its own is coming back, and should come back instantly.
+        // The drafts first: they are in memory too, and a write still waiting
+        // must not land in the cache the next account claims.
+        com.aatech.betweenus.core.store.Drafts.forget()
         Cache.clear()
     }
 

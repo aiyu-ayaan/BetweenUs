@@ -8,6 +8,8 @@ import { VoicePanel } from '../voice/VoicePanel';
 import { UserPanel } from '../settings/UserPanel';
 import { CreateChannelDialog } from './CreateChannelDialog';
 import { Avatar } from '../../components/Avatar';
+import { DraftLabel } from '../../components/DraftLabel';
+import { useDrafted } from '../../services/drafts';
 import {
   CheckIcon,
   ChevronDownIcon,
@@ -35,6 +37,7 @@ export function ChannelSidebar({
   const { servers, channels, activeServerId, activeChannelId, unread, selectChannel } =
     useChatStore();
 
+  const hasDraft = useDrafted();
   const [creating, setCreating] = useState<ChannelType | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -72,6 +75,7 @@ export function ChannelSidebar({
           {textChannels.map((channel) => {
             const isActive = activeChannelId === channel.id;
             const unreadCount = unread[channel.id] ?? 0;
+            const drafted = !isActive && hasDraft(channel.id);
 
             return (
               <button
@@ -92,6 +96,7 @@ export function ChannelSidebar({
                 {channel.isPrivate && (
                   <LockIcon className="h-3.5 w-3.5 shrink-0 text-slate-500" />
                 )}
+                {drafted && unreadCount === 0 && <DraftLabel />}
                 {unreadCount > 0 && (
                   <span className="ms-auto flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[10px] font-bold text-white shadow-sm">
                     {unreadCount}
