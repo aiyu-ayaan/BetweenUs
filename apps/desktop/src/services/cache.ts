@@ -9,10 +9,15 @@
  * disk would undo what the encryption is for, which is why the decrypted
  * history in `stores/chat.ts` stays in memory and dies with the window.
  *
+ * The one exception is `drafts`: the text somebody left unsent in a composer,
+ * which is theirs, on their own device, and has no sealed form to keep instead.
+ * It never leaves this machine - see `services/drafts.ts`.
+ *
  * A cache has nothing in it that cannot be fetched again, so every failure path
  * here is "carry on without it". Nothing throws into a caller.
  */
 import type { Channel, DirectChannel, Message, ServerWithRole } from '@betweenus/shared-types';
+import type { Draft } from './drafts';
 
 const DB_NAME = 'betweenus-cache';
 const DB_VERSION = 1;
@@ -165,6 +170,14 @@ export const cache = {
   readMarkers: (): Promise<Record<string, string | null> | null> => readList('readMarkers'),
   putReadMarkers: (markers: Record<string, string | null>): Promise<void> =>
     writeList('readMarkers', markers),
+
+  /**
+   * Unsent composer text, by channel. Kept with the lists rather than in a
+   * store of its own, so the `clear()` that runs on sign-out and on an account
+   * switch takes it too - with no schema version to bump for it.
+   */
+  drafts: (): Promise<Record<string, Draft> | null> => readList('drafts'),
+  putDrafts: (drafts: Record<string, Draft>): Promise<void> => writeList('drafts', drafts),
 
   // --- Messages -------------------------------------------------------------
 

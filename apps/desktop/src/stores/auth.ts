@@ -4,6 +4,7 @@ import { ApiError, api, apiBaseUrl, configureApi } from '../services/api';
 import { chatSocket, onSocketTokenRejected, presenceSocket } from '../services/socket';
 import { initIdentity, resetE2ee, type BackupSecret } from '../services/e2ee';
 import { cache } from '../services/cache';
+import { forgetDrafts } from '../services/drafts';
 import { stopWebPush } from '../services/web-push';
 
 /** Both realtime sockets carry the same access token and reconnect together. */
@@ -195,6 +196,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     localStorage.removeItem(STORAGE_KEY);
     // Only a deliberate sign-out empties the cache. A session that expired on
     // its own is coming back, and should come back instantly.
+    // The drafts go with it - from memory here, from disk with the rest of the
+    // cache - and first, so a write still waiting cannot put them back.
+    forgetDrafts();
     void cache.clear().catch(() => undefined);
     set({ user: null, accessToken: null, status: 'idle' });
     if (stored) await api.logout(stored).catch(() => undefined);

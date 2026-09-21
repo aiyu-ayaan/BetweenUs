@@ -6,6 +6,8 @@ import { VoicePanel } from '../voice/VoicePanel';
 import { Avatar } from '../../components/Avatar';
 import { MonitorIcon, UsersIcon, XIcon } from '../../components/icons';
 import { SkeletonRows } from '../../components/Skeleton';
+import { DraftLabel } from '../../components/DraftLabel';
+import { useDrafted } from '../../services/drafts';
 import { listState } from '../../services/list-state';
 
 /**
@@ -48,6 +50,7 @@ export function HomeSidebar({
   const openDirect = useFriendsStore((state) => state.openDirect);
   const activeChannelId = useChatStore((state) => state.activeChannelId);
   const unread = useChatStore((state) => state.unread);
+  const hasDraft = useDrafted();
   const statusOf = useStatusOf();
   const pending = useFriendsStore((state) =>
     state.friends.filter((friend) => friend.direction === 'incoming').length,
@@ -151,6 +154,8 @@ export function HomeSidebar({
                     {count}
                     <span className="sr-only"> unread messages</span>
                   </span>
+                ) : !active && hasDraft(direct.channelId) ? (
+                  <DraftLabel />
                 ) : (
                   <XIcon className="h-4 w-4 opacity-0 transition-opacity group-hover:opacity-60" />
                 )}
