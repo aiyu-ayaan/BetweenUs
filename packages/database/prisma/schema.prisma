@@ -714,13 +714,14 @@ model Server {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  owner    User               @relation("ServerOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  members  ServerMember[]
-  channels Channel[]
-  invites  ServerInvite[]
-  roles    ServerCustomRole[]
-  emoji    ServerEmoji[]
-  audit    ServerAudit[]
+  owner             User               @relation("ServerOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members           ServerMember[]
+  channels          Channel[]
+  invites           ServerInvite[]
+  roles             ServerCustomRole[]
+  emoji             ServerEmoji[]
+  audit             ServerAudit[]
+  channelCategories ChannelCategory[]
 
   @@index([ownerId])
   @@map("servers")
@@ -843,21 +844,31 @@ model ServerMember {
 }
 
 model Channel {
-  id        String      @id @default(uuid())
+  id         String      @id @default(uuid())
   /// Null for a direct message, which belongs to its two participants rather
   /// than to a server.
-  serverId  String?
-  name      String
-  type      ChannelType @default(TEXT)
-  topic     String?
+  serverId   String?
+  name       String
+  type       ChannelType @default(TEXT)
+  topic      String?
   /// A private channel is visible only to the users listed in `members`. Server
   /// membership grants nothing here - not even to an administrator, who has to
   /// be added like anyone else. See development/PLANNING.md (phase 12).
-  isPrivate Boolean     @default(false)
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
+  isPrivate  Boolean     @default(false)
+  /// The category the sidebar files it under, or null for the loose channels
+  /// drawn above every category. Deleting a category sets this back to null
+  /// rather than taking the channel with it - a category is a heading, and
+  /// removing a heading must never be a way to delete somebody's history.
+  categoryId String?
+  /// Where it sits within its category (or among the uncategorized), lowest
+  /// first. Not unique: ties fall back to `createdAt`, which is exactly the
+  /// order every channel was drawn in before anyone had dragged one.
+  position   Int         @default(0)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
 
-  server   Server?         @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  server   Server?          @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  category ChannelCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   members  ChannelMember[]
   messages Message[]
   keys     ChannelKey[]
@@ -865,7 +876,36 @@ model Channel {
   webhooks Webhook[]
 
   @@unique([serverId, name])
+  @@index([categoryId])
   @@map("channels")
+}
+
+/// A heading in a server's channel sidebar - "Announcements", "Games",
+/// "Voice" - under which channels are filed and which a member can fold away.
+///
+/// Shared by everyone in the server and edited by whoever holds
+/// MANAGE_CHANNEL, because the layout is part of how a server is organised,
+/// not a personal view of it. Whether a category is *collapsed* is the
+/// opposite - that one is per person and never leaves their device.
+///
+/// It owns nothing: deleting one moves its channels back to uncategorized
+/// (`Channel.categoryId` is `SetNull`), and it carries no permissions of its
+/// own. A private channel stays exactly as private inside a category as out
+/// of one - an empty-looking category is what a member sees when every
+/// channel in it is closed to them.
+model ChannelCategory {
+  id        String   @id @default(uuid())
+  serverId  String
+  name      String
+  /// Lowest first. Ties fall back to `createdAt`.
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+
+  server   Server    @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  channels Channel[]
+
+  @@index([serverId])
+  @@map("channel_categories")
 }
 
 /// A URL an outside system can POST to in order to say something in a channel.
