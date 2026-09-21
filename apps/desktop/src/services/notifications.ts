@@ -234,6 +234,32 @@ export function notifyRing(channelId: string, channelName: string, caller: strin
   raise(`${caller} is calling`, `Ringing you into ${channelName}`, channelId);
 }
 
+/**
+ * A notification this person asked for themselves: a reminder they set, or a
+ * scheduled message that went out late.
+ *
+ * None of the silencers apply. A channel muted for being loud and quiet hours
+ * set against other people's messages are both about *other people*; a
+ * reminder is the person talking to their future self, and one that a mute
+ * could swallow is a reminder that did not remind. `tag` is not a channel id -
+ * it is `reminder:<id>` or `scheduled:<id>` - so it neither collapses into a
+ * channel's message notification nor gets dismissed when that channel is read.
+ */
+export function notifySelf(title: string, body: string, tag: string): void {
+  raise(title, body, tag, false);
+}
+
+/**
+ * Asks a browser for permission while there is a click to ask on. Setting a
+ * reminder is that click: the notification it is for arrives later, with no
+ * gesture behind it, which is when browsers refuse to prompt. A no-op in the
+ * desktop app, which needs no permission.
+ */
+export function askNotificationPermission(): void {
+  if (window.betweenus || typeof Notification === 'undefined') return;
+  if (Notification.permission === 'default') void Notification.requestPermission();
+}
+
 /** Handlers waiting on a click, in the web client. Electron keeps its own. */
 const clickHandlers = new Set<(channelId: string) => void>();
 

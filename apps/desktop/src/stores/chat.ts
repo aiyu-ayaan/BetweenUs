@@ -133,7 +133,7 @@ interface ChatState {
   loadingOlder: boolean;
   error: string | null;
   /** What the right-hand column shows, if anything. */
-  rightPanel: 'members' | 'pins' | 'search' | 'none';
+  rightPanel: 'members' | 'pins' | 'search' | 'scheduled' | 'none';
   /** Pinned messages of the open channel, newest pin first. */
   pins: DecryptedMessage[];
   /** True while the pin list is being fetched and decrypted for this channel. */
@@ -188,6 +188,21 @@ interface ChatState {
     replyTo?: MessageReply,
     /** One-time: its media may be opened once, and opening it destroys it. */
     viewOnce?: boolean,
+  ) => Promise<void>;
+  /**
+   * Seals and sends text to any channel, not only the one on screen.
+   *
+   * What a scheduled message goes out through (`stores/scheduled.ts`): the
+   * channel it was written in may not be open when its time comes, and the
+   * sealing happens now - under whatever epoch the channel is on at the due
+   * time, for whoever is in it then - rather than when it was written. Throws
+   * on failure, so the scheduler can decide whether to try again.
+   */
+  sendTextTo: (
+    channelId: string,
+    serverId: string | null,
+    content: string,
+    replyTo?: MessageReply,
   ) => Promise<void>;
   /**
    * The same message again, in another channel.
@@ -685,6 +700,24 @@ export const useChatStore = create<ChatState>((set, get) => ({
       attachments.map((attachment) => attachment.key),
       viewOnce,
     );
+  },
+
+  sendTextTo: async (channelId, serverId, content, replyTo) => {
+    // The server's emoji may not be loaded when this is not the server on
+    // screen, and the pictures travel inside the envelope - so they are asked
+    // for first. A failure leaves the shortcodes as text, which still reads.
+    if (serverId) await loadEmoji(serverId).catch(() => undefined);
+    const emoji = usedEmoji(content, emojiFor(serverId));
+    const envelope = await encryptForChannel(
+      channelId,
+      encodeBody({
+        text: content,
+        attachments: [],
+        ...(replyTo ? { replyTo } : {}),
+        ...(emoji.length > 0 ? { emoji } : {}),
+      }),
+    );
+    await api.sendMessage(channelId, envelope, [], false);
   },
 
   answerMoment: async (authorId, statusId, text) => {
