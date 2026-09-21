@@ -55,6 +55,9 @@ class BetweenUsApp : Application(), ImageLoaderFactory {
         // send survives the screen it was started from - which is the whole
         // reason it exists.
         Outbox.init(this)
+        // Scheduled sends and reminders held on this phone, and the WorkManager
+        // wake-up that fires them - see `Scheduled`.
+        com.aatech.betweenus.feature.schedule.Scheduled.init(this)
         // Whether anybody is looking, and where a push token comes from. Both
         // have to exist before the first push, which can arrive before any
         // activity does.

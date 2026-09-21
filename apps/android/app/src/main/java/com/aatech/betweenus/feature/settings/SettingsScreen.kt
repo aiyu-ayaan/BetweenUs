@@ -296,6 +296,7 @@ fun SettingsScreen(
                         com.aatech.betweenus.feature.notifications.SocialNotifications.clearAll(context)
                         com.aatech.betweenus.feature.notifications.PushGate.forgetPreferences()
                         com.aatech.betweenus.feature.chat.Outbox.forgetPending()
+                        com.aatech.betweenus.feature.schedule.Scheduled.clear(context)
                         com.aatech.betweenus.core.store.ChannelFocus.forget()
                         Session.signOut()
                     }
