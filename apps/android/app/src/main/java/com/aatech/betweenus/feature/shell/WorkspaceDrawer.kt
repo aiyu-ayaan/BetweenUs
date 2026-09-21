@@ -469,6 +469,8 @@ private fun DraftLabel() {
 private fun DirectMessageList(onSelectChannel: (Channel) -> Unit) {
     val directs by Workspace.directChannels.collectAsState()
     val unread by Workspace.unread.collectAsState()
+    val drafted by Drafts.drafted.collectAsState()
+    LaunchedEffect(Unit) { Drafts.load() }
     // Collected, not read through `Presence.statusOf`: that returns the value
     // at the moment it is called, so the dot next to a conversation kept the
     // colour it had when the drawer was first drawn and never went green.
