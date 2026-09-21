@@ -714,6 +714,20 @@ fun ChatScreen(
                                     .exceptionOrNull()?.message
                             }
                         },
+                        onVotePoll = { options ->
+                            scope.launch {
+                                failure = runCatching { Conversation.votePoll(readable.message, options) }
+                                    .exceptionOrNull()?.message
+                            }
+                        },
+                        onClosePoll = {
+                            scope.launch {
+                                failure = runCatching { Conversation.closePoll(readable.message) }
+                                    .exceptionOrNull()?.message
+                            }
+                        },
+                        canModeratePolls = Workspace.server(channel?.serverId)
+                            ?.can("MANAGE_MESSAGE") == true,
                         onViewImage = { bmp, name ->
                             viewingImage = bmp to name
                         },

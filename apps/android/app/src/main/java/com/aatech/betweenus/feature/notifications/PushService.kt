@@ -376,6 +376,10 @@ class PushService : FirebaseMessagingService() {
      */
     private fun describe(body: MessageBody?): String {
         if (body == null) return "New message"
+        // Built on this phone from the opened envelope: the push carried
+        // ciphertext, so the question never passed through anything that could
+        // read it - not the server, not the push relay.
+        if (body.pollOptions != null && body.text.isNotBlank()) return "Poll: ${body.text}"
         val attachments = body.attachments
         if (body.text.isNotBlank()) return body.text
         val picture = attachments.count { it.isImage }
