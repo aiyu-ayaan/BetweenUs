@@ -44,7 +44,6 @@ import type {
   PortableFactorKind,
   StatusEntry,
   StatusKeyEntry,
-  VaultFactor,
   VaultGrantRequest,
 } from '@betweenus/shared-types';
 import { ACCOUNT_SCOPE } from '@betweenus/shared-types';
@@ -229,18 +228,18 @@ async function openVault(userId: string, secret?: VaultSecret): Promise<OpenVaul
 
   const opened = await unlock(userId, vault, device, secret);
   if (opened) {
-    await adopt(userId, device, opened, vault.factors);
+    await adopt(userId, device, opened);
     return opened;
   }
 
-  // Locked. Ask to be let in from a machine that already is, and say so.
-  await requestGrant(device);
-  setIdentityStatus({
-    status: 'locked',
-    reason: secret ? 'wrong-secret' : 'no-secret',
-    grantRequested: true,
-  });
-  throw new VaultLockedError();
+  // Nothing opens it: no cached key, no key held by the server, no secret or
+  // grant that fits. That is a vault created before the server held a key, on
+  // a launch with no password, whose recovery code nobody kept - and nobody
+  // anywhere can open it. Start it over rather than leave this machine on a
+  // screen it cannot leave. The server refuses the reset if it does hold a
+  // key, so a vault somebody *can* open is never replaced from here.
+  await api.resetVault();
+  return adoptOrCreateVault(userId, device, secret);
 }
 
 /**
@@ -267,7 +266,20 @@ async function unlock(
     await secureSet(masterKeyStore(userId), '');
   }
 
-  // 2. A secret somebody typed or a sign-in carried.
+  // 2. The key the server holds for this account - what makes a new phone, a
+  //    reinstall or a provider sign-in open everything with nothing typed.
+  //    A failed request throws: it is not "the server holds nothing", and
+  //    reading it as that would reset a vault somebody can open.
+  const { masterKey: held } = await api.vaultEscrow();
+  if (held) {
+    const opened = await openWith(vault, held);
+    if (opened) {
+      await secureSet(masterKeyStore(userId), held);
+      return opened;
+    }
+  }
+
+  // 3. A secret somebody typed or a sign-in carried.
   if (secret) {
     for (const factor of vault.factors.filter((it) => it.kind === secret.kind)) {
       const masterKey = await tryOpen(() => openMasterKeyWithSecret(factor, secret.value));
@@ -280,8 +292,7 @@ async function unlock(
     }
   }
 
-  // 3. A grant somebody approved for this machine, possibly while it was
-  //    sitting on the locked screen.
+  // 4. A grant somebody approved for this machine.
   const grant = vault.factors.find(
     (it) => it.kind === 'device' && it.deviceId === deviceId(),
   );
@@ -345,18 +356,20 @@ async function adoptOrCreateVault(
   const masterKey = generateMasterKey();
   const keyring: KeyringEntry[] = [{ generation: 1, ...identity }];
 
-  const code = generateRecoveryCode();
-  const factors = [await sealMasterKeyWithSecret(masterKey, code, 'recovery-code')];
-  // The password factor as well when there is one, because it is what makes
-  // signing in on a new machine need nothing typed beyond the password.
-  if (secret && secret.kind !== 'recovery-code') {
-    factors.push(await sealMasterKeyWithSecret(masterKey, secret.value, secret.kind));
-  }
+  // The server holds the key from the first moment, in the same request, so
+  // there is never a vault only this machine can open. The password factor
+  // too when a sign-in carried one. No recovery code is minted unasked: one
+  // nobody wrote down opens nothing, and Settings can make one on request.
+  const factors =
+    secret && secret.kind !== 'recovery-code'
+      ? [await sealMasterKeyWithSecret(masterKey, secret.value, secret.kind)]
+      : [];
 
   const created = await api.createVault({
     publicKey: identity.publicKey,
     keyring: await sealKeyring(keyring, masterKey),
     factors,
+    escrow: masterKey,
   });
 
   // Somebody else's machine created it a moment ago - two sign-ins at once, or
@@ -368,22 +381,16 @@ async function adoptOrCreateVault(
     if (!vault) throw new Error('The vault could not be created or read');
     const opened = await unlock(userId, vault, device, secret);
     if (!opened) {
-      await requestGrant(device);
-      setIdentityStatus({ status: 'locked', reason: 'no-secret', grantRequested: true });
+      setIdentityStatus({ status: 'locked', reason: 'no-secret', grantRequested: false });
       throw new VaultLockedError();
     }
-    await adopt(userId, device, opened, vault.factors);
+    await adopt(userId, device, opened);
     return opened;
   }
 
   await secureSet(masterKeyStore(userId), masterKey);
   const opened: OpenVault = { masterKey, keyring };
-  await adopt(userId, device, opened, created.vault.factors);
-  // Shown once, by whoever is listening - or held for the dialog that is
-  // about to mount. Nothing stores it: a recovery code kept anywhere this app
-  // can read is a recovery code that goes with the machine, which is the
-  // thing it exists not to do.
-  announceRecoveryCode(code);
+  await adopt(userId, device, opened);
   return opened;
 }
 
@@ -399,7 +406,6 @@ async function adopt(
   userId: string,
   device: IdentityKeyPair,
   opened: OpenVault,
-  factors: VaultFactor[],
 ): Promise<void> {
   vault = opened;
   deviceKeys = device;
@@ -424,75 +430,23 @@ async function adopt(
     throw error;
   }
 
-  setIdentityStatus({ status: 'ready', recoverable: factors.some(isPortableFactor2) });
+  // Every machine that holds the key makes sure the server does too. This is
+  // how a vault from before the server held keys gets one, and how it comes
+  // back if the deployment's settings secret was rotated. Not fatal: the next
+  // sign-in tries again.
+  await ensureEscrow(opened.masterKey).catch(() => undefined);
+
+  setIdentityStatus({ status: 'ready', recoverable: true });
   // Everything this machine can still rescue from v1, in the background. It is
   // the only thing that can: those rows are addressed to this machine's device
   // key and nothing else in the world opens them.
   void promoteEverything();
 }
 
-/** `isPortableFactor` over a stored factor, named apart to keep imports flat. */
-function isPortableFactor2(factor: VaultFactor): boolean {
-  return factor.kind !== 'device';
-}
-
-/**
- * Asks to be let in from a machine that already is.
- *
- * Sent even when nobody is likely to be watching, because the alternative is a
- * screen with a button somebody has to find, and the request costs nothing: it
- * carries a public key and a label, and approving it is a deliberate act on
- * another machine with a fingerprint to compare first.
- */
-async function requestGrant(device: IdentityKeyPair): Promise<void> {
-  try {
-    await api.requestVaultGrant({
-      deviceId: deviceId(),
-      publicKey: device.publicKey,
-      label: deviceLabel(),
-      fingerprint: await keyFingerprint(device.publicKey),
-    });
-  } catch {
-    // Offline, or the queue is full. The locked screen offers the two routes
-    // that need nobody else, and asks again on the next attempt.
-  }
-}
-
-/**
- * Opens the vault with a secret typed on the locked screen.
- *
- * Separate from `initIdentity` because it is a second attempt rather than a
- * first: the sign-in has already happened, the session is live, and what is
- * missing is one string.
- */
-export async function unlockWithSecret(secret: VaultSecret): Promise<void> {
-  const userId = vaultUserId;
-  if (!userId) throw new Error('Nobody is signed in');
-
-  signInSecret = secret;
-  vaultReady = null;
-  await initIdentity(userId, secret);
-}
-
-/**
- * Whether a machine waiting for approval has been let in yet.
- *
- * Polled by the locked screen. Cheap on purpose - one row by primary key - so
- * that a machine somebody approved from the next room comes to life without
- * anybody restarting anything.
- */
-export async function checkForGrant(): Promise<boolean> {
-  const userId = vaultUserId;
-  if (!userId) return false;
-  try {
-    const { factor } = await api.vaultGrant(deviceId());
-    if (!factor) return false;
-    vaultReady = null;
-    await initIdentity(userId);
-    return true;
-  } catch {
-    return false;
-  }
+/** Hands the server the master key when it does not already hold this one. */
+async function ensureEscrow(masterKey: string): Promise<void> {
+  const { masterKey: held } = await api.vaultEscrow();
+  if (held !== masterKey) await api.putVaultEscrow(masterKey);
 }
 
 /** Machines of this account waiting to be let in, for the approval screen. */
@@ -594,50 +548,6 @@ export async function rotateAccountIdentity(): Promise<void> {
     keyring: await sealKeyring(keyring, open.masterKey),
   });
   vault = { masterKey: open.masterKey, keyring };
-}
-
-/** Who is listening for the one-time recovery code, at account creation. */
-const recoveryCodeListeners = new Set<(code: string) => void>();
-
-/**
- * A code minted before anything was listening.
- *
- * The vault is created inside a sign-in, and the screen that shows the code
- * mounts in response to that same sign-in - so on a fresh registration the
- * code is very often produced a frame or two before the dialog exists. Firing
- * into an empty set there would lose the only copy of the only factor that
- * survives losing everything else, silently, on the accounts least equipped
- * to notice. So it is held until somebody asks.
- */
-let pendingRecoveryCode: string | null = null;
-
-/**
- * Subscribes to the recovery code minted when an account's vault is created.
- *
- * A callback rather than a return value because the vault is created deep
- * inside a sign-in, several frames below anything that can draw a dialog, and
- * the code has to be shown or it may as well not exist.
- */
-export function onRecoveryCode(listener: (code: string) => void): () => void {
-  recoveryCodeListeners.add(listener);
-  if (pendingRecoveryCode) {
-    const code = pendingRecoveryCode;
-    // Cleared as it is handed over: this is the one delivery, and holding it
-    // any longer would mean a later subscriber - a remount, a second dialog -
-    // showing a code that has already been written down and moved past.
-    pendingRecoveryCode = null;
-    listener(code);
-  }
-  return () => recoveryCodeListeners.delete(listener);
-}
-
-/** Hands the code to whoever is listening, or holds it until somebody is. */
-function announceRecoveryCode(code: string): void {
-  if (recoveryCodeListeners.size === 0) {
-    pendingRecoveryCode = code;
-    return;
-  }
-  recoveryCodeListeners.forEach((listener) => listener(code));
 }
 
 /**
@@ -770,9 +680,6 @@ export function resetE2ee(): void {
   vault = null;
   deviceKeys = null;
   vaultUserId = null;
-  // A code minted for the account that is signing out must not be shown to
-  // whoever signs in next.
-  pendingRecoveryCode = null;
   vaultReady = null;
   signInSecret = null;
   channels.clear();

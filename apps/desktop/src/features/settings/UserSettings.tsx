@@ -1238,24 +1238,20 @@ function EncryptionSection(): JSX.Element {
     <>
       <h1 className="text-xl font-semibold text-slate-50">Encryption key</h1>
       <p className="mt-1 text-sm text-slate-400">
-        Messages are encrypted with a key this account owns, sealed on the server under a key the
-        server does not have. Every device you sign in on opens the same one, so your whole
-        history is there the moment you sign in - nothing is left behind on the last machine.
+        Messages are encrypted with a key this account owns. The server keeps a copy of it for
+        this account, so every device you sign in on has your whole history straight away, with
+        nothing to type and no other device needed.
       </p>
       <p className="mt-2 text-sm text-slate-300">
-        {identity.status === 'ready' && identity.recoverable
-          ? 'This device has your account key, and the account can be recovered without it. Signing in somewhere new brings every conversation with it.'
-          : identity.status === 'ready'
-            ? 'This device has your account key and nothing else does. Set a recovery passphrase, or keep a recovery code, or these conversations end with your devices.'
-            : identity.status === 'locked'
-              ? 'This device has not been let into your account yet. Enter your recovery code or passphrase, or approve it from a device that is already signed in.'
-              : 'Waiting for the account key.'}
+        {identity.status === 'ready'
+          ? 'This device has your account key. Signing in anywhere else brings every conversation with it.'
+          : 'Getting your account key…'}
       </p>
       {byPassword !== null && (
         <p className="mt-1 text-sm text-slate-400">
           {byPassword
             ? 'Recovery by account password is on: signing in on a new device restores your messages with nothing else to type.'
-            : 'Recovery by account password is off. A new device needs your recovery passphrase.'}
+            : 'Recovery by account password is off. New devices still get your key from the server.'}
         </p>
       )}
       <div className="mt-3 space-y-4">

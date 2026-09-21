@@ -57,8 +57,6 @@ import { UpdateNotice } from './components/UpdateNotice';
 import { ConnectionNotice } from './components/ConnectionNotice';
 import { ShortcutSheet } from './components/ShortcutSheet';
 import { BackupNotice } from './components/BackupNotice';
-import { VaultLocked } from './components/VaultLocked';
-import { RecoveryCodeDialog } from './components/RecoveryCodeDialog';
 import { opensShortcutSheet } from './services/shortcuts';
 import { QuickSwitcher } from './features/shell/QuickSwitcher';
 import { LoadingScreen, MIN_BOOT_MS } from './features/shell/LoadingScreen';
@@ -551,8 +549,6 @@ function Workbench(): JSX.Element {
       <BackupNotice onOpenSettings={() => setSettings('user')} />
       {/* Over everything, because a machine that cannot read the messages
           should not be showing a list of them with padlocks in it. */}
-      <VaultLocked />
-      <RecoveryCodeDialog />
       <ClockNotice />
       <VersionNotice />
       <UpdateNotice />

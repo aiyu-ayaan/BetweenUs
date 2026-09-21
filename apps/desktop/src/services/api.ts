@@ -32,6 +32,7 @@ import type {
   PortableFactorKind,
   PutVaultFactorRequest,
   RotateVaultRequest,
+  VaultEscrowResponse,
   VaultFactor,
   VaultGrantsResponse,
   LinkPreview,
@@ -764,6 +765,15 @@ export const api = {
 
   rotateVault: (body: RotateVaultRequest): Promise<AccountVaultResponse> =>
     request('/api/v1/e2ee/vault/rotate', { method: 'POST', body: JSON.stringify(body) }),
+
+  /** The master key the server holds for this account, or null. */
+  vaultEscrow: (): Promise<VaultEscrowResponse> => request('/api/v1/e2ee/vault/escrow'),
+
+  putVaultEscrow: (masterKey: string): Promise<{ ok: true }> =>
+    request('/api/v1/e2ee/vault/escrow', { method: 'PUT', body: JSON.stringify({ masterKey }) }),
+
+  /** Starts over a vault nobody can open. Refused while the server holds its key. */
+  resetVault: (): Promise<{ ok: true }> => request('/api/v1/e2ee/vault/reset', { method: 'POST' }),
 
   putVaultFactor: (body: PutVaultFactorRequest): Promise<{ ok: true }> =>
     request('/api/v1/e2ee/vault/factors', { method: 'PUT', body: JSON.stringify(body) }),
