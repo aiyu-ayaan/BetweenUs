@@ -68,6 +68,8 @@ fun MessageActionsSheet(
     onDelete: () -> Unit,
     onPin: () -> Unit,
     onReact: (String) -> Unit,
+    /** Null on a tombstone, which has nothing to be reminded of. */
+    onRemind: (() -> Unit)? = null,
 ) {
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val clipboard = LocalClipboardManager.current
@@ -121,6 +123,13 @@ fun MessageActionsSheet(
                     onDismiss()
                 },
             )
+            if (onRemind != null) {
+                ListRow(
+                    title = "Remind me",
+                    leading = { BetweenUsIcon(BetweenUsIcons.Clock, tint = Slate400) },
+                    onClick = onRemind,
+                )
+            }
             if (mine) {
                 ListRow(
                     title = "Edit",

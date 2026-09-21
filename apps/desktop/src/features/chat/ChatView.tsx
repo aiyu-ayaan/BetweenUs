@@ -41,6 +41,9 @@ import { EmojiPicker } from './EmojiPicker';
 import { ChannelMenu } from './ChannelMenu';
 import { ForwardDialog } from './ForwardDialog';
 import { MessageMenu } from './MessageMenu';
+import { WhenPicker } from './WhenPicker';
+import { useScheduledStore } from '../../stores/scheduled';
+import { REMIND_PRESETS, SEND_PRESETS, scheduleBlocker } from '../../services/schedule';
 import { OneTimeToggle, SendPreview, isPreviewable, isImage } from './SendPreview';
 import { EmojiSuggest } from './EmojiSuggest';
 import { MentionSuggest } from './MentionSuggest';
@@ -85,6 +88,7 @@ import { reactorNames } from '../../services/reactions';
 import { clearDraft, draftFor, loadDrafts, saveDraft } from '../../services/drafts';
 import {
   CHANNEL_LEVELS,
+  askNotificationPermission,
   channelLevel,
   onPreferencesChanged,
   setChannelLevel,
@@ -104,6 +108,7 @@ import {
   PinIcon,
   ReplyIcon,
   SearchIcon,
+  ClockIcon,
   SendIcon,
   SmileIcon,
   SparklesIcon,
@@ -307,7 +312,7 @@ function PanelButton({
   label,
   icon,
 }: {
-  panel: 'pins' | 'search';
+  panel: 'pins' | 'search' | 'scheduled';
   label: string;
   icon: JSX.Element;
 }): JSX.Element {
@@ -327,6 +332,36 @@ function PanelButton({
       }`}
     >
       {icon}
+    </button>
+  );
+}
+
+/**
+ * Opens the list of what this device is holding to send or remind about later.
+ * A count on it, because "is something waiting" is the question it answers.
+ */
+function ScheduledButton(): JSX.Element {
+  const waiting = useScheduledStore((state) => state.items.length);
+  const current = useChatStore((state) => state.rightPanel);
+  const showPanel = useChatStore((state) => state.showPanel);
+  const open = current === 'scheduled';
+  return (
+    <button
+      type="button"
+      onClick={() => showPanel(open ? 'none' : 'scheduled')}
+      aria-pressed={open}
+      aria-label={`Scheduled messages and reminders${waiting > 0 ? `, ${waiting} waiting` : ''}`}
+      title="Scheduled"
+      className={`relative flex h-9 w-9 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:h-8 sm:w-8 cursor-pointer items-center justify-center rounded-md p-1.5 transition-colors duration-150 hover:bg-white/[0.07] hover:text-slate-100 ${
+        open ? 'bg-white/[0.07] text-slate-100' : 'text-slate-400'
+      }`}
+    >
+      <ClockIcon className="h-5 w-5" />
+      {waiting > 0 && (
+        <span className="absolute -end-0.5 -top-0.5 min-w-[16px] rounded-full bg-accent px-1 text-center text-[10px] font-semibold leading-4 text-white">
+          {waiting}
+        </span>
+      )}
     </button>
   );
 }
@@ -551,6 +586,7 @@ export function ChatView({
             icon={<PinIcon className="h-5 w-5" />}
           />
           <PanelButton panel="search" label="Search" icon={<SearchIcon className="h-5 w-5" />} />
+          <ScheduledButton />
           <MuteButton channelId={channel.id} />
 
           {!isDirect && (
@@ -676,6 +712,11 @@ function MessageList({
   const unreadCount = useChatStore((state) => state.unread[channel.id] ?? 0);
 
   const [menu, setMenu] = useState<{ id: string; at: { x: number; y: number } } | null>(null);
+  const [reminding, setReminding] = useState<{ id: string; at: { x: number; y: number } } | null>(
+    null,
+  );
+  const remind = useScheduledStore((state) => state.remind);
+  const activeServerId = useChatStore((state) => state.activeServerId);
   const [armedDelete, setArmedDelete] = useState<string | null>(null);
   const [picker, setPicker] = useState<{ id: string; at: { x: number; y: number } } | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
@@ -1267,6 +1308,11 @@ function MessageList({
               return () => setForwarding(menu.id);
             })(),
             onMoreEmoji: (at) => setPicker({ id: menu.id, at }),
+            onRemind: (() => {
+              const target = messages.find((item) => item.id === menu.id);
+              if (!target || target.deletedAt) return undefined;
+              return (at: { x: number; y: number }) => setReminding({ id: menu.id, at });
+            })(),
             onEdit:
               messages.find((item) => item.id === menu.id)?.author.id === me?.id
                 ? () => setEditing(menu.id)
@@ -1284,6 +1330,38 @@ function MessageList({
           }}
         />
       )}
+
+      {reminding &&
+        (() => {
+          const target = messages.find((item) => item.id === reminding.id);
+          if (!target) return null;
+          return (
+            <WhenPicker
+              at={reminding.at}
+              title="Remind me"
+              note="A notification on this device, at that time."
+              presets={REMIND_PRESETS}
+              confirmLabel="Remind"
+              onPick={(dueAt) => {
+                askNotificationPermission();
+                void remind(
+                  {
+                    channelId: channel.id,
+                    serverId: isDirect ? null : activeServerId,
+                    channelName: channel.name,
+                  },
+                  {
+                    id: target.id,
+                    author: target.author.displayName,
+                    text: target.content || target.attachments[0]?.name || '',
+                  },
+                  dueAt,
+                );
+              }}
+              onClose={() => setReminding(null)}
+            />
+          );
+        })()}
 
       {seenFor &&
         (() => {
@@ -2205,6 +2283,8 @@ function MessageComposer({
    * message whose files disagree about whether they still exist.
    */
   const [viewOnce, setViewOnce] = useState(false);
+  const scheduleMessage = useScheduledStore((state) => state.scheduleMessage);
+  const [scheduling, setScheduling] = useState<{ x: number; y: number } | null>(null);
   const [uploading, setUploading] = useState<{ name: string; percent: number } | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
@@ -2507,7 +2587,27 @@ function MessageComposer({
   // mid-recording is exactly how the recording light gets left on.
   useEffect(() => () => recorder.current?.cancel(), []);
 
+  /**
+   * Opens the "send when?" menu, unless what is in the box cannot be
+   * scheduled - and then says why, rather than opening a menu that will refuse.
+   */
+  const openSchedule = (at: { x: number; y: number }): void => {
+    const blocker = scheduleBlocker(content, files.length, OVERFLOW_CHARS);
+    if (blocker) {
+      setFailure(blocker);
+      return;
+    }
+    setFailure(null);
+    setScheduling(at);
+  };
+
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
+    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && event.shiftKey) {
+      event.preventDefault();
+      const rect = event.currentTarget.getBoundingClientRect();
+      openSchedule({ x: rect.right - 40, y: rect.top });
+      return;
+    }
     if (event.key === 'Enter') {
       const area = event.currentTarget;
       const caret = area.selectionStart ?? area.value.length;
@@ -2789,6 +2889,11 @@ function MessageComposer({
               type="submit"
               disabled={sending || !hasSomethingToSend}
               aria-label="Send message"
+              title="Send (right-click to schedule)"
+              onContextMenu={(event) => {
+                event.preventDefault();
+                openSchedule({ x: event.clientX, y: event.clientY });
+              }}
               className="spring-press flex h-9 w-9 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:h-auto sm:w-auto cursor-pointer items-center justify-center rounded-md p-1.5 text-slate-300 hover:text-accent disabled:cursor-not-allowed disabled:text-slate-600"
             >
               <SendIcon className="h-5 w-5" />
@@ -2808,6 +2913,32 @@ function MessageComposer({
         </div>
         )}
       </div>
+
+      {scheduling && (
+        <WhenPicker
+          at={scheduling}
+          title="Send later"
+          note="Kept on this device and sent from it - it must be running then."
+          presets={SEND_PRESETS}
+          confirmLabel="Schedule"
+          onPick={(dueAt) => {
+            void scheduleMessage(
+              {
+                channelId: channel.id,
+                serverId: channel.type === 'DM' ? null : serverId,
+                channelName: channel.name,
+              },
+              content.trim(),
+              dueAt,
+              replyTo ?? undefined,
+            );
+            setContent('');
+            setReplyTo(null);
+            setFailure(null);
+          }}
+          onClose={() => setScheduling(null)}
+        />
+      )}
 
       {content.trim().length > OVERFLOW_CHARS && (
         <p className="mt-1.5 text-xs text-slate-400">

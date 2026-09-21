@@ -60,6 +60,7 @@ fun ChannelMenu(
     title: String,
     isDirect: Boolean,
     onOpenPins: () -> Unit,
+    onOpenScheduled: () -> Unit,
     onOpenMembers: () -> Unit,
     onOpenSearch: () -> Unit,
 ) {
@@ -98,6 +99,15 @@ fun ChannelMenu(
                 onClick = {
                     open = false
                     onOpenPins()
+                },
+            )
+
+            DropdownMenuItem(
+                text = { Text("Scheduled") },
+                leadingIcon = { BetweenUsIcon(BetweenUsIcons.Clock) },
+                onClick = {
+                    open = false
+                    onOpenScheduled()
                 },
             )
 

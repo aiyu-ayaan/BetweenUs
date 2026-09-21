@@ -65,6 +65,12 @@ import com.aatech.betweenus.core.data.MessageReply
 import com.aatech.betweenus.core.data.PresenceStatus
 import com.aatech.betweenus.core.data.PublicUser
 import com.aatech.betweenus.core.data.UserSummary
+import android.widget.Toast
+import com.aatech.betweenus.core.store.PendingChannel
+import com.aatech.betweenus.core.store.Scheduling
+import com.aatech.betweenus.feature.schedule.Scheduled
+import com.aatech.betweenus.feature.schedule.ScheduledSheet
+import com.aatech.betweenus.feature.schedule.WhenSheet
 import com.aatech.betweenus.core.store.Conversation
 import com.aatech.betweenus.core.store.Drafts
 import com.aatech.betweenus.core.store.LastSeen
@@ -168,6 +174,10 @@ fun ChatScreen(
     /** A quoted message that has just been jumped to, flashed so it is findable. */
     var highlighted by remember { mutableStateOf<String?>(null) }
     var showPins by remember { mutableStateOf(false) }
+    var showScheduled by remember { mutableStateOf(false) }
+    // What is waiting on a "when?": a message to send later, or a message to be reminded of.
+    var schedulingText by remember { mutableStateOf<String?>(null) }
+    var remindingAbout by remember { mutableStateOf<ReadableMessage?>(null) }
     /** The search sheet over this conversation, closed until asked for. */
     var showSearch by remember(channelId) { mutableStateOf(false) }
     /** The message whose "forward to" sheet is open, if any. */
@@ -617,6 +627,7 @@ fun ChatScreen(
                 title = title,
                 isDirect = direct != null,
                 onOpenPins = { showPins = true },
+                onOpenScheduled = { showScheduled = true },
                 onOpenMembers = onOpenMembers,
                 onOpenSearch = { showSearch = true },
             )
@@ -880,6 +891,10 @@ fun ChatScreen(
                 )
                 replyingTo = null
             },
+            onSchedule = { typed ->
+                val blocker = Scheduling.blocker(typed, 0, MAX_SCHEDULED_CHARS)
+                if (blocker != null) failure = blocker else schedulingText = typed
+            },
             onSend = { text ->
                 scope.launch {
                     val target = editing
@@ -1013,6 +1028,11 @@ fun ChatScreen(
                 }
                 acting = null
             },
+            onRemind = if (readable.message.deleted) {
+                null
+            } else {
+                { remindingAbout = readable; acting = null }
+            },
         )
     }
 
@@ -1071,7 +1091,62 @@ fun ChatScreen(
     if (showPins) {
         PinnedSheet(channelId = channelId, self = self, onDismiss = { showPins = false })
     }
+
+    if (showScheduled) {
+        ScheduledSheet(
+            onOpenChannel = { id ->
+                showScheduled = false
+                if (id != channelId) PendingChannel.offer(id)
+            },
+            onDismiss = { showScheduled = false },
+        )
+    }
+
+    schedulingText?.let { pending ->
+        WhenSheet(
+            title = "Send later",
+            note = "Kept on this phone and sent from it - the phone has to be able to reach the network then.",
+            presets = Scheduling.SEND_PRESETS,
+            onPick = { at ->
+                Scheduled.scheduleMessage(
+                    context = context,
+                    channelId = channelId,
+                    channelName = title,
+                    serverId = if (direct != null) null else channel?.serverId,
+                    text = pending,
+                    dueAt = at,
+                )
+                Toast.makeText(context, "Scheduled", Toast.LENGTH_SHORT).show()
+            },
+            onDismiss = { schedulingText = null },
+        )
+    }
+
+    remindingAbout?.let { target ->
+        WhenSheet(
+            title = "Remind me",
+            note = "A notification on this phone, at that time.",
+            presets = Scheduling.REMIND_PRESETS,
+            onPick = { at ->
+                Scheduled.remind(
+                    context = context,
+                    channelId = channelId,
+                    channelName = title,
+                    serverId = if (direct != null) null else channel?.serverId,
+                    messageId = target.message.id,
+                    author = target.message.author.label,
+                    text = target.text,
+                    dueAt = at,
+                )
+                Toast.makeText(context, "Reminder set", Toast.LENGTH_SHORT).show()
+            },
+            onDismiss = { remindingAbout = null },
+        )
+    }
 }
+
+/** Longer than this is sent as a text file, which a scheduled message cannot be. */
+private const val MAX_SCHEDULED_CHARS = 2000
 
 /**
  * The same ceiling the server enforces and the desktop honours.

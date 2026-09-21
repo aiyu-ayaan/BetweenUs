@@ -377,3 +377,33 @@ then.
 
 See also [notification-service](/services/notification-service) for its
 REST surface.
+
+## Reminders and scheduled sends
+
+Two kinds of notification are raised by the client itself and involve no push
+at all: a **reminder** the person set on a message, and a **scheduled message
+that went out late**. See [local scheduling](./local-scheduling.md) for why
+these never touch the server.
+
+- **Desktop** uses the same main-process notification path as messages
+  (`notification:show`), and the web client the Notifications API. A browser
+  asks for permission when the reminder is set, since the notification that
+  follows has no click behind it to prompt from. Their tags are
+  `reminder:<id>` and `scheduled:<id>` rather than a channel id, so they neither
+  collapse into a channel's message toast nor are dismissed when that channel is
+  read. Clicking a reminder opens the channel, loads back up to five pages of
+  history if needed, and scrolls to and flashes the message. Clicking a late-send
+  notice opens the Scheduled panel.
+- **Android** uses its own channel, `betweenus.reminders` ("Reminders and
+  scheduled messages", high importance), so it can be switched off separately
+  from message notifications. It taps through to the conversation with the
+  existing `betweenus://channel/<id>` link. Android does not yet scroll to the
+  reminded message; it opens the channel.
+- **Per-channel mutes, mentions-only, quiet hours and Do Not Disturb do not
+  apply.** Those settings are about other people's messages. A reminder is a
+  person talking to their future self, and one that a mute could swallow did
+  not remind. The account-level notifications switch is not consulted either,
+  since nothing here is a message from anyone else. The operating system's own
+  permission and focus settings still apply.
+- A reminder that fires more than five minutes late (device off or asleep) says
+  so in its title.

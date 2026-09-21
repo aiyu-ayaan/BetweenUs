@@ -56,6 +56,11 @@ export function shortcuts(command: string = commandKey()): Shortcut[] {
       where: 'In a conversation',
     },
     {
+      keys: [command, 'Shift', 'Enter'],
+      what: 'Schedule the message for later',
+      where: 'In a conversation',
+    },
+    {
       keys: ['Shift', 'Enter'],
       what: 'A new line, without sending',
       where: 'In a conversation',

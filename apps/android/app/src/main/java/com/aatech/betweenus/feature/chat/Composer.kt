@@ -131,6 +131,8 @@ fun Composer(
      */
     onSendVoice: (VoiceNote.Recorded, Boolean) -> Unit,
     onSend: (String) -> Unit,
+    /** Opens the "send when?" sheet for what is typed. Text only - see `Scheduling.blocker`. */
+    onSchedule: (String) -> Unit,
 ) {
     // A caret position, not just a string: the `:` menu has to know what is
     // behind the cursor, and inserting an emoji mid-sentence has to put it
@@ -615,6 +617,17 @@ fun Composer(
                         compact = true,
                     )
                 }
+            }
+
+            // Send later. Only with text in the box and no edit under way: a
+            // scheduled message is new text, sent from this phone at the time.
+            if (canSend && editing == null && !recording) {
+                IconAction(
+                    icon = BetweenUsIcons.Clock,
+                    contentDescription = "Send later",
+                    onClick = { onSchedule(text.trim()) },
+                    compact = true,
+                )
             }
 
             // Send.

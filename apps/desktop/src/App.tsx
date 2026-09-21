@@ -39,6 +39,8 @@ import { MemberList } from './features/members/MemberList';
 import { ChatView } from './features/chat/ChatView';
 import { PinnedPanel } from './features/chat/PinnedPanel';
 import { SearchPanel } from './features/chat/SearchPanel';
+import { ScheduledPanel } from './features/chat/ScheduledPanel';
+import { followScheduledNotification, useScheduledStore } from './stores/scheduled';
 import { UserSettings } from './features/settings/UserSettings';
 import { ActivitiesScreen } from './features/settings/ActivitiesScreen';
 import { VoiceChannelView } from './features/voice/VoiceChannelView';
@@ -158,11 +160,22 @@ function Session(): JSX.Element {
   // Clicking a notification brings the window back and opens what it was about.
   useEffect(
     () =>
-      onNotificationActivate((channelId) =>
-        void useChatStore.getState().selectChannel(channelId),
-      ),
+      onNotificationActivate((tag) => {
+        // A reminder or a late scheduled send is tagged rather than given a
+        // channel id: opening it is the scheduler's business.
+        if (followScheduledNotification(tag)) return;
+        void useChatStore.getState().selectChannel(tag);
+      }),
     [],
   );
+
+  // The device-held schedule belongs to whoever is signed in, and stops the
+  // moment they are not. See `stores/scheduled.ts`.
+  const signedInUserId = useAuthStore((state) => state.user?.id ?? null);
+  useEffect(() => {
+    if (signedInUserId) void useScheduledStore.getState().start(signedInUserId);
+    else void useScheduledStore.getState().signOut();
+  }, [signedInUserId]);
 
   /**
    * The same thing for a browser, where the notification was drawn by the
@@ -443,6 +456,7 @@ function Workbench(): JSX.Element {
   const isRightPanelOpen =
     rightPanel === 'pins' ||
     rightPanel === 'search' ||
+    rightPanel === 'scheduled' ||
     (rightPanel === 'members' && view === 'server');
   const rightSheet = useFocusTrap<HTMLDivElement>(isRightPanelOpen);
 
@@ -620,6 +634,7 @@ function Workbench(): JSX.Element {
               <>
                 {rightPanel === 'pins' && <PinnedPanel onClose={handleCloseRightPanel} />}
                 {rightPanel === 'search' && <SearchPanel onClose={handleCloseRightPanel} />}
+                {rightPanel === 'scheduled' && <ScheduledPanel onClose={handleCloseRightPanel} />}
                 {rightPanel === 'members' && view === 'server' && (
                   <MemberList onClose={handleCloseRightPanel} />
                 )}
@@ -658,6 +673,9 @@ function Workbench(): JSX.Element {
             )}
             {rightPanel === 'search' && (
               <SearchPanel onClose={handleCloseRightPanel} className="h-full w-full border-none bg-surface-900" />
+            )}
+            {rightPanel === 'scheduled' && (
+              <ScheduledPanel onClose={handleCloseRightPanel} className="h-full w-full border-none bg-surface-900" />
             )}
             {rightPanel === 'members' && view === 'server' && (
               <MemberList onClose={handleCloseRightPanel} className="h-full w-full border-none bg-surface-900 flex" />

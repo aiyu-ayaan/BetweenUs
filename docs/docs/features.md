@@ -27,6 +27,7 @@ import useBaseUrl from '@docusaurus/useBaseUrl';
 | **Listen Together (YouTube)** | ✅ Full (real youtube.com) | ⚠️ Embed only | 🎵 Audio Sync |
 | **Play Together (6 Board Games & Carrom)** | ✅ Full Support | ✅ Full Support | ✅ Full Support |
 | **Remote Desktop Control** | 🖥️ Agent & Controller | 🎮 Controller Only | 👁️ Viewer Only |
+| **Scheduled Send & Remind Me (device-local)** | ✅ App open or in tray | ✅ Tab open | ✅ WorkManager |
 | **Moments (24h Ephemeral Stories)** | ✅ Full Support | ✅ Full Support | ✅ Full Support |
 | **Multi-Theme Engine (16 Themes)** | ✅ 16 Themes + Accents | ✅ 16 Themes + Accents | ✅ 16 Themes + Material You |
 | **Server Rail Folders** | ✅ Collapsible, per machine | ✅ Collapsible, per machine | ➖ Flat rail |
@@ -82,6 +83,7 @@ BetweenUs guarantees absolute message privacy. Messages and uploaded files are e
 - **Encrypted Media & Attachments**: Images, videos, PDFs, and archives up to 100 MB are encrypted in memory prior to upload and decrypted on the recipient device.
 - **Drafts That Survive a Restart**: Unsent text and the message you were replying to are kept per channel and direct message on desktop, web, and Android. Switching away and back, or quitting and relaunching, restores them; sending clears them, and signing out wipes them. Drafts are stored on your own device in the same local cache as the ciphertext, and are never sent to the server. Conversations with a draft show a quiet "Draft" label in the list.
 - **Local Persistence & Search**: Decrypted messages are indexed into encrypted SQLite/Room storage for instant full-text search.
+- **Scheduled Send and Remind Me**: Choose a time for a text message (in 30 minutes, tomorrow morning, or a custom date and time), or ask to be reminded about any message. Both are held **on your device only**: the server never holds an unsent message. The device must be running at the time (desktop open or in the tray, a web tab open, Android via WorkManager); if it was away, the item goes on its next chance and is marked late. A Scheduled list lets you change the time, send now or cancel. See [Scheduled Send and Reminders](/architecture/local-scheduling).
 
 ---
 
