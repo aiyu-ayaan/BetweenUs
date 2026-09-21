@@ -15,6 +15,8 @@ import {
 import { CurrentUser, JwtAuthGuard, type AuthenticatedUser } from '@betweenus/auth';
 import type {
   Channel,
+  ChannelCategory,
+  ChannelLayout,
   ChannelMember,
   InvitePreview,
   ServerAuditEntry,
@@ -27,6 +29,8 @@ import type {
 import { ServersService } from './servers.service';
 import {
   AddServerMemberDto,
+  ChannelLayoutDto,
+  CreateChannelCategoryDto,
   CreateChannelDto,
   CreateServerDto,
   CreateServerEmojiDto,
@@ -34,6 +38,7 @@ import {
   CreateServerRoleDto,
   JoinServerDto,
   SetChannelMembersDto,
+  UpdateChannelCategoryDto,
   UpdateChannelDto,
   UpdateServerDto,
   UpdateServerMemberDto,
@@ -254,6 +259,56 @@ export class ServersController {
     @Param('serverId', ParseUUIDPipe) serverId: string,
   ): Promise<Channel[]> {
     return this.servers.listChannels(user.id, serverId);
+  }
+
+  // --- Channel categories and layout ------------------------------------------
+
+  @Get(':serverId/categories')
+  categories(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('serverId', ParseUUIDPipe) serverId: string,
+  ): Promise<ChannelCategory[]> {
+    return this.servers.listCategories(user.id, serverId);
+  }
+
+  @Post(':serverId/categories')
+  createCategory(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('serverId', ParseUUIDPipe) serverId: string,
+    @Body() dto: CreateChannelCategoryDto,
+  ): Promise<ChannelCategory> {
+    return this.servers.createCategory(user.id, serverId, dto.name);
+  }
+
+  @Patch(':serverId/categories/:categoryId')
+  renameCategory(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('serverId', ParseUUIDPipe) serverId: string,
+    @Param('categoryId', ParseUUIDPipe) categoryId: string,
+    @Body() dto: UpdateChannelCategoryDto,
+  ): Promise<ChannelCategory> {
+    return this.servers.renameCategory(user.id, serverId, categoryId, dto.name);
+  }
+
+  /** Its channels move to uncategorized; none of them is deleted. */
+  @Delete(':serverId/categories/:categoryId')
+  @HttpCode(204)
+  deleteCategory(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('serverId', ParseUUIDPipe) serverId: string,
+    @Param('categoryId', ParseUUIDPipe) categoryId: string,
+  ): Promise<void> {
+    return this.servers.deleteCategory(user.id, serverId, categoryId);
+  }
+
+  /** Reorders categories, and channels within and between them, in one go. */
+  @Put(':serverId/channel-layout')
+  channelLayout(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('serverId', ParseUUIDPipe) serverId: string,
+    @Body() dto: ChannelLayoutDto,
+  ): Promise<ChannelLayout> {
+    return this.servers.setChannelLayout(user.id, serverId, dto);
   }
 }
 
