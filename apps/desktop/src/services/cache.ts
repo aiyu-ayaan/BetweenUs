@@ -223,16 +223,20 @@ export const cache = {
   },
 
   async putMessages(messages: Message[]): Promise<void> {
-    if (messages.length === 0) return;
+    // The channel's timeline only. A thread reply is not in it, and this
+    // store is read back as "the newest fifty of the channel" - a reply kept
+    // here would be painted into the timeline on the next cold open.
+    const timeline = messages.filter((message) => !message.threadRootId);
+    if (timeline.length === 0) return;
     const db = await database();
     if (!db) return;
 
     const transaction = db.transaction(MESSAGES, 'readwrite');
     const store = transaction.objectStore(MESSAGES);
-    for (const message of messages) store.put(message);
+    for (const message of timeline) store.put(message);
     await done(transaction);
 
-    for (const channelId of new Set(messages.map((message) => message.channelId))) {
+    for (const channelId of new Set(timeline.map((message) => message.channelId))) {
       await prune(channelId);
     }
   },

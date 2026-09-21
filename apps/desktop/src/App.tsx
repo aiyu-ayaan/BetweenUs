@@ -38,6 +38,7 @@ import { RemoteSessionView } from './features/remote/RemoteSessionView';
 import { MemberList } from './features/members/MemberList';
 import { ChatView } from './features/chat/ChatView';
 import { PinnedPanel } from './features/chat/PinnedPanel';
+import { ThreadPanel } from './features/chat/ThreadPanel';
 import { SearchPanel } from './features/chat/SearchPanel';
 import { UserSettings } from './features/settings/UserSettings';
 import { ActivitiesScreen } from './features/settings/ActivitiesScreen';
@@ -445,6 +446,7 @@ function Workbench(): JSX.Element {
   const isRightPanelOpen =
     rightPanel === 'pins' ||
     rightPanel === 'search' ||
+    rightPanel === 'thread' ||
     (rightPanel === 'members' && view === 'server');
   const rightSheet = useFocusTrap<HTMLDivElement>(isRightPanelOpen);
 
@@ -624,6 +626,7 @@ function Workbench(): JSX.Element {
               <>
                 {rightPanel === 'pins' && <PinnedPanel onClose={handleCloseRightPanel} />}
                 {rightPanel === 'search' && <SearchPanel onClose={handleCloseRightPanel} />}
+                {rightPanel === 'thread' && <ThreadPanel onClose={handleCloseRightPanel} />}
                 {rightPanel === 'members' && view === 'server' && (
                   <MemberList onClose={handleCloseRightPanel} />
                 )}
@@ -662,6 +665,9 @@ function Workbench(): JSX.Element {
             )}
             {rightPanel === 'search' && (
               <SearchPanel onClose={handleCloseRightPanel} className="h-full w-full border-none bg-surface-900" />
+            )}
+            {rightPanel === 'thread' && (
+              <ThreadPanel onClose={handleCloseRightPanel} className="h-full w-full border-none bg-surface-900" />
             )}
             {rightPanel === 'members' && view === 'server' && (
               <MemberList onClose={handleCloseRightPanel} className="h-full w-full border-none bg-surface-900 flex" />

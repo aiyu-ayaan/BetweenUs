@@ -40,6 +40,7 @@ import { AttachmentList } from './Attachments';
 import { EmojiPicker } from './EmojiPicker';
 import { ChannelMenu } from './ChannelMenu';
 import { ForwardDialog } from './ForwardDialog';
+import { threadChipLabel } from './thread';
 import { MessageMenu } from './MessageMenu';
 import { OneTimeToggle, SendPreview, isPreviewable, isImage } from './SendPreview';
 import { EmojiSuggest } from './EmojiSuggest';
@@ -661,6 +662,7 @@ function MessageList({
   const togglePin = useChatStore((state) => state.togglePin);
   const react = useChatStore((state) => state.react);
   const setReplyTo = useChatStore((state) => state.setReplyTo);
+  const openThread = useChatStore((state) => state.openThread);
   const loadOlder = useChatStore((state) => state.loadOlder);
   const loadingOlder = useChatStore((state) => state.loadingOlder);
   const exhausted = useChatStore((state) => state.cursors[channel.id] === null);
@@ -1215,6 +1217,23 @@ function MessageList({
                     )}
                   </div>
 
+                  {/* "N replies · last reply X ago": also under a deleted
+                      root, because the thread outlives the message it hangs
+                      off and this is the only way back into it. */}
+                  {(() => {
+                    const chip = threadChipLabel(message.thread);
+                    if (!chip) return null;
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => void openThread(message)}
+                        className="mt-1 flex max-w-full cursor-pointer items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-medium text-accent transition-colors duration-150 hover:bg-white/[0.07]"
+                      >
+                        <MessageIcon className="h-3.5 w-3.5 shrink-0" />
+                        <span className="truncate">{chip}</span>
+                      </button>
+                    );
+                  })()}
                   {!deleted && editing !== message.id && (
                     <ReactionRow
                       message={message}
@@ -1254,6 +1273,15 @@ function MessageList({
               const target = messages.find((item) => item.id === menu.id);
               if (target) setReplyTo(quoteOf(target));
             },
+            onThread: (() => {
+              const target = messages.find((item) => item.id === menu.id);
+              // A tombstone with a thread is still worth opening; one without
+              // has nothing to hang a thread on. A one-time message is destroyed
+              // by looking, which a thread under it should not be.
+              if (!target || target.viewOnce || !hasBody(target.kind)) return undefined;
+              if (target.deletedAt && !target.thread) return undefined;
+              return () => void openThread(target);
+            })(),
             onForward: (() => {
               const target = messages.find((item) => item.id === menu.id);
               // A tombstone has nothing to carry, and a one-time message must
@@ -1398,7 +1426,7 @@ function NewMessagesDivider(): JSX.Element {
  * different event from an author taking their own back, and reading the thread
  * afterwards should not make them look the same.
  */
-function Tombstone({ message }: { message: DecryptedMessage }): JSX.Element {
+export function Tombstone({ message }: { message: DecryptedMessage }): JSX.Element {
   const by = message.deletedBy;
   return (
     <p className="flex items-center gap-1.5 text-sm italic text-slate-500">
@@ -1745,7 +1773,7 @@ export function renderTextWithLinks(text: string): JSX.Element {
  * link matcher then run over. Doing it the other way round would have them
  * matching against asterisks that are never drawn.
  */
-function MessageText({ message }: { message: DecryptedMessage }): JSX.Element {
+export function MessageText({ message }: { message: DecryptedMessage }): JSX.Element {
   const emoji = message.emoji ?? [];
   const blocks = parseMarkup(message.content);
 

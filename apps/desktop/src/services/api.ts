@@ -487,11 +487,25 @@ export const api = {
       body: JSON.stringify({ userIds }),
     }),
 
-  messages: (channelId: string, before?: string): Promise<Paginated<Message>> =>
+  /**
+   * A page of the channel's timeline - or, with `threadRootId`, of the thread
+   * under that root. The same paging either way; the timeline never includes
+   * thread replies.
+   */
+  messages: (
+    channelId: string,
+    before?: string,
+    threadRootId?: string,
+  ): Promise<Paginated<Message>> =>
     request(
       `/api/v1/messages?channelId=${encodeURIComponent(channelId)}` +
-        (before ? `&before=${encodeURIComponent(before)}` : ''),
+        (before ? `&before=${encodeURIComponent(before)}` : '') +
+        (threadRootId ? `&threadRootId=${encodeURIComponent(threadRootId)}` : ''),
     ),
+
+  /** One message by id, tombstone included - a thread's root, usually. */
+  message: (messageId: string): Promise<Message> =>
+    request(`/api/v1/messages/${encodeURIComponent(messageId)}`),
 
   /**
    * `attachmentKeys` names the blobs the sealed body carries. The server cannot
@@ -503,10 +517,12 @@ export const api = {
     content: string,
     attachmentKeys?: string[],
     viewOnce?: boolean,
+    /** Posts into the thread under this root instead of the channel. */
+    threadRootId?: string,
   ): Promise<Message> =>
     request('/api/v1/messages', {
       method: 'POST',
-      body: JSON.stringify({ channelId, content, attachmentKeys, viewOnce }),
+      body: JSON.stringify({ channelId, content, attachmentKeys, viewOnce, threadRootId }),
     }),
 
   /** Author or moderator; the row survives as a tombstone, the body does not. */

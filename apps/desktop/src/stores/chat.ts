@@ -36,6 +36,7 @@ import {
   windowIsFocused,
 } from '../services/notifications';
 import { mentionsMe } from '../services/mentions';
+import { takesPartIn } from '../features/chat/thread';
 import { cache } from '../services/cache';
 import { forgetAttachments, openAttachment, uploadAttachment } from '../services/attachments';
 import { emojiFor, forgetEmoji, loadEmoji, usedEmoji } from '../services/server-emoji';
@@ -56,6 +57,17 @@ export interface DecryptedMessage extends Message {
   forwardedFrom?: MessageForward;
   /** Set when this message answers a moment. See `MessageMoment`. */
   momentRef?: MessageMoment;
+}
+
+/** A thread as the panel holds it. */
+export interface OpenThread {
+  channelId: string;
+  root: DecryptedMessage;
+  replies: DecryptedMessage[];
+  /** Id to page before, null once the thread is read back to its first reply. */
+  cursor: string | null;
+  loading: boolean;
+  error: string | null;
 }
 
 interface ChatState {
@@ -133,7 +145,14 @@ interface ChatState {
   loadingOlder: boolean;
   error: string | null;
   /** What the right-hand column shows, if anything. */
-  rightPanel: 'members' | 'pins' | 'search' | 'none';
+  rightPanel: 'members' | 'pins' | 'search' | 'thread' | 'none';
+  /**
+   * The thread on screen: its root, and the replies loaded so far, oldest
+   * first. Kept apart from `messages` on purpose - a thread reply is never in
+   * the channel's timeline, and a panel that shared the list would have to
+   * filter it back out of every reader of it.
+   */
+  thread: OpenThread | null;
   /** Pinned messages of the open channel, newest pin first. */
   pins: DecryptedMessage[];
   /** True while the pin list is being fetched and decrypted for this channel. */
@@ -149,6 +168,14 @@ interface ChatState {
    * Loaded when a channel is opened and kept current by `channel.read`.
    */
   receipts: Record<string, ChannelReadReceipt[]>;
+
+  /** Opens a message's thread in the right-hand panel. */
+  openThread: (root: DecryptedMessage) => Promise<void>;
+  closeThread: () => void;
+  /** The page of the open thread before its oldest reply. */
+  loadOlderThread: () => Promise<void>;
+  /** Sends into the open thread. Sealed with the channel key like any message. */
+  sendThreadReply: (content: string) => Promise<void>;
 
   loadServers: () => Promise<void>;
   /** Read markers live on the account, so a badge survives a restart. */
@@ -291,6 +318,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   loadingOlder: false,
   error: null,
   rightPanel: 'none',
+  thread: null,
   pins: [],
   loadingPins: false,
   jumpTo: null,
@@ -512,6 +540,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // Whatever was read before is still true; show it now and refresh behind
     // it, rather than blanking the view for the round trip.
     const cached = get().history[channelId];
+    // A thread belongs to the channel it was opened in.
+    if (get().thread && get().thread?.channelId !== channelId) get().closeThread();
     set({
       activeChannelId: channelId,
       messages: cached ?? [],
@@ -847,6 +877,82 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
+  openThread: async (root) => {
+    const channelId = root.channelId;
+    set({
+      rightPanel: 'thread',
+      thread: { channelId, root, replies: [], cursor: null, loading: true, error: null },
+    });
+    const isCurrent = (): boolean => get().thread?.root.id === root.id;
+    try {
+      const page = await api.messages(channelId, undefined, root.id);
+      const replies = await Promise.all(page.items.map(decrypt));
+      const current = get().thread;
+      if (!current || !isCurrent()) return;
+      // Anything that arrived over the socket while the page was in flight is
+      // already in `replies`; merge rather than overwrite.
+      const seen = new Set(replies.map((reply) => reply.id));
+      const arrived = current.replies.filter((reply) => !seen.has(reply.id));
+      set({
+        thread: {
+          ...current,
+          replies: [...replies, ...arrived],
+          cursor: page.nextCursor,
+          loading: false,
+        },
+      });
+    } catch (error) {
+      const current = get().thread;
+      if (current && isCurrent()) {
+        set({ thread: { ...current, loading: false, error: (error as Error).message } });
+      }
+    }
+  },
+
+  closeThread: () => {
+    set({ thread: null, ...(get().rightPanel === 'thread' ? { rightPanel: 'none' as const } : {}) });
+  },
+
+  loadOlderThread: async () => {
+    const open = get().thread;
+    if (!open || open.loading || !open.cursor) return;
+    set({ thread: { ...open, loading: true } });
+    try {
+      const page = await api.messages(open.channelId, open.cursor, open.root.id);
+      const older = await Promise.all(page.items.map(decrypt));
+      const current = get().thread;
+      if (!current || current.root.id !== open.root.id) return;
+      const seen = new Set(current.replies.map((reply) => reply.id));
+      set({
+        thread: {
+          ...current,
+          replies: [...older.filter((reply) => !seen.has(reply.id)), ...current.replies],
+          cursor: page.nextCursor,
+          loading: false,
+        },
+      });
+    } catch {
+      const current = get().thread;
+      if (current) set({ thread: { ...current, loading: false } });
+    }
+  },
+
+  sendThreadReply: async (content) => {
+    const open = get().thread;
+    if (!open) return;
+    const emoji = usedEmoji(content, emojiFor(get().activeServerId));
+    const envelope = await encryptForChannel(
+      open.channelId,
+      encodeBody({
+        text: content,
+        attachments: [],
+        ...(emoji.length > 0 ? { emoji } : {}),
+      }),
+    );
+    // Arrives over the socket like every other message.
+    await api.sendMessage(open.channelId, envelope, undefined, false, open.root.id);
+  },
+
   showPanel: (panel) => {
     set({ rightPanel: panel });
     if (panel === 'pins') void get().loadPins();
@@ -974,6 +1080,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       loadingOlder: false,
       error: null,
       pins: [],
+      thread: null,
+      rightPanel: 'none',
       loadingPins: false,
       jumpTo: null,
       readMarkers: {},
@@ -1188,6 +1296,9 @@ function forgetMessages(messageIds: Set<string>): void {
   useChatStore.setState({
     messages: keep(state.messages),
     pins: keep(state.pins),
+    ...(state.thread
+      ? { thread: { ...state.thread, replies: keep(state.thread.replies) } }
+      : {}),
     history: Object.fromEntries(
       Object.entries(state.history).map(([channelId, items]) => [channelId, keep(items)]),
     ),
@@ -1240,6 +1351,16 @@ function replaceMessage(message: DecryptedMessage): void {
 
   const cached = state.history[message.channelId];
   useChatStore.setState({
+    ...(state.thread
+      ? {
+          thread: {
+            ...state.thread,
+            // The root's chip and tombstone, or an edit or deletion of a reply.
+            root: state.thread.root.id === message.id ? message : state.thread.root,
+            replies: swap(state.thread.replies),
+          },
+        }
+      : {}),
     ...(cached ? { history: { ...state.history, [message.channelId]: swap(cached) } } : {}),
     messages: swap(state.messages),
     // A message that stopped being pinned - or was deleted - leaves the panel;
@@ -1287,6 +1408,15 @@ function patchProfile(user: UserSummary): void {
     ),
     messages: state.messages.map(inMessage),
     pins: state.pins.map(inMessage),
+    ...(state.thread
+      ? {
+          thread: {
+            ...state.thread,
+            root: inMessage(state.thread.root),
+            replies: state.thread.replies.map(inMessage),
+          },
+        }
+      : {}),
     history: mapValues(state.history, inMessage),
     receipts: mapValues(state.receipts, (receipt) =>
       receipt.user.id === user.id ? { ...receipt, user: { ...receipt.user, ...face } } : receipt,
@@ -1466,6 +1596,53 @@ chatSocket.on((event) => {
     const active = incoming.channelId === state.activeChannelId;
     const self = useAuthStore.getState().user;
     const mine = incoming.author.id === self?.id;
+
+    // A thread reply is not part of the channel: it never enters the timeline,
+    // its cache or its unread count. It goes to the open thread if it is the
+    // one on screen, and it notifies only the people it is for.
+    if (incoming.threadRootId) {
+      const open = state.thread;
+      if (
+        open &&
+        open.root.id === incoming.threadRootId &&
+        !open.replies.some((reply) => reply.id === incoming.id)
+      ) {
+        useChatStore.setState({ thread: { ...open, replies: [...open.replies, message] } });
+      }
+      if (mine) return;
+
+      const text = notificationText(message);
+      const mentioned = mentionsMe(text, {
+        username: self?.username ?? '',
+        displayName: self?.displayName,
+      });
+      // "In the thread" as far as this client can tell: it wrote the root, or
+      // has a reply in what it has loaded. The server applies the same rule to
+      // decide who is pushed at all.
+      const rootAuthor =
+        open?.root.id === incoming.threadRootId
+          ? open.root.author.id
+          : state.messages.find((item) => item.id === incoming.threadRootId)?.author.id;
+      const replyAuthors =
+        open?.root.id === incoming.threadRootId ? open.replies.map((reply) => reply.author.id) : [];
+      const involved = takesPartIn(self?.id, rootAuthor, replyAuthors);
+      const watching =
+        open?.root.id === incoming.threadRootId && state.rightPanel === 'thread' && windowIsFocused();
+      if (watching || !(involved || mentioned)) return;
+
+      notifyMessage({
+        channelId: incoming.channelId,
+        channelName:
+          [...state.channels, ...state.directs].find((channel) => channel.id === incoming.channelId)
+            ?.name ?? 'a channel',
+        author: `${incoming.author.displayName || incoming.author.username} (thread)`,
+        authorId: incoming.author.id,
+        text,
+        active: false,
+        mentioned,
+      });
+      return;
+    }
 
     // Append to the cache as well as the view, so a channel read earlier in
     // the session is up to date when it is opened again.

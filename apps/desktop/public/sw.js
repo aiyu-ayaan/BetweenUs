@@ -145,6 +145,16 @@ self.addEventListener('push', (event) => {
         return;
       }
 
+      // A thread reply to somebody who is not in the thread is only news if it
+      // mentions them, and this worker holds no key to find out. Quiet is the
+      // better guess: a side conversation buzzing every browser in the
+      // channel is what threads exist to avoid. Returned before `present`,
+      // because a null from there would also close the channel's own
+      // notification.
+      if (data.type === 'message.created' && data.threadRootId && data.mentionsOnly === '1') {
+        return;
+      }
+
       const shown = present(data);
       if (!shown) {
         // Nothing to draw: this push exists to take a notification away.
