@@ -997,6 +997,7 @@ object BetweenUsApi {
         keyringIv: String,
         keyringCt: String,
         factors: List<VaultFactor>,
+        escrow: String,
     ): AccountVault? = io {
         val array = JSONArray()
         factors.forEach { array.put(it.toJson()) }
@@ -1006,8 +1007,29 @@ object BetweenUsApi {
             JSONObject()
                 .put("publicKey", publicKey)
                 .put("keyring", JSONObject().put("v", 1).put("iv", keyringIv).put("ct", keyringCt))
-                .put("factors", array),
+                .put("factors", array)
+                .put("escrow", escrow),
         ).optJSONObject("vault")?.let { AccountVault.from(it) }
+    }
+
+    /**
+     * The master key the server holds for this account, or null. A failed
+     * request throws: it is not "the server holds nothing", and reading it as
+     * that would reset a vault somebody can open.
+     */
+    suspend fun vaultEscrow(): String? = io {
+        val body = authed("GET", "/api/v1/e2ee/vault/escrow")
+        if (body.isNull("masterKey")) null else body.getString("masterKey")
+    }
+
+    /** Hands the server the master key to hold. Refused unless it opens the keyring. */
+    suspend fun putVaultEscrow(masterKey: String): Unit = io {
+        authed("PUT", "/api/v1/e2ee/vault/escrow", JSONObject().put("masterKey", masterKey))
+    }
+
+    /** Starts over a vault nobody can open. Refused while the server holds its key. */
+    suspend fun resetVault(): Unit = io {
+        authed("POST", "/api/v1/e2ee/vault/reset")
     }
 
     suspend fun rotateVault(

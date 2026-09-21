@@ -52,6 +52,32 @@ class CryptoInteropTest {
     }
 
     /**
+     * A vault keyring the desktop sealed, opened with the master key the server
+     * hands out. This is the whole of how a phone signs in and reads history
+     * written elsewhere, so the JSON shape and the GCM layout have to agree.
+     */
+    @Test
+    fun `opens an account keyring the desktop sealed`() {
+        val keyring = Crypto.openKeyring(
+            iv = "58yzmBrdwGA3bYWK",
+            ciphertext = "IiCKaZ6h+S11mdPfa3s0oTrGG1ppMMiGlaPojSS4mcNDyrKuF7yiswdpcgWVyh+lHLT7Newaf4nPaFUVwymi6U2nJVxMQnn87OJK7MKySoSSSFqIOgwFcFBzrXc+fsTu+mVBAbaJQtiZWucAR2o6onFc5uc1wOmADKt15ec4/4cjvNZtqlY50VBmpoA9wA+tvADZgLuyxwRO393luRZx66Aa2maBcg/2Owv2HQkTNlntb1VF1csFcHT3RlWvZTfolVivCi/T8J/8BA8n+q2fN5F4qCYu2brEl2997oHpVlPWI3UKk3g9TjLPbobE/ngoTeuE7IoiQtN4wmHVS/zwP9B8h8Dyyj9kT8CX8cRcSm7aHljVijvUrgVxWa/2WKQVgJVMBpX7dIUERRK9V+wDXY3bNvfe95skr3f16iYyKVEExAY2PwCn+eeh0bw36/45iJcFRQ5lT1ZcgNfjTH8npBaycRpwFZcAw0fhX2EOgJzPHpy/7NVSQzR6Grx0EZaQmFpsTSEC3qsI1juLilpGzHn2SzYpsAZcsmpSiPU/n6tK0K3IqkaWiptkhsAxQ9yzTTqnn5MyQvzcUnjeIdEz4HG3Wzs8qNO8XgtIdl5vCwZ/9jvuDAGM8kQ=",
+            masterKey = "q83vEjRWeJq83vEjRWeJq83vEjRWeJq83vEjRWeJq80=",
+        )
+        assertEquals(1, keyring.size)
+        assertEquals(1, keyring[0].generation)
+        assertEquals(alicePrivate, keyring[0].privateKey)
+
+        // And the keyring's private half opens what was wrapped to its public
+        // half - a channel key sealed to the account on another client.
+        val opened = Crypto.unwrapChannelKey(
+            Crypto.Wrapped("cAsOKmra+Dg4JFx9T8FhvMmxEkB1zrk9sFsFsaGJizEEPVOPHKVOJm+0shN3mia4", "Kud3/ImK6g43o1X0"),
+            bobPrivate,
+            keyring[0].publicKey,
+        )
+        assertEquals(channelKey, opened)
+    }
+
+    /**
      * The other direction. ECDH is symmetric, so wrapping from Bob's side and
      * opening from Alice's proves the two derivations agreed rather than that
      * one implementation is consistent with itself.

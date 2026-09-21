@@ -229,18 +229,19 @@ object E2ee {
 
             val opened = unlock(userId, stored, device, opener)
             if (opened != null) {
-                adopt(userId, device, opened, stored.factors)
+                adopt(userId, device, opened)
                 return@withLock opened
             }
 
-            // Locked. Ask to be let in from a device that already is, and say
-            // so rather than quietly becoming a second account.
-            requestGrant(device)
-            _status.value = IdentityStatus.Locked(
-                reason = if (opener != null) LockedReason.WrongSecret else LockedReason.NoSecret,
-                grantRequested = true,
-            )
-            throw VaultLockedError()
+            // Nothing opens it: no cached key, no key held by the server, no
+            // secret or grant that fits. That is a vault created before the
+            // server held keys, on a launch with no password, whose recovery
+            // code nobody kept - nobody anywhere can open it. Start it over
+            // rather than leave this phone unable to read. The server refuses
+            // the reset while it holds a key, so a vault somebody *can* open
+            // is never replaced from here.
+            BetweenUsApi.resetVault()
+            createVault(userId, device, opener)
         }
 
     /**
@@ -263,6 +264,16 @@ object E2ee {
             // The cached key does not open the current keyring: the account
             // rotated, or this is stale. Drop it and try the routes below.
             store.put(masterKeyStore(userId), "")
+        }
+
+        // The key the server holds for this account: what makes a new phone,
+        // a reinstall or a provider sign-in open everything with nothing typed.
+        // A failed request throws rather than reading as "nothing held".
+        BetweenUsApi.vaultEscrow()?.let { held ->
+            openWith(stored, held)?.let {
+                store.put(masterKeyStore(userId), held)
+                return it
+            }
         }
 
         if (secret != null) {
@@ -339,15 +350,21 @@ object E2ee {
         val keyring = listOf(Crypto.KeyringEntry(1, identity.publicKey, identity.privateKey))
         val (keyringIv, keyringCt) = Crypto.sealKeyring(keyring, masterKey)
 
-        val code = Crypto.generateRecoveryCode()
-        val factors = mutableListOf(secretFactor(masterKey, VaultSecret(code, "recovery-code")))
-        // The password as well when there is one, because it is what makes
-        // signing in on a new phone need nothing typed beyond the password.
-        if (secret != null && secret.kind != "recovery-code") {
-            factors += secretFactor(masterKey, secret)
-        }
+        // The server holds the key from the first moment, in the same request,
+        // so there is never a vault only this phone can open. The password too
+        // when a sign-in carried one. No recovery code is minted unasked: one
+        // nobody wrote down opens nothing.
+        val factors =
+            if (secret != null && secret.kind != "recovery-code") listOf(secretFactor(masterKey, secret))
+            else emptyList()
 
-        val created = BetweenUsApi.createVault(identity.publicKey, keyringIv, keyringCt, factors)
+        val created = BetweenUsApi.createVault(
+            identity.publicKey,
+            keyringIv,
+            keyringCt,
+            factors,
+            escrow = masterKey,
+        )
             // Somebody else's device created it a moment ago - two sign-ins at
             // once, or a retry after a lost response. Read theirs rather than
             // insisting on ours: the server refuses the second create for
@@ -355,19 +372,15 @@ object E2ee {
             ?: BetweenUsApi.vault()
             ?: error("The vault could not be created or read")
 
+        store.put(masterKeyStore(userId), masterKey)
         val opened = unlock(userId, created, device, secret)
             ?: run {
-                requestGrant(device)
                 _status.value =
-                    IdentityStatus.Locked(LockedReason.NoSecret, grantRequested = true)
+                    IdentityStatus.Locked(LockedReason.NoSecret, grantRequested = false)
                 throw VaultLockedError()
             }
 
-        adopt(userId, device, opened, created.factors)
-        // Shown once, by whoever is listening, or held until somebody is.
-        // Nothing stores it: a recovery code this app can read back is one
-        // that goes with the phone, which is the thing it exists not to do.
-        announceRecoveryCode(code)
+        adopt(userId, device, opened)
         return opened
     }
 
@@ -383,7 +396,6 @@ object E2ee {
         userId: String,
         device: Crypto.KeyPairJwk,
         opened: Crypto.OpenVault,
-        factors: List<VaultFactor>,
     ) {
         vault = opened
         deviceKeys = device
@@ -403,61 +415,15 @@ object E2ee {
             if (error.code == "DEVICE_REVOKED") _status.value = IdentityStatus.Revoked
             throw error
         }
-        _status.value = IdentityStatus.Ready(recoverable = factors.any { it.portable })
-    }
-
-    /**
-     * Asks to be let in from a device that already is.
-     *
-     * Sent even when nobody is likely to be watching: the request costs
-     * nothing, and the alternative is a screen with a button somebody has to
-     * find. Approving it is a deliberate act on another device, with a
-     * fingerprint to compare first.
-     */
-    private suspend fun requestGrant(device: Crypto.KeyPairJwk) {
+        // Every device that holds the key makes sure the server does too. This
+        // is how a vault from before the server held keys gets one. Not fatal:
+        // the next sign-in tries again.
         runCatching {
-            BetweenUsApi.requestVaultGrant(
-                DeviceIdentity.id(),
-                device.publicKey,
-                DeviceIdentity.label(),
-                Crypto.keyFingerprint(device.publicKey),
-            )
+            if (BetweenUsApi.vaultEscrow() != opened.masterKey) {
+                BetweenUsApi.putVaultEscrow(opened.masterKey)
+            }
         }
-        // Offline, or the queue is full. The locked screen offers the two
-        // routes that need nobody else, and this is asked again next time.
-    }
-
-    /**
-     * Opens the vault with a secret typed on the locked screen: a second
-     * attempt rather than a first, so the sign-in has already happened and
-     * what is missing is one string.
-     */
-    suspend fun unlockWithSecret(secret: VaultSecret) {
-        val id = userId ?: error("Nobody is signed in")
-        signInSecret = secret
-        identityLock.withLock { vault = null }
-        // Every channel key held at rest is dropped on the way in. They are
-        // still valid, but they are the subset a locked or pre-vault identity
-        // could reach, and the cache would go on serving that subset while
-        // the wraps the account key opens sat unread in the directory - which
-        // is somebody unlocking their account and still seeing padlocks.
-        forgetAllKeys()
-        initIdentity(id, secret)
-    }
-
-    /**
-     * Whether a device waiting for approval has been let in yet. Polled by the
-     * locked screen, so a phone approved in the next room comes to life
-     * without anybody restarting anything.
-     */
-    suspend fun checkForGrant(): Boolean {
-        val id = userId ?: return false
-        return runCatching {
-            BetweenUsApi.vaultGrant(DeviceIdentity.id()) ?: return false
-            identityLock.withLock { vault = null }
-            initIdentity(id)
-            true
-        }.getOrDefault(false)
+        _status.value = IdentityStatus.Ready(recoverable = true)
     }
 
     /** Devices of this account waiting to be let in, for the approval screen. */
@@ -592,9 +558,6 @@ object E2ee {
         deviceKeys = null
         userId = null
         signInSecret = null
-        // A code minted for the account signing out must not be shown to
-        // whoever signs in next.
-        pendingRecoveryCode = null
         channels.clear()
         channelLocks.clear()
         rekeyed.clear()
@@ -649,45 +612,6 @@ object E2ee {
 
     /** Where this device keeps the master key once it has opened the vault. */
     private fun masterKeyStore(userId: String) = "vault:$userId"
-
-    /** Who is listening for the one-time recovery code, at account creation. */
-    private val recoveryCodeListeners = mutableSetOf<(String) -> Unit>()
-
-    /**
-     * A code minted before anything was listening.
-     *
-     * The vault is created inside a sign-in and the screen that shows the code
-     * appears in response to that same sign-in, so on a fresh registration the
-     * code is often produced before anything is subscribed. Firing into an
-     * empty room there would lose the only copy of the only factor that
-     * survives losing everything else, silently, on the accounts least
-     * equipped to notice.
-     */
-    @Volatile
-    private var pendingRecoveryCode: String? = null
-
-    /** Subscribes to the recovery code minted when a vault is created. */
-    @Synchronized
-    fun onRecoveryCode(listener: (String) -> Unit): () -> Unit {
-        recoveryCodeListeners += listener
-        pendingRecoveryCode?.let { code ->
-            // Cleared as it is handed over: this is the one delivery, and
-            // holding it longer would show a later subscriber a code that has
-            // already been written down and moved past.
-            pendingRecoveryCode = null
-            listener(code)
-        }
-        return { synchronized(this) { recoveryCodeListeners -= listener } }
-    }
-
-    @Synchronized
-    private fun announceRecoveryCode(code: String) {
-        if (recoveryCodeListeners.isEmpty()) {
-            pendingRecoveryCode = code
-            return
-        }
-        recoveryCodeListeners.toList().forEach { it(code) }
-    }
 
     /** Waits for sign-in key setup instead of racing it, and retries a failed one. */
     private suspend fun currentVault(): Crypto.OpenVault =

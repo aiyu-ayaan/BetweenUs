@@ -307,13 +307,9 @@ fun AccountSecurityScreen(
                 Text(
                     text = when (val state = identity) {
                         is IdentityStatus.Ready ->
-                            if (state.recoverable) {
-                                "This device has your account key, and the account can be recovered without it. Signing in somewhere new brings every conversation with it."
-                            } else {
-                                "This device has your account key and nothing else does. Set a recovery passphrase, or keep a recovery code, or these conversations end with your devices."
-                            }
+                            "This device has your account key. The server keeps a copy for your account, so signing in anywhere else brings every conversation with it."
                         is IdentityStatus.Locked ->
-                            "This device has not been let into your account yet. Enter your recovery code or passphrase, or approve it from a device that is already signed in."
+                            "Getting your account key…"
                         IdentityStatus.Revoked ->
                             "This device was revoked from another session. Older cached messages remain readable, but new messages are not encrypted for it."
                         IdentityStatus.Absent -> "No identity key present on this device yet."
