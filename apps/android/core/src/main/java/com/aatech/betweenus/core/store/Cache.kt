@@ -254,6 +254,14 @@ object Cache {
         write("unread", json.toString())
     }
 
+    /**
+     * Unsent composer text, as the JSON [Drafts] encodes. One row in the same
+     * table as the lists, so [clear] and [claim] take it with them.
+     */
+    suspend fun drafts(): String? = read("drafts")
+
+    fun putDrafts(json: String) = write("drafts", json)
+
     // --- messages ---
 
     /** The newest page of a channel, oldest first, as the screen wants it. */

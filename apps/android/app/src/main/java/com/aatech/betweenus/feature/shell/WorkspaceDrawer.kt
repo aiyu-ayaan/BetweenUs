@@ -39,6 +39,7 @@ import com.aatech.betweenus.core.data.ChannelType
 import com.aatech.betweenus.core.data.PublicUser
 import com.aatech.betweenus.core.data.ServerWithRole
 import com.aatech.betweenus.core.data.PresenceStatus
+import com.aatech.betweenus.core.store.Drafts
 import com.aatech.betweenus.core.store.Presence
 import com.aatech.betweenus.core.store.Statuses
 import com.aatech.betweenus.core.store.Workspace
@@ -79,6 +80,8 @@ fun WorkspaceDrawer(
 
     val channels by Workspace.channels.collectAsState()
     val unread by Workspace.unread.collectAsState()
+    val drafted by Drafts.drafted.collectAsState()
+    LaunchedEffect(Unit) { Drafts.load() }
     val self by Presence.self.collectAsState()
     val statusRuns by Statuses.runs.collectAsState()
 
@@ -231,7 +234,12 @@ fun WorkspaceDrawer(
 
                     if (text.isNotEmpty()) item { SectionLabel("Text channels") }
                     items(text, key = { it.id }) { channel ->
-                        ChannelRow(channel, channel.id == selectedChannelId, unread[channel.id] ?: 0) {
+                        ChannelRow(
+                            channel,
+                            channel.id == selectedChannelId,
+                            unread[channel.id] ?: 0,
+                            drafted = channel.id != selectedChannelId && channel.id in drafted,
+                        ) {
                             onSelectChannel(channel)
                         }
                     }
@@ -350,6 +358,7 @@ private fun ChannelRow(
     selected: Boolean,
     unread: Int,
     subtitle: String? = null,
+    drafted: Boolean = false,
     onClick: () -> Unit,
 ) {
     ListRow(
@@ -371,8 +380,20 @@ private fun ChannelRow(
                 size = 20.dp,
             )
         },
-        trailing = { if (unread > 0) Badge(unread) },
+        trailing = {
+            if (unread > 0) Badge(unread) else if (drafted) DraftLabel()
+        },
         onClick = onClick,
+    )
+}
+
+/** The quiet "Draft" beside a conversation with unsent text - smaller and greyer than a badge. */
+@Composable
+private fun DraftLabel() {
+    Text(
+        text = "Draft",
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 }
 
@@ -380,6 +401,8 @@ private fun ChannelRow(
 private fun DirectMessageList(onSelectChannel: (Channel) -> Unit) {
     val directs by Workspace.directChannels.collectAsState()
     val unread by Workspace.unread.collectAsState()
+    val drafted by Drafts.drafted.collectAsState()
+    LaunchedEffect(Unit) { Drafts.load() }
     // Collected, not read through `Presence.statusOf`: that returns the value
     // at the moment it is called, so the dot next to a conversation kept the
     // colour it had when the drawer was first drawn and never went green.
@@ -410,7 +433,10 @@ private fun DirectMessageList(onSelectChannel: (Channel) -> Unit) {
                         size = 32.dp,
                     )
                 },
-                trailing = { (unread[direct.channelId] ?: 0).let { if (it > 0) Badge(it) } },
+                trailing = {
+                    val count = unread[direct.channelId] ?: 0
+                    if (count > 0) Badge(count) else if (direct.channelId in drafted) DraftLabel()
+                },
                 onClick = {
                     onSelectChannel(
                         Channel(
