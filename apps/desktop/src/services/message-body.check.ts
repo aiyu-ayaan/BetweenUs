@@ -82,6 +82,8 @@ async function main(): Promise<void> {
   assert.equal(replyPreview('  two\n\nlines  '), 'two lines');
   assert.equal(replyPreview('x'.repeat(500)).length, REPLY_PREVIEW_CHARS);
   assert.equal(replyPreview('x'.repeat(500)).endsWith('…'), true);
+  // A quoted spoiler stays hidden under the reply that quotes it.
+  assert.equal(replyPreview('it was **||snape||**'), 'it was ▒▒▒▒');
 
   // Custom emoji: no files, no quote, and still a document, because the
   // pictures have to travel with the text.

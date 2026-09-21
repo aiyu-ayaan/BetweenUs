@@ -22,7 +22,7 @@
  * or the same message reads differently on two screens.
  */
 
-export type Style = 'bold' | 'italic' | 'strike' | 'code';
+export type Style = 'bold' | 'italic' | 'strike' | 'code' | 'spoiler';
 
 /** A style over `[start, end)` of the block's own text. */
 export interface Span {
@@ -43,12 +43,18 @@ export type Kind = 'body' | 'quote' | 'code' | 'bullet' | 'number' | 'heading';
  *
  * `ordinal` is the number a `number` item is drawn with, and the level of a
  * `heading` - `## Install` is 2. Zero for everything else.
+ *
+ * `lang` is what a `code` block's opening fence named - ```` ```ts ```` is
+ * `ts` - lower-cased, and empty for a bare fence and every other kind. It is
+ * only ever a hint to the highlighter, which falls back to plain text for a
+ * language it does not know.
  */
 export interface Block {
   kind: Kind;
   text: string;
   spans: Span[];
   ordinal: number;
+  lang: string;
 }
 
 interface Delimiter {
@@ -58,7 +64,11 @@ interface Delimiter {
 
 // Longest first: `**` has to be tried before `*` or every bold is two italics
 // with nothing between them.
+//
+// `||` is a spoiler. A single pipe is nothing, so a table row or a shell
+// pipeline is left alone; only the doubled one hides anything.
 const DELIMITERS: Delimiter[] = [
+  { token: '||', style: 'spoiler' },
   { token: '**', style: 'bold' },
   { token: '~~', style: 'strike' },
   { token: '*', style: 'italic' },
@@ -66,7 +76,7 @@ const DELIMITERS: Delimiter[] = [
   { token: '`', style: 'code' },
 ];
 
-const ESCAPABLE = '*_~`\\>';
+const ESCAPABLE = '*_~`|\\>';
 
 /**
  * A list marker, and the space after it.
@@ -77,6 +87,12 @@ const ESCAPABLE = '*_~`\\>';
  */
 const BULLET = /^ {0,3}[-*+] +(.*)$/;
 const NUMBER = /^ {0,3}(\d{1,9})[.)] +(.*)$/;
+
+/**
+ * What an opening fence names: ```` ```ts ````, ```` ```Python ````. The first
+ * word only, so ```` ```js title="x" ```` still reads as `js`.
+ */
+const FENCE_LANG = /^\s*```\s*([\w+#.-]*)/;
 
 /** `### Features`. The space is what keeps a `#channel` mention from being one. */
 const HEADING = /^ {0,3}(#{1,6}) +(.*?)\s*#*\s*$/;
@@ -110,6 +126,7 @@ export function parse(text: string, headings = false): Block[] {
 
     if (line.trimStart().startsWith('```')) {
       flush();
+      const lang = (FENCE_LANG.exec(line)?.[1] ?? '').toLowerCase();
       const fence: string[] = [];
       i++;
       while (i < lines.length && !(lines[i] ?? '').trimStart().startsWith('```')) {
@@ -120,7 +137,7 @@ export function parse(text: string, headings = false): Block[] {
       // hit send meant the rest to be code; drawing it as prose with three
       // backticks in front of it helps nobody.
       if (i < lines.length) i++;
-      blocks.push({ kind: 'code', text: trimNewlines(fence.join('\n')), spans: [], ordinal: 0 });
+      blocks.push({ kind: 'code', text: trimNewlines(fence.join('\n')), spans: [], ordinal: 0, lang });
       continue;
     }
 
@@ -198,7 +215,7 @@ function inline(source: string, kind: Kind, ordinal = 0): Block {
   const out = { text: '' };
   const spans: Span[] = [];
   scan(source, out, spans);
-  return { kind, text: out.text, spans, ordinal };
+  return { kind, text: out.text, spans, ordinal, lang: '' };
 }
 
 /**
@@ -423,10 +440,47 @@ export function continueList(text: string, caret: number): Continuation | null {
 
 /** Whether anything at all would be drawn differently. Saves a rebuild. */
 export function isPlain(text: string): boolean {
-  if (/[*_~`\\]/.test(text)) return false;
+  if (/[*_~`|\\]/.test(text)) return false;
   return text
     .split('\n')
     .every((line) => !(line.startsWith('> ') || line === '>' || BULLET.test(line) || NUMBER.test(line)));
+}
+
+/** What a spoiler reads as anywhere it cannot be clicked to reveal. */
+export const SPOILER_MASK = '▒▒▒▒';
+
+/**
+ * A message as one run of plain words, for the places that quote it rather
+ * than draw it: a notification, the snippet a reply carries, a pinned list.
+ *
+ * The marks come out - a toast showing `**done**` with its asterisks is a
+ * toast somebody has to read past - and every spoiler becomes
+ * `SPOILER_MASK`. That second half is the reason this goes through `parse`
+ * rather than a regex: only the parser knows that `||x||` inside backticks is
+ * code and not a spoiler, and that a spoiler is one wherever the message
+ * list would hide it. Hiding it in the list and printing it in a notification
+ * would make the mark worthless. The mask is a fixed width on purpose, so it
+ * does not give away how long the hidden words are.
+ *
+ * Not trimmed or collapsed onto one line: the callers each have their own
+ * idea of how long a snippet is.
+ */
+export function previewText(text: string): string {
+  return parse(text)
+    .map((block) => {
+      let words = block.text;
+      // From the end, so cutting one spoiler never moves the next one's offsets.
+      const hidden = block.spans
+        .filter((span) => span.style === 'spoiler')
+        .sort((a, b) => b.start - a.start);
+      for (const span of hidden) {
+        words = words.slice(0, span.start) + SPOILER_MASK + words.slice(span.end);
+      }
+      if (block.kind === 'bullet') return `• ${words}`;
+      if (block.kind === 'number') return `${block.ordinal}. ${words}`;
+      return words;
+    })
+    .join('\n');
 }
 
 /**

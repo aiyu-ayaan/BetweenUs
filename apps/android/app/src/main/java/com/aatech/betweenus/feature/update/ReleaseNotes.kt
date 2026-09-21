@@ -152,4 +152,6 @@ private fun Markup.Style.span(): SpanStyle = when (this) {
     Markup.Style.Italic -> SpanStyle(fontStyle = FontStyle.Italic)
     Markup.Style.Strike -> SpanStyle(textDecoration = TextDecoration.LineThrough)
     Markup.Style.Code -> SpanStyle(fontFamily = FontFamily.Monospace, background = Surface950)
+    // Release notes are ours and carry none; drawn as words if one ever does.
+    Markup.Style.Spoiler -> SpanStyle()
 }

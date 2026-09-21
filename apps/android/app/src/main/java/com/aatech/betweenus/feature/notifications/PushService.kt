@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import com.aatech.betweenus.core.crypto.E2ee
 import com.aatech.betweenus.core.data.AuthPhase
 import com.aatech.betweenus.core.data.Http
+import com.aatech.betweenus.core.data.Markup
 import com.aatech.betweenus.core.data.MessageBody
 import com.aatech.betweenus.core.data.PushTokens
 import com.aatech.betweenus.core.data.Session
@@ -377,7 +378,8 @@ class PushService : FirebaseMessagingService() {
     private fun describe(body: MessageBody?): String {
         if (body == null) return "New message"
         val attachments = body.attachments
-        if (body.text.isNotBlank()) return body.text
+        // Spoilers masked: the shade is readable over a shoulder.
+        if (body.text.isNotBlank()) return Markup.previewText(body.text)
         val picture = attachments.count { it.isImage }
         val video = attachments.count { it.isVideo }
         return when {
