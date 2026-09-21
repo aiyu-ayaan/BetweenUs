@@ -1054,7 +1054,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }),
     );
     // Arrives over the socket like every other message.
-    await api.sendMessage(open.channelId, envelope, undefined, false, open.root.id);
+    await api.sendMessage(open.channelId, envelope, undefined, false, undefined, open.root.id);
   },
 
   showPanel: (panel) => {
