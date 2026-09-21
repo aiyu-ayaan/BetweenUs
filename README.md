@@ -159,6 +159,7 @@ to be framed, so no browser tab can ever show it.
 | Voice messages, with a waveform, played in place | ✅ | ✅ | ✅ |
 | Replies, edit, delete, reactions | ✅ | ✅ | ✅ |
 | Pinned messages | ✅ | ✅ | ✅ |
+| Scheduled send and remind-me (kept on the device, never on the server) | ✅ | ✅ | ✅ |
 | Custom emoji in messages | ✅ | ✅ | ✅ |
 | `:` emoji suggestion menu while typing | ✅ | ✅ | ✅ a bar |
 | Emoji picker, including the server's own | ✅ | ✅ | ✅ |
