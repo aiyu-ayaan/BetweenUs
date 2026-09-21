@@ -269,7 +269,11 @@ object Cache {
      * should never need fetching again, and a few thousand rows of text is not
      * a size worth pruning. If it ever becomes one, prune by channel here.
      */
-    fun putMessages(messages: List<Message>) {
+    fun putMessages(all: List<Message>) {
+        // The channel's timeline only. This store is read back as "the newest
+        // page of the channel", so a thread reply kept here would be drawn into
+        // the timeline on the next cold open.
+        val messages = all.filterNot { it.isThreadReply }
         if (messages.isEmpty()) return
         scope.launch {
             runCatching {

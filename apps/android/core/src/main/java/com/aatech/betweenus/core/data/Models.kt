@@ -847,8 +847,20 @@ data class Message(
      * output to a person.
      */
     val webhook: MessageWebhook? = null,
+    /**
+     * The root this message answers, when it is a thread reply. The one thing
+     * about a thread the server is told in the clear; the body is sealed with
+     * the channel key like any other. Not a quote reply, which is a snapshot
+     * inside the envelope of a message that stays in the timeline.
+     */
+    val threadRootId: String? = null,
+    /** On a root: "N replies · last reply X ago". Null when there is no thread. */
+    val thread: ThreadSummary? = null,
 ) {
     val deleted: Boolean get() = deletedAt != null
+
+    /** Belongs in a thread screen rather than the channel's timeline. */
+    val isThreadReply: Boolean get() = threadRootId != null
     val pinned: Boolean get() = pinnedAt != null
 
     /** Somebody joined the server. There is no body to open and none to draw. */
@@ -908,6 +920,8 @@ data class Message(
         .put("viewOnce", viewOnce)
         .put("viewedBy", jsonArrayOf(viewedBy))
         .put("webhook", webhook?.toJson())
+        .put("threadRootId", threadRootId)
+        .put("thread", thread?.toJson())
 
     companion object {
         /** A message somebody wrote. What every row was before [kind] existed. */
@@ -944,6 +958,22 @@ data class Message(
             viewOnce = json.optBoolean("viewOnce", false),
             viewedBy = json.strings("viewedBy"),
             webhook = json.optJSONObject("webhook")?.let { MessageWebhook.from(it) },
+            threadRootId = json.stringOrNull("threadRootId"),
+            thread = json.optJSONObject("thread")?.let { ThreadSummary.from(it) },
+        )
+    }
+}
+
+/** What a root says about its thread. */
+data class ThreadSummary(val replyCount: Int, val lastReplyAt: String?) {
+    fun toJson(): JSONObject = JSONObject()
+        .put("replyCount", replyCount)
+        .put("lastReplyAt", lastReplyAt)
+
+    companion object {
+        fun from(json: JSONObject) = ThreadSummary(
+            replyCount = json.optInt("replyCount", 0),
+            lastReplyAt = json.stringOrNull("lastReplyAt"),
         )
     }
 }

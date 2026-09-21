@@ -95,6 +95,8 @@ fun ChatScreen(
     onOpenMenu: (() -> Unit)?,
     onOpenMembers: () -> Unit,
     onStartCall: () -> Unit,
+    /** Opens a message's thread as its own screen. */
+    onOpenThread: (rootId: String) -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -699,6 +701,7 @@ fun ChatScreen(
                         myRoles = myRoles,
                         onReply = { replyingTo = readable.quote() },
                         onOpenSeenBy = { seenFor = readable },
+                        onOpenThread = { onOpenThread(readable.id) },
                         onOpenQuoted = { quotedId ->
                             val at = messages.indexOfFirst { it.id == quotedId }
                             // Not on this device yet: the quote carries enough
@@ -973,6 +976,18 @@ fun ChatScreen(
             canModerate = Workspace.server(channel?.serverId)?.can("DELETE_MESSAGE") == true,
             onDismiss = { acting = null },
             onReply = { replyingTo = readable.quote(); acting = null },
+            // A one-time message is destroyed by being looked at, which a thread
+            // under it should not be. A reply is never a root: one level only.
+            onThread = if (
+                readable.message.viewOnce ||
+                !readable.message.hasBody ||
+                readable.message.isThreadReply ||
+                (readable.message.deleted && readable.message.thread == null)
+            ) {
+                null
+            } else {
+                { onOpenThread(readable.id); acting = null }
+            },
             // A tombstone has nothing to carry, and a one-time message must
             // not be carried anywhere: being seen once by the people it was
             // sent to is the whole of what it promised.

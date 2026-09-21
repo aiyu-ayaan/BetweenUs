@@ -59,6 +59,12 @@ fun MessageActionsSheet(
     onDismiss: () -> Unit,
     onReply: () -> Unit,
     /**
+     * Null when there is nothing to hang a thread on: a one-time message, an
+     * arrival notice, a message that is itself a thread reply, or a tombstone
+     * with no thread.
+     */
+    onThread: (() -> Unit)?,
+    /**
      * Null when there is nothing to forward: a tombstone, or a one-time
      * message, whose whole bargain is that it is seen once by the people it
      * was sent to.
@@ -97,6 +103,13 @@ fun MessageActionsSheet(
                 leading = { BetweenUsIcon(BetweenUsIcons.Reply, tint = Slate400) },
                 onClick = onReply,
             )
+            onThread?.let { thread ->
+                ListRow(
+                    title = "Reply in thread",
+                    leading = { BetweenUsIcon(BetweenUsIcons.Message, tint = Slate400) },
+                    onClick = thread,
+                )
+            }
             onForward?.let { forward ->
                 ListRow(
                     title = "Forward",

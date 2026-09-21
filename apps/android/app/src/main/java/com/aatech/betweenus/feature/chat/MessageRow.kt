@@ -108,6 +108,7 @@ import com.aatech.betweenus.ui.components.AvatarWithStatus
 import com.aatech.betweenus.ui.components.tintFor
 import com.aatech.betweenus.ui.components.BetweenUsIcon
 import com.aatech.betweenus.ui.components.BetweenUsIcons
+import com.aatech.betweenus.core.data.ThreadRules
 import com.aatech.betweenus.ui.theme.Accent
 import com.aatech.betweenus.ui.theme.Danger
 import com.aatech.betweenus.ui.theme.Edge
@@ -198,6 +199,8 @@ fun MessageRow(
     /** Swiping the row rightwards answers it, the way every phone chat does. */
     onReply: () -> Unit = {},
     onOpenSeenBy: () -> Unit = {},
+    /** Opens this message's thread, from the "N replies" chip under it. */
+    onOpenThread: () -> Unit = {},
     onOpenQuoted: (String) -> Unit = {},
     onReact: (String) -> Unit,
     onViewImage: (Bitmap, String) -> Unit = { _, _ -> },
@@ -869,6 +872,21 @@ fun MessageRow(
                             }
                         }
                     }
+                }
+
+                // "N replies · last reply X ago". Also under a deleted root: the
+                // thread outlives the message it hangs off, and this is the only
+                // way back into it.
+                ThreadRules.chipLabel(message.thread)?.let { label ->
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.labelMediumEmphasized,
+                        color = Accent,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable(onClick = onOpenThread)
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                    )
                 }
 
                 // Only ever under your own message, and only once each reader
