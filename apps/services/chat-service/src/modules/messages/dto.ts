@@ -1,19 +1,50 @@
+import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
   IsBoolean,
+  IsInt,
   IsOptional,
   IsString,
   IsUUID,
   Length,
+  Max,
+  Min,
+  ValidateNested,
 } from 'class-validator';
-import { MAX_MESSAGE_CONTENT_LENGTH } from '@betweenus/shared-types';
+import {
+  MAX_MESSAGE_CONTENT_LENGTH,
+  POLL_MAX_OPTIONS,
+  POLL_MIN_OPTIONS,
+} from '@betweenus/shared-types';
 import type {
   ClearChatsRequest,
   CreateMessageRequest,
+  CreatePollSettings,
   ReactToMessageRequest,
   UpdateMessageRequest,
+  VotePollRequest,
 } from '@betweenus/shared-types';
+
+/**
+ * What the server is told about a poll: numbers only. The question and the
+ * labels are sealed in `content` beside it. The duration is checked against
+ * `POLL_DURATIONS` by the service, which is also what turns it into a moment.
+ */
+export class CreatePollDto implements CreatePollSettings {
+  @IsInt()
+  @Min(POLL_MIN_OPTIONS)
+  @Max(POLL_MAX_OPTIONS)
+  optionCount!: number;
+
+  @IsOptional()
+  @IsBoolean()
+  multiChoice?: boolean;
+
+  @IsOptional()
+  @IsInt()
+  durationSeconds?: number | null;
+}
 
 export class CreateMessageDto implements CreateMessageRequest {
   @IsUUID()
@@ -51,6 +82,12 @@ export class CreateMessageDto implements CreateMessageRequest {
   @IsOptional()
   @IsBoolean()
   viewOnce?: boolean;
+
+  /** Send this as a poll. See `CreatePollDto`. */
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CreatePollDto)
+  poll?: CreatePollDto;
 }
 
 export class UpdateMessageDto implements UpdateMessageRequest {
@@ -68,6 +105,18 @@ export class ReactToMessageDto implements ReactToMessageRequest {
   @IsString()
   @Length(1, 32)
   emoji!: string;
+}
+
+/**
+ * A whole ballot: the option indexes chosen, never their labels. An empty list
+ * takes the vote back. Range and single-choice are the service's to check,
+ * because only it knows how many options this poll has.
+ */
+export class VotePollDto implements VotePollRequest {
+  @IsArray()
+  @ArrayMaxSize(POLL_MAX_OPTIONS)
+  @IsInt({ each: true })
+  options!: number[];
 }
 
 export class MessageQueryDto {

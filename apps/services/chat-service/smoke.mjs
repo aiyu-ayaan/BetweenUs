@@ -585,6 +585,118 @@ const badEmoji = await fetch(`${CHAT}/api/v1/messages/${dmMessage.id}/reactions`
 });
 ok('a sentence is not an emoji', badEmoji.status === 400);
 
+// --- Polls: refereed, never read -------------------------------------------
+//
+// The body stands in for an envelope; the server is only told how many options
+// there are, and a vote is an index into them.
+
+const poll = await json(`${CHAT}/api/v1/messages`, {
+  method: 'POST',
+  headers: authed,
+  body: JSON.stringify({
+    channelId: direct.channelId,
+    content: 'sealed poll body',
+    poll: { optionCount: 3, durationSeconds: 3600 },
+  }),
+});
+ok(
+  'a poll is sent with numbers only',
+  poll.poll?.optionCount === 3 &&
+    poll.poll.multiChoice === false &&
+    poll.poll.closesAt !== null &&
+    poll.poll.tallies.length === 3,
+);
+
+const smuggled = await statusOf(`${CHAT}/api/v1/messages`, {
+  method: 'POST',
+  headers: authed,
+  body: JSON.stringify({
+    channelId: direct.channelId,
+    content: 'x',
+    poll: { optionCount: 2, question: 'in the clear?' },
+  }),
+});
+ok('the server refuses to be told the question', smuggled === 400);
+
+const pollUrl = `${CHAT}/api/v1/messages/${poll.id}/poll`;
+const voted = await json(`${pollUrl}/vote`, {
+  method: 'PUT',
+  headers: other,
+  body: JSON.stringify({ options: [1] }),
+});
+ok('a vote is counted', voted.poll.tallies[1].userIds.includes(otherId));
+
+const switched = await json(`${pollUrl}/vote`, {
+  method: 'PUT',
+  headers: other,
+  body: JSON.stringify({ options: [2] }),
+});
+ok(
+  'changing a vote moves it',
+  switched.poll.tallies[1].userIds.length === 0 &&
+    switched.poll.tallies[2].userIds.includes(otherId),
+);
+
+ok(
+  'a single-choice poll takes one',
+  (await statusOf(`${pollUrl}/vote`, {
+    method: 'PUT',
+    headers: other,
+    body: JSON.stringify({ options: [0, 1] }),
+  })) === 400,
+);
+ok(
+  'an option out of range is refused',
+  (await statusOf(`${pollUrl}/vote`, {
+    method: 'PUT',
+    headers: other,
+    body: JSON.stringify({ options: [3] }),
+  })) === 400,
+);
+
+const retracted = await json(`${pollUrl}/vote`, {
+  method: 'PUT',
+  headers: other,
+  body: JSON.stringify({ options: [] }),
+});
+ok(
+  'an empty ballot retracts',
+  retracted.poll.tallies.every((entry) => entry.userIds.length === 0),
+);
+
+ok(
+  'a poll cannot be edited under its votes',
+  (await statusOf(`${CHAT}/api/v1/messages/${poll.id}`, {
+    method: 'PATCH',
+    headers: authed,
+    body: JSON.stringify({ content: 'different labels' }),
+  })) === 400,
+);
+
+ok(
+  'only the author closes a poll in a direct message',
+  (await statusOf(`${pollUrl}/close`, { method: 'POST', headers: other })) === 403,
+);
+const closedPoll = await json(`${pollUrl}/close`, { method: 'POST', headers: authed });
+ok('the author closes it', closedPoll.poll.closedAt !== null && closedPoll.poll.closedBy === me.id);
+ok(
+  'a closed poll takes no votes',
+  (await statusOf(`${pollUrl}/vote`, {
+    method: 'PUT',
+    headers: other,
+    body: JSON.stringify({ options: [0] }),
+  })) === 409,
+);
+
+ok(
+  'a plain message is not a poll',
+  (await statusOf(`${CHAT}/api/v1/messages/${dmMessage.id}/poll/vote`, {
+    method: 'PUT',
+    headers: other,
+    body: JSON.stringify({ options: [0] }),
+  })) === 404,
+);
+
 await fetch(`${CHAT}/api/v1/messages/${dmMessage.id}`, { method: 'DELETE', headers: authed });
 const afterDelete = await json(`${CHAT}/api/v1/messages?channelId=${direct.channelId}`, {
   headers: other,

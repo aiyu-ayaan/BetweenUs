@@ -11,12 +11,14 @@ import {
   isDisappearingWindow,
   MAX_MESSAGE_CONTENT_LENGTH,
   type ClearChatsResponse,
+  type CreatePollSettings,
   type Message,
   type MessageKind,
   type MessageReactionSummary,
   type Paginated,
 } from '@betweenus/shared-types';
 import { purgeMessageAttachments } from '../uploads/attachment-sweeper';
+import { judgePollSettings, toPoll, type PollRow } from './poll-rules';
 
 const PAGE_SIZE = 50;
 /**
@@ -84,7 +86,7 @@ export function looksOwed(
 }
 
 /** Everything a `Message` is built from, in one place so every path agrees. */
-const MESSAGE_INCLUDE = {
+export const MESSAGE_INCLUDE = {
   author: true,
   deletedBy: true,
   reactions: { select: { userId: true, emoji: true } },
@@ -93,6 +95,18 @@ const MESSAGE_INCLUDE = {
   // the row also carries the token hash and every history page would otherwise
   // read it out of the database for no reason.
   webhook: { select: { id: true, name: true, avatarUrl: true } },
+  // The refereed half of a poll: counts and indexes, never words. Oldest vote
+  // first, so the names under a bar do not reshuffle every time somebody votes.
+  poll: {
+    select: {
+      optionCount: true,
+      multiChoice: true,
+      closesAt: true,
+      closedAt: true,
+      closedById: true,
+      votes: { select: { userId: true, option: true }, orderBy: { createdAt: 'asc' } },
+    },
+  },
 } as const;
 
 @Injectable()
@@ -289,8 +303,26 @@ export class MessagesService {
     content: string,
     attachmentKeys: string[] = [],
     viewOnce = false,
+    pollSettings?: CreatePollSettings,
   ): Promise<Message> {
     const access = await this.requireChannelAccess(userId, channelId, PERMISSIONS.SEND_MESSAGE);
+
+    // The settings are checked before anything is written, so a refused poll
+    // leaves no message behind. The words are in `content` and are not looked
+    // at - they cannot be.
+    let poll: ReturnType<typeof judgePollSettings> | null = null;
+    if (pollSettings) {
+      if (viewOnce) {
+        throw new BadRequestException({
+          code: 'INVALID_POLL',
+          message: 'A poll cannot be a one-time message',
+        });
+      }
+      poll = judgePollSettings(pollSettings, new Date());
+      if (!poll.ok) {
+        throw new BadRequestException({ code: poll.code, message: poll.message });
+      }
+    }
 
     const trimmed = content.trim();
     if (trimmed.length === 0 || trimmed.length > MAX_CONTENT_LENGTH) {
@@ -305,7 +337,14 @@ export class MessagesService {
     const expiresAt = await this.expiryFor(access.serverId, viewOnce);
 
     const row = await prisma.message.create({
-      data: { channelId, authorId: userId, content: trimmed, expiresAt, viewOnce },
+      data: {
+        channelId,
+        authorId: userId,
+        content: trimmed,
+        expiresAt,
+        viewOnce,
+        ...(poll?.ok ? { poll: { create: poll.value } } : {}),
+      },
       include: MESSAGE_INCLUDE,
     });
 
@@ -347,6 +386,21 @@ export class MessagesService {
       throw new ForbiddenException({
         code: 'NOT_MESSAGE_AUTHOR',
         message: 'Only the author can edit a message',
+      });
+    }
+
+    // A poll's labels are sealed, so the server could not tell an edit that
+    // fixed a typo from one that swapped "yes" and "no" under everybody's
+    // votes. Refusing the edit is the only way to keep a vote meaning what it
+    // meant when it was cast.
+    const poll = await prisma.messagePoll.findUnique({
+      where: { messageId: existing.id },
+      select: { messageId: true },
+    });
+    if (poll) {
+      throw new BadRequestException({
+        code: 'POLL_NOT_EDITABLE',
+        message: 'A poll cannot be edited once it is sent',
       });
     }
 
@@ -401,21 +455,26 @@ export class MessagesService {
       });
     }
 
-    const row = await prisma.message.update({
-      where: { id: existing.id },
-      data: {
-        deletedAt: new Date(),
-        // Null when the author took their own message back: a client only
-        // names the person when it was somebody else.
-        deletedById: mine ? null : userId,
-        content: '',
-        // A deleted message cannot stay pinned, and its reactions go with it.
-        pinnedAt: null,
-        pinnedById: null,
-        reactions: { deleteMany: {} },
-      },
-      include: MESSAGE_INCLUDE,
-    });
+    // A tombstone asks nothing, so its poll and every vote on it go too. In the
+    // same transaction as the tombstone, so a failed delete keeps the votes.
+    const [, row] = await prisma.$transaction([
+      prisma.messagePoll.deleteMany({ where: { messageId: existing.id } }),
+      prisma.message.update({
+        where: { id: existing.id },
+        data: {
+          deletedAt: new Date(),
+          // Null when the author took their own message back: a client only
+          // names the person when it was somebody else.
+          deletedById: mine ? null : userId,
+          content: '',
+          // A deleted message cannot stay pinned, and its reactions go with it.
+          pinnedAt: null,
+          pinnedById: null,
+          reactions: { deleteMany: {} },
+        },
+        include: MESSAGE_INCLUDE,
+      }),
+    ]);
 
     // After the row update, never before: a blob deleted for a message that
     // then failed to delete is a message rendering broken pictures for ever.
@@ -686,6 +745,8 @@ interface MessageRow {
    */
   webhookId?: string | null;
   webhook?: { id: string; name: string; avatarUrl: string | null } | null;
+  /** Set when the message is a poll. Optional for callers that did not select it. */
+  poll?: PollRow | null;
 }
 
 export function toMessage(row: MessageRow): Message {
@@ -728,6 +789,7 @@ export function toMessage(row: MessageRow): Message {
           },
         }
       : {}),
+    ...(row.poll ? { poll: toPoll(row.poll) } : {}),
   };
 }
 
