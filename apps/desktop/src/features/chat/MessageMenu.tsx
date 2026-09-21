@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { QUICK_REACTIONS } from './emoji';
 import {
+  ClockIcon,
   CopyIcon,
   ReplyIcon,
   PencilIcon,
@@ -22,6 +23,8 @@ export interface MessageMenuActions {
   /** Opens the full picker at the position the menu was standing in. */
   onMoreEmoji: (at: { x: number; y: number }) => void;
   onEdit?: () => void;
+  /** Sets a local reminder. Opens its own picker where the menu stood. */
+  onRemind?: (at: { x: number; y: number }) => void;
   onPin?: () => void;
   onCopy?: () => void;
   onDelete?: () => void;
@@ -80,6 +83,7 @@ export function MessageMenu({
     [
       actions.onReply,
       actions.onForward,
+      actions.onRemind,
       actions.onEdit,
       actions.onPin,
       actions.onCopy,
@@ -148,6 +152,16 @@ export function MessageMenu({
           label="Forward"
           onClick={() => {
             actions.onForward?.();
+            onClose();
+          }}
+        />
+      )}
+      {actions.onRemind && (
+        <Item
+          icon={<ClockIcon className="h-4 w-4" />}
+          label="Remind me"
+          onClick={() => {
+            actions.onRemind?.(at);
             onClose();
           }}
         />
