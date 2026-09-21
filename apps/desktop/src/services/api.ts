@@ -14,6 +14,9 @@ import type {
   CallHistoryEntry,
   CallIceResponse,
   Channel,
+  ChannelCategory,
+  ChannelLayout,
+  ChannelLayoutRequest,
   InvitePreview,
   ChannelKeysResponse,
   ChannelMember,
@@ -468,6 +471,41 @@ export const api = {
 
   channels: (serverId: string): Promise<Channel[]> =>
     request(`/api/v1/channels?serverId=${encodeURIComponent(serverId)}`),
+
+  // --- Channel categories ---
+  //
+  // Reading needs only membership. Creating, renaming, deleting and reordering
+  // need MANAGE_CHANNEL, and reordering is one PUT carrying the whole new
+  // arrangement so a drag is never half-applied.
+
+  channelCategories: (serverId: string): Promise<ChannelCategory[]> =>
+    request(`/api/v1/servers/${serverId}/categories`),
+
+  createChannelCategory: (serverId: string, name: string): Promise<ChannelCategory> =>
+    request(`/api/v1/servers/${serverId}/categories`, {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    }),
+
+  renameChannelCategory: (
+    serverId: string,
+    categoryId: string,
+    name: string,
+  ): Promise<ChannelCategory> =>
+    request(`/api/v1/servers/${serverId}/categories/${categoryId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ name }),
+    }),
+
+  /** Its channels move to uncategorized; none is deleted. */
+  deleteChannelCategory: (serverId: string, categoryId: string): Promise<void> =>
+    request(`/api/v1/servers/${serverId}/categories/${categoryId}`, { method: 'DELETE' }),
+
+  setChannelLayout: (serverId: string, body: ChannelLayoutRequest): Promise<ChannelLayout> =>
+    request(`/api/v1/servers/${serverId}/channel-layout`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
 
   createChannel: (body: CreateChannelRequest): Promise<Channel> =>
     request('/api/v1/channels', { method: 'POST', body: JSON.stringify(body) }),
