@@ -44,6 +44,7 @@ import { MessageMenu } from './MessageMenu';
 import { OneTimeToggle, SendPreview, isPreviewable, isImage } from './SendPreview';
 import { EmojiSuggest } from './EmojiSuggest';
 import { MentionSuggest } from './MentionSuggest';
+import { CodeBlock, Spoiler, SpoilerScope } from './Formatting';
 import { mentionsMe, roleNamesFor, type MentionTarget } from '../../services/mentions';
 import {
   emojiFor,
@@ -1758,7 +1759,7 @@ function MessageText({ message }: { message: DecryptedMessage }): JSX.Element {
   }
 
   return (
-    <>
+    <SpoilerScope messageId={message.id}>
       {groupBlocks(blocks).map((group, index) =>
         group.kind === 'list' ? (
           <MarkupList key={index} items={group.blocks} emoji={emoji} />
@@ -1766,7 +1767,7 @@ function MessageText({ message }: { message: DecryptedMessage }): JSX.Element {
           <MarkupBlock key={index} block={group.blocks[0]!} emoji={emoji} />
         ),
       )}
-    </>
+    </SpoilerScope>
   );
 }
 
@@ -1829,13 +1830,7 @@ function MarkupBlock({
   block: MarkupBlockType;
   emoji: MessageCustomEmoji[];
 }): JSX.Element {
-  if (block.kind === 'code') {
-    return (
-      <pre className="my-1 overflow-x-auto rounded-md border border-edge bg-surface-950 px-3 py-2 font-mono text-sm text-slate-100">
-        <code>{block.text}</code>
-      </pre>
-    );
-  }
+  if (block.kind === 'code') return <CodeBlock code={block.text} lang={block.lang} />;
 
   if (block.kind === 'quote') {
     return (
@@ -1882,6 +1877,8 @@ function StyledRun({ run, emoji }: { run: MarkupRun; emoji: MessageCustomEmoji[]
   if (run.styles.includes('strike')) node = <del>{node}</del>;
   if (run.styles.includes('italic')) node = <em>{node}</em>;
   if (run.styles.includes('bold')) node = <strong className="font-semibold">{node}</strong>;
+  // Outermost, so the cover hides the bold and the link along with the words.
+  if (run.styles.includes('spoiler')) node = <Spoiler>{node}</Spoiler>;
   return node;
 }
 
@@ -2125,6 +2122,7 @@ function classesFor(styles: HighlightStyle[]): string {
   if (styles.includes('mark')) return 'text-slate-500';
   const out: string[] = [];
   if (styles.includes('code')) out.push('rounded bg-surface-950 text-accent');
+  if (styles.includes('spoiler')) out.push('rounded bg-slate-500/30');
   if (styles.includes('strike')) out.push('line-through');
   if (styles.includes('bold')) out.push('text-slate-50');
   else if (styles.includes('italic')) out.push('text-slate-300');

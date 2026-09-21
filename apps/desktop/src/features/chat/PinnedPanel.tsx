@@ -5,6 +5,7 @@ import { PersonAvatar } from '../../components/Avatar';
 import { PinIcon, XIcon } from '../../components/icons';
 import { SkeletonRows } from '../../components/Skeleton';
 import { listState } from '../../services/list-state';
+import { previewText } from '../../services/markup';
 
 export interface PinnedPanelProps {
   onClose?: () => void;
@@ -103,7 +104,8 @@ export function PinnedPanel({
 
 /** A file-only message still needs a line of text to be recognised by. */
 function preview(message: DecryptedMessage): string {
-  if (message.content.trim()) return message.content;
+  // Spoilers masked: the pinned list is a list of snippets, not the message.
+  if (message.content.trim()) return previewText(message.content);
   if (message.attachments.length === 1) return message.attachments[0]?.name ?? 'Attachment';
   if (message.attachments.length > 1) return `${message.attachments.length} attachments`;
   return 'Empty message';

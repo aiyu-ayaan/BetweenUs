@@ -615,6 +615,29 @@
   .no-drag {
     -webkit-app-region: no-drag;
   }
+
+  /**
+   * Code-block colours (`services/syntax.ts`). Every theme only defines an
+   * accent and a ramp of greys, so the hues are mixed into the theme's own
+   * text colour: on a dark theme that pulls them light, on a light theme dark,
+   * and each stays readable on its own code-block ground without sixteen
+   * palettes to keep in step. Keywords are simply the accent.
+   */
+  .syntax-keyword {
+    color: rgb(var(--color-accent));
+    font-weight: 600;
+  }
+  .syntax-string {
+    color: color-mix(in srgb, #22c55e 55%, rgb(var(--color-slate-100)));
+  }
+  .syntax-number,
+  .syntax-literal {
+    color: color-mix(in srgb, #f59e0b 60%, rgb(var(--color-slate-100)));
+  }
+  .syntax-comment {
+    color: rgb(var(--color-slate-500));
+    font-style: italic;
+  }
 }
 
 @layer utilities {

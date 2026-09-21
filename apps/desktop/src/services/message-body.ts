@@ -12,6 +12,7 @@
  * produce, so nobody can type a message that pretends to be one.
  */
 import type { MessageBody } from '@betweenus/shared-types';
+import { previewText } from './markup';
 
 /** Longer than this and a message is sent as a text file, the way Discord does. */
 export const OVERFLOW_CHARS = 2000;
@@ -89,9 +90,13 @@ export const REPLY_PREVIEW_CHARS = 140;
 /**
  * The snippet a reply quotes. One line: a quote that reflows to six defeats
  * the point of a quote.
+ *
+ * Marks out and spoilers masked (`previewText`): the quote is copied into the
+ * reply and drawn as plain text, so a spoiler quoted verbatim would be printed
+ * in full right under the message that hid it.
  */
 export function replyPreview(text: string): string {
-  const line = text.replace(/\s+/g, ' ').trim();
+  const line = previewText(text).replace(/\s+/g, ' ').trim();
   return line.length > REPLY_PREVIEW_CHARS
     ? `${line.slice(0, REPLY_PREVIEW_CHARS - 1)}…`
     : line;

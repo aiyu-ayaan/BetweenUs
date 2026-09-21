@@ -18,6 +18,7 @@ import type {
 } from '@betweenus/shared-types';
 import { api } from './api';
 import { usePresenceStore } from '../stores/presence';
+import { previewText } from './markup';
 
 /** True when this window is on screen and has keyboard focus. */
 export function windowIsFocused(): boolean {
@@ -200,7 +201,9 @@ export function notifyMessage(message: MessageNotification): void {
   // this one's - so `active` is passed along rather than resolved here.
   raise(
     `${message.author} in #${message.channelName}`,
-    message.text ?? 'Sent an encrypted message',
+    // Marks out and spoilers masked: a toast that printed the words the
+    // message list hides would make `||` pointless.
+    message.text !== null ? previewText(message.text) : 'Sent an encrypted message',
     message.channelId,
     message.active,
   );
