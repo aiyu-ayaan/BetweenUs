@@ -88,6 +88,15 @@ export class CreateMessageDto implements CreateMessageRequest {
   @ValidateNested()
   @Type(() => CreatePollDto)
   poll?: CreatePollDto;
+
+  /**
+   * Post into the thread under this root instead of the channel. The pointer
+   * is the only thing about a thread the server is told; the body is sealed
+   * with the channel key like any other message.
+   */
+  @IsOptional()
+  @IsUUID()
+  threadRootId?: string;
 }
 
 export class UpdateMessageDto implements UpdateMessageRequest {
@@ -127,6 +136,14 @@ export class MessageQueryDto {
   @IsOptional()
   @IsUUID()
   before?: string;
+
+  /**
+   * Page this root's thread instead of the channel's timeline. Absent means
+   * the timeline, which never includes thread replies.
+   */
+  @IsOptional()
+  @IsUUID()
+  threadRootId?: string;
 }
 
 export class PinQueryDto {

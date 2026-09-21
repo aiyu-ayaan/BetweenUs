@@ -67,6 +67,25 @@ data class ReadableMessage(
 }
 
 /**
+ * A thread as the thread screen holds it: the root, and the replies loaded so
+ * far, oldest first.
+ *
+ * Kept apart from the channel's list on purpose. A thread reply is never in the
+ * timeline, and a screen sharing that list would have to filter it back out of
+ * every reader of it.
+ */
+data class ThreadState(
+    val channelId: String,
+    /** Null only while the root is still being fetched. */
+    val root: ReadableMessage? = null,
+    val replies: List<ReadableMessage> = emptyList(),
+    val loading: Boolean = true,
+    /** The oldest reply held, which is what "load earlier" asks before. */
+    val cursor: String? = null,
+    val failed: Boolean = false,
+)
+
+/**
  * Message history, per channel.
  *
  * The port of the message half of `apps/desktop/src/stores/chat.ts`. It holds
@@ -90,6 +109,10 @@ object Conversation {
      */
     private val _receipts = MutableStateFlow<Map<String, List<ChannelReadReceipt>>>(emptyMap())
     val receipts: StateFlow<Map<String, List<ChannelReadReceipt>>> = _receipts.asStateFlow()
+
+    /** Threads opened this session, by root id. See [ThreadState]. */
+    private val _threads = MutableStateFlow<Map<String, ThreadState>>(emptyMap())
+    val threads: StateFlow<Map<String, ThreadState>> = _threads.asStateFlow()
 
     /** The oldest id fetched per channel, which is what "load more" asks before. */
     private val cursors = ConcurrentHashMap<String, String>()
@@ -117,6 +140,7 @@ object Conversation {
     fun stop() {
         _messages.value = emptyMap()
         _receipts.value = emptyMap()
+        _threads.value = emptyMap()
         cursors.clear()
         exhausted.clear()
         visibleChannelId = null
@@ -186,6 +210,19 @@ object Conversation {
             return
         }
         val message = event.optJSONObject("message")?.let { Message.from(it) } ?: return
+        // A thread reply is not part of the channel: it never enters the
+        // timeline, the cache or the unread count.
+        if (message.isThreadReply) {
+            onThreadReply(event.optString("type"), message)
+            return
+        }
+        // The root of an open thread is the one message that is in both places.
+        _threads.value[message.id]?.let { held ->
+            if (event.optString("type") == "message.updated") {
+                val readable = read(message)
+                _threads.update { it + (message.id to held.copy(root = readable)) }
+            }
+        }
         // Cached whether or not the channel is open. A conversation nobody has
         // looked at this session is exactly the one that should not be a spinner
         // when the badge is finally tapped.
@@ -234,6 +271,147 @@ object Conversation {
                 replace(read(message))
             }
         }
+    }
+
+    /**
+     * A reply in a thread: shown if that thread is open, and counted for nobody.
+     *
+     * The push fan-out has already decided who is woken for it; the badge stays
+     * out because the reply is not in the channel's timeline, so a count
+     * promising something new there would open onto nothing.
+     */
+    private suspend fun onThreadReply(type: String, message: Message) {
+        val rootId = message.threadRootId ?: return
+        val held = _threads.value[rootId] ?: return
+        val readable = read(message)
+        when (type) {
+            "message.created" -> _threads.update { all ->
+                val current = all[rootId] ?: return@update all
+                if (current.replies.any { it.id == readable.id }) return@update all
+                all + (rootId to current.copy(
+                    replies = (current.replies + readable).sortedBy { it.message.createdAt },
+                ))
+            }
+            "message.updated" -> {
+                if (message.deleted) {
+                    val keys = held.replies.firstOrNull { it.id == message.id }
+                        ?.attachments?.map { it.key }.orEmpty()
+                    if (keys.isNotEmpty()) onAttachmentsGone?.invoke(keys)
+                }
+                _threads.update { all ->
+                    val current = all[rootId] ?: return@update all
+                    all + (rootId to current.copy(
+                        replies = current.replies.map { if (it.id == readable.id) readable else it },
+                    ))
+                }
+            }
+        }
+    }
+
+    /**
+     * Opens a thread: its root, then its first page of replies.
+     *
+     * The root comes from the channel's list when it is there and from the
+     * server when it is not - a notification can point at a thread whose root
+     * is far back in history. Access is the channel's, checked by the server on
+     * both reads.
+     */
+    fun openThread(channelId: String, rootId: String) {
+        if (_threads.value[rootId]?.let { !it.failed } == true) {
+            refreshThread(rootId)
+            return
+        }
+        val held = _messages.value[channelId]?.firstOrNull { it.id == rootId }
+        _threads.update { it + (rootId to ThreadState(channelId, root = held)) }
+        scope.launch {
+            runCatching {
+                launch { runCatching { E2ee.syncChannelKeys(channelId) } }
+                val root = held ?: read(BetweenUsApi.message(rootId))
+                val page = BetweenUsApi.messages(channelId, threadRootId = rootId)
+                val replies = page.items.map { read(it) }
+                _threads.update {
+                    it + (rootId to ThreadState(
+                        channelId = channelId,
+                        root = root,
+                        replies = replies,
+                        loading = false,
+                        cursor = page.nextCursor,
+                    ))
+                }
+            }.onFailure {
+                _threads.update { all ->
+                    all + (rootId to (all[rootId] ?: ThreadState(channelId)).copy(
+                        loading = false,
+                        failed = true,
+                    ))
+                }
+            }
+        }
+    }
+
+    /** The newest page again, merged over what is held: a resumed screen is stale. */
+    private fun refreshThread(rootId: String) {
+        val held = _threads.value[rootId] ?: return
+        scope.launch {
+            runCatching {
+                val page = BetweenUsApi.messages(held.channelId, threadRootId = rootId)
+                val fresh = page.items.map { read(it) }
+                _threads.update { all ->
+                    val current = all[rootId] ?: return@update all
+                    all + (rootId to current.copy(replies = merge(current.replies, fresh)))
+                }
+            }
+        }
+    }
+
+    /** The page before the oldest reply held. A no-op once the thread is read back. */
+    fun loadOlderThread(rootId: String) {
+        val held = _threads.value[rootId] ?: return
+        val cursor = held.cursor ?: return
+        if (held.loading) return
+        _threads.update { it + (rootId to held.copy(loading = true)) }
+        scope.launch {
+            runCatching {
+                val page = BetweenUsApi.messages(held.channelId, before = cursor, threadRootId = rootId)
+                val older = page.items.map { read(it) }
+                _threads.update { all ->
+                    val current = all[rootId] ?: return@update all
+                    all + (rootId to current.copy(
+                        replies = merge(current.replies, older),
+                        cursor = page.nextCursor,
+                        loading = false,
+                    ))
+                }
+            }.onFailure {
+                _threads.update { all ->
+                    val current = all[rootId] ?: return@update all
+                    all + (rootId to current.copy(loading = false))
+                }
+            }
+        }
+    }
+
+    /**
+     * Says something in a thread. Sealed with the channel key like any message;
+     * the server is told only which root it hangs off.
+     */
+    suspend fun sendThreadReply(channelId: String, rootId: String, text: String) {
+        val said = text.trim()
+        if (said.isEmpty()) return
+        val body = MessageBody(said, emptyList(), null, usedEmoji(channelId, said)).encode()
+        val sealed = E2ee.encryptForChannel(channelId, body)
+        val message = BetweenUsApi.sendMessage(channelId, sealed, threadRootId = rootId)
+        val readable = read(message)
+        _threads.update { all ->
+            val current = all[rootId] ?: return@update all
+            if (current.replies.any { it.id == readable.id }) return@update all
+            all + (rootId to current.copy(replies = merge(current.replies, listOf(readable))))
+        }
+    }
+
+    /** Drops a thread's state when its screen is left. */
+    fun closeThread(rootId: String) {
+        _threads.update { it - rootId }
     }
 
     /**
@@ -879,6 +1057,13 @@ object Conversation {
         if (keys.isNotEmpty()) onAttachmentsGone?.invoke(keys)
 
         _messages.update { all -> all.mapValues { (_, list) -> list.filterNot { it.id in ids } } }
+        // A thread whose root is gone goes with it, and a reply that expired
+        // leaves the thread it was in.
+        _threads.update { all ->
+            (all - ids).mapValues { (_, state) ->
+                state.copy(replies = state.replies.filterNot { it.id in ids })
+            }
+        }
         scope.launch { Cache.forgetMessages(ids.toList()) }
     }
 

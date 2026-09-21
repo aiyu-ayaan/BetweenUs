@@ -504,14 +504,25 @@ object BetweenUsApi {
 
     // --- messages ---
 
-    suspend fun messages(channelId: String, before: String? = null): Page<Message> = io {
+    /** With [threadRootId], the thread under that root; otherwise the timeline, which has none. */
+    suspend fun messages(
+        channelId: String,
+        before: String? = null,
+        threadRootId: String? = null,
+    ): Page<Message> = io {
         val path = "/api/v1/messages?channelId=${enc(channelId)}" +
-            (before?.let { "&before=${enc(it)}" } ?: "")
+            (before?.let { "&before=${enc(it)}" } ?: "") +
+            (threadRootId?.let { "&threadRootId=${enc(it)}" } ?: "")
         val json = authed("GET", path)
         Page(
             items = json.optJSONArray("items")?.map { Message.from(it) }.orEmpty(),
             nextCursor = json.stringOrNull("nextCursor"),
         )
+    }
+
+    /** One message by id, tombstone included - a thread's root, usually. */
+    suspend fun message(messageId: String): Message = io {
+        Message.from(authed("GET", "/api/v1/messages/${enc(messageId)}"))
     }
 
     /**
@@ -526,6 +537,7 @@ object BetweenUsApi {
         content: String,
         attachmentKeys: List<String> = emptyList(),
         viewOnce: Boolean = false,
+        threadRootId: String? = null,
     ): Message = io {
         Message.from(
             authed(
@@ -536,6 +548,9 @@ object BetweenUsApi {
                     "content" to content,
                     "attachmentKeys" to JSONArray(attachmentKeys),
                     "viewOnce" to viewOnce,
+                    // JSON null when it is not a thread reply, which the server
+                    // reads as absent.
+                    "threadRootId" to threadRootId,
                 ),
             ),
         )

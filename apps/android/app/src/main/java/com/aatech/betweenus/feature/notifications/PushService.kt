@@ -365,7 +365,10 @@ class PushService : FirebaseMessagingService() {
         // The badge, so opening the app agrees with the notification that woke
         // it. Harmless when the socket already counted it: the same channel is
         // marked read the moment it is opened.
-        Workspace.noteUnread(channelId, 1)
+        // Not for a thread reply: it is not in the channel's timeline, so a
+        // count promising something new there would open onto nothing. The
+        // server leaves it out of the unread counts for the same reason.
+        if (data["threadRootId"].isNullOrEmpty()) Workspace.noteUnread(channelId, 1)
     }
 
     /**

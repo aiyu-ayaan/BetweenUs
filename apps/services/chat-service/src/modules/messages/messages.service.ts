@@ -19,6 +19,7 @@ import {
 } from '@betweenus/shared-types';
 import { purgeMessageAttachments } from '../uploads/attachment-sweeper';
 import { judgePollSettings, toPoll, type PollRow } from './poll-rules';
+import { threadRootProblem, threadSummaryOf } from './threads';
 
 const PAGE_SIZE = 50;
 /**
@@ -121,8 +122,27 @@ export class MessagesService {
    * the database, and a conversation that silently closes over a removed
    * message is harder to follow than one that says something was here.
    */
-  async history(userId: string, channelId: string, before?: string): Promise<Paginated<Message>> {
+  async history(
+    userId: string,
+    channelId: string,
+    before?: string,
+    threadRootId?: string,
+  ): Promise<Paginated<Message>> {
     await this.requireChannelAccess(userId, channelId, PERMISSIONS.VIEW_CHANNEL);
+
+    // A thread is paged exactly like its channel, under its root. The root has
+    // to be in this channel - a thread id is not a way round the access check
+    // on the channel it lives in. A deleted root is fine: the thread under it
+    // is still somebody's conversation.
+    if (threadRootId) {
+      const root = await prisma.message.findFirst({
+        where: { id: threadRootId, channelId },
+        select: { id: true },
+      });
+      if (!root) {
+        throw new NotFoundException({ code: 'MESSAGE_NOT_FOUND', message: 'Message not found' });
+      }
+    }
 
     const cursor = before
       ? await prisma.message.findUnique({ where: { id: before }, select: { createdAt: true } })
@@ -132,6 +152,9 @@ export class MessagesService {
     const rows = await prisma.message.findMany({
       where: {
         channelId,
+        // The channel's own timeline leaves thread replies out; a thread's
+        // history is nothing but them.
+        threadRootId: threadRootId ?? null,
         ...(cursor || clearedAt
           ? {
               createdAt: {
@@ -152,6 +175,34 @@ export class MessagesService {
       items,
       nextCursor: rows.length === PAGE_SIZE && oldest ? oldest.id : null,
     };
+  }
+
+  /**
+   * One message by id, tombstone included - what a client opening a thread
+   * from a notification needs when the root is not in anything it has loaded.
+   *
+   * The same visibility as a history page: channel access, and nothing from
+   * before this account's own cut-off.
+   */
+  async one(userId: string, messageId: string): Promise<Message> {
+    const row = await prisma.message.findUnique({
+      where: { id: messageId },
+      include: MESSAGE_INCLUDE,
+    });
+    if (!row) {
+      throw new NotFoundException({ code: 'MESSAGE_NOT_FOUND', message: 'Message not found' });
+    }
+    // Resolved after the lookup, and a message in a channel the caller cannot
+    // see answers the same 404 as one that does not exist.
+    const access = await resolveChannelAccess(userId, row.channelId);
+    if (!access || !access.permissions.includes(PERMISSIONS.VIEW_CHANNEL)) {
+      throw new NotFoundException({ code: 'MESSAGE_NOT_FOUND', message: 'Message not found' });
+    }
+    const floor = await this.historyFloor(userId, row.channelId);
+    if (floor && row.createdAt.getTime() <= floor.getTime()) {
+      throw new NotFoundException({ code: 'MESSAGE_NOT_FOUND', message: 'Message not found' });
+    }
+    return toMessage(row);
   }
 
   /** Pinned messages of one channel, most recently pinned first. */
@@ -304,6 +355,7 @@ export class MessagesService {
     attachmentKeys: string[] = [],
     viewOnce = false,
     pollSettings?: CreatePollSettings,
+    threadRootId?: string,
   ): Promise<Message> {
     const access = await this.requireChannelAccess(userId, channelId, PERMISSIONS.SEND_MESSAGE);
 
@@ -321,6 +373,31 @@ export class MessagesService {
       poll = judgePollSettings(pollSettings, new Date());
       if (!poll.ok) {
         throw new BadRequestException({ code: poll.code, message: poll.message });
+      }
+    }
+
+    if (threadRootId) {
+      // A one-time reply would be destroyed out from under the thread's count
+      // by a look, which is a thread quietly rewriting itself.
+      if (viewOnce) {
+        throw new BadRequestException({
+          code: 'THREAD_NOT_ALLOWED',
+          message: 'A thread reply cannot be a one-time message',
+        });
+      }
+      const root = await prisma.message.findUnique({
+        where: { id: threadRootId },
+        select: { channelId: true, kind: true, threadRootId: true, viewOnce: true },
+      });
+      const problem = threadRootProblem(root, channelId);
+      if (problem === 'MESSAGE_NOT_FOUND') {
+        throw new NotFoundException({ code: problem, message: 'Message not found' });
+      }
+      if (problem === 'THREAD_NOT_ALLOWED') {
+        throw new BadRequestException({
+          code: problem,
+          message: 'That message cannot have a thread',
+        });
       }
     }
 
@@ -344,6 +421,7 @@ export class MessagesService {
         expiresAt,
         viewOnce,
         ...(poll?.ok ? { poll: { create: poll.value } } : {}),
+        threadRootId: threadRootId ?? null,
       },
       include: MESSAGE_INCLUDE,
     });
@@ -366,6 +444,9 @@ export class MessagesService {
     // The WebSocket gateway - in this process and in every other instance -
     // fans this out to subscribed sockets.
     await this.events.publish(EVENTS.MESSAGE_CREATED, { message });
+    // The root's "N replies" chip, after the reply itself: a client that sees
+    // the count move before the reply exists would open an empty thread.
+    if (threadRootId) await refreshThreadSummaries(this.events, [threadRootId]);
     return message;
   }
 
@@ -485,6 +566,9 @@ export class MessagesService {
       channelId: row.channelId,
       message: toMessage(row),
     });
+    // A deleted reply stops counting towards its root's chip. A deleted root
+    // keeps its thread: the tombstone above still carries the summary.
+    if (row.threadRootId) await refreshThreadSummaries(this.events, [row.threadRootId]);
   }
 
   /**
@@ -747,6 +831,10 @@ interface MessageRow {
   webhook?: { id: string; name: string; avatarUrl: string | null } | null;
   /** Set when the message is a poll. Optional for callers that did not select it. */
   poll?: PollRow | null;
+  /** Thread columns; optional so a caller that selected without them still fits. */
+  threadRootId?: string | null;
+  threadReplyCount?: number;
+  threadLastReplyAt?: Date | null;
 }
 
 export function toMessage(row: MessageRow): Message {
@@ -777,6 +865,8 @@ export function toMessage(row: MessageRow): Message {
     expiresAt: row.expiresAt ? row.expiresAt.toISOString() : null,
     viewOnce: row.viewOnce ?? false,
     viewedBy: (row.views ?? []).map((view) => view.userId),
+    threadRootId: row.threadRootId ?? null,
+    thread: threadSummaryOf(row),
     ...(row.kind === 'WEBHOOK'
       ? {
           webhook: {
@@ -791,6 +881,40 @@ export function toMessage(row: MessageRow): Message {
       : {}),
     ...(row.poll ? { poll: toPoll(row.poll) } : {}),
   };
+}
+
+/**
+ * Rewrites each root's thread summary from its live replies, and tells every
+ * subscriber the root changed.
+ *
+ * Recomputed from the rows rather than incremented, so a reply that was
+ * deleted, expired, or sent twice across a retry can never leave the count
+ * drifting. A root that no longer exists - destroyed by a disappearing window,
+ * which takes its thread with it - is skipped rather than recreated.
+ *
+ * The root travels as an ordinary `message.updated`: that is already what a
+ * client does with "this message is not what you last saw", and the chip is
+ * part of the message.
+ */
+export async function refreshThreadSummaries(events: EventBus, rootIds: string[]): Promise<void> {
+  for (const rootId of new Set(rootIds)) {
+    const replies = await prisma.message.aggregate({
+      where: { threadRootId: rootId, deletedAt: null },
+      _count: { _all: true },
+      _max: { createdAt: true },
+    });
+    const { count } = await prisma.message.updateMany({
+      where: { id: rootId },
+      data: {
+        threadReplyCount: replies._count._all,
+        threadLastReplyAt: replies._max.createdAt,
+      },
+    });
+    if (count === 0) continue;
+
+    const root = await prisma.message.findUnique({ where: { id: rootId }, include: MESSAGE_INCLUDE });
+    if (root) await events.publish(EVENTS.MESSAGE_UPDATED, { message: toMessage(root) });
+  }
 }
 
 /** Groups the rows by emoji, keeping the order they were first used in. */

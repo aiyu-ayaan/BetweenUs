@@ -25,6 +25,7 @@ import { prisma } from '@betweenus/database';
 import { EVENTS, EventBus } from '@betweenus/events';
 import { Logger } from '@betweenus/logger';
 import { purgeMessageAttachments } from '../uploads/attachment-sweeper';
+import { refreshThreadSummaries } from './messages.service';
 
 /**
  * How often to look.
@@ -58,16 +59,26 @@ export function expiredWhere(now: Date = new Date()): { expiresAt: { lte: Date }
 export async function sweepExpired(events: EventBus, now: Date = new Date()): Promise<number> {
   const doomed = await prisma.message.findMany({
     where: expiredWhere(now),
-    select: { id: true, channelId: true },
+    select: { id: true, channelId: true, threadRootId: true },
     orderBy: { expiresAt: 'asc' },
     take: BATCH,
   });
   if (doomed.length === 0) return 0;
+  const doomedIds = doomed.map((row) => row.id);
 
-  await purgeMessageAttachments(doomed.map((row) => row.id));
-  await prisma.message.deleteMany({ where: { id: { in: doomed.map((row) => row.id) } } });
+  // A root that disappears takes its thread with it - the foreign key
+  // cascades - so the replies' blobs are purged and their removal announced
+  // here too, or they would leave the database with nobody told.
+  const orphaned = await prisma.message.findMany({
+    where: { threadRootId: { in: doomedIds }, id: { notIn: doomedIds } },
+    select: { id: true, channelId: true },
+  });
+  const gone = [...doomed, ...orphaned];
 
-  for (const row of doomed) {
+  await purgeMessageAttachments(gone.map((row) => row.id));
+  await prisma.message.deleteMany({ where: { id: { in: doomedIds } } });
+
+  for (const row of gone) {
     await events.publish(EVENTS.MESSAGE_DELETED, {
       messageId: row.id,
       channelId: row.channelId,
@@ -76,6 +87,15 @@ export async function sweepExpired(events: EventBus, now: Date = new Date()): Pr
       message: null,
     });
   }
+
+  // A reply that expired under a root that is still here: the chip shrinks.
+  const held = new Set(doomedIds);
+  await refreshThreadSummaries(
+    events,
+    doomed.flatMap((row) =>
+      row.threadRootId && !held.has(row.threadRootId) ? [row.threadRootId] : [],
+    ),
+  );
   return doomed.length;
 }
 

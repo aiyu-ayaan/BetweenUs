@@ -330,6 +330,13 @@ than tombstoning them: a conversation that fills with "this message was
 deleted" for everything that aged out is not a disappearing conversation, it is
 a very detailed index of one.
 
+`threadRootId` makes a message a thread reply (self-relation, `ON DELETE
+CASCADE`, one level deep); `threadReplyCount` and `threadLastReplyAt` are the
+summary a root carries, recomputed from its live replies and never incremented.
+`@@index([threadRootId, createdAt])` serves thread paging. Only the pointer is
+in the clear: the reply's body is sealed with the channel key like any other.
+Migration `20260922120000_threads`.
+
 `viewOnce` marks a one-time message; `viewedAt` records when the **first**
 recipient opened it, which is what the backstop expiry is measured from. Who
 has looked lives in `MessageView`, one row per person — see below.

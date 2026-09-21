@@ -215,8 +215,17 @@ export interface Message {
   reactions: MessageReactionSummary[];
   replyTo: MessageReply | null;
   isPinned: boolean;
+  /** Set when this is a thread reply: the root it hangs off. Absent from the timeline. */
+  threadRootId?: string | null;
+  /** On a root: `{ replyCount, lastReplyAt }` for the "N replies" chip. */
+  thread?: MessageThreadSummary | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface MessageThreadSummary {
+  replyCount: number;
+  lastReplyAt: string | null;
 }
 
 export interface MessageAttachment {

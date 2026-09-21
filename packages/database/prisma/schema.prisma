@@ -1128,8 +1128,29 @@ model Message {
   /// `WEBHOOK`, and what a client reads the name and picture off - `author` is
   /// the account that created the webhook, which is not who the row is from.
   webhookId   String?
+  /// The root this message answers, when it is a thread reply.
+  ///
+  /// Metadata the server has to see - it keeps the reply out of the channel's
+  /// own timeline and is what the thread's history is paged by - and nothing
+  /// more: the body is sealed with the same channel key as every other
+  /// message. Distinct from a quote reply, which is a snapshot inside the
+  /// envelope and stays in the main timeline. One level only: a reply is
+  /// never itself a root.
+  threadRootId      String?
+  /// On a root: how many live replies its thread holds. Recomputed from the
+  /// rows on every change rather than incremented, so a deleted or expired
+  /// reply can never leave it drifting.
+  threadReplyCount  Int       @default(0)
+  /// On a root: when its newest live reply was sent. Null with no replies.
+  threadLastReplyAt DateTime?
 
   channel     Channel           @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  /// `Cascade`: a root is only destroyed outright by a disappearing window,
+  /// and a thread left hanging off a message that disappeared is exactly the
+  /// marker that feature promises not to leave. An ordinary delete is a
+  /// tombstone, so the thread stays reachable under "original message deleted".
+  threadRoot    Message?  @relation("MessageThread", fields: [threadRootId], references: [id], onDelete: Cascade)
+  threadReplies Message[] @relation("MessageThread")
   author      User              @relation(fields: [authorId], references: [id], onDelete: Cascade)
   deletedBy   User?             @relation("MessageDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
   pinnedBy    User?             @relation("MessagePinnedBy", fields: [pinnedById], references: [id], onDelete: SetNull)
@@ -1149,6 +1170,8 @@ model Message {
   @@index([channelId, pinnedAt])
   // The disappearing sweeper reads whatever is past its window, oldest first.
   @@index([expiresAt])
+  // A thread's history pages newest-first under its root.
+  @@index([threadRootId, createdAt])
   @@map("messages")
 }
 

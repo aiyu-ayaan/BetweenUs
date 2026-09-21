@@ -82,6 +82,7 @@ Base Route: `/api/v1`
 | :--- | :--- | :---: | :--- |
 | `GET` | `/channels/:channelId/messages` | Yes | Cursor-paginated message history (sorted newest to oldest). |
 | `POST` | `/channels/:channelId/messages` | Yes | Publishes an encrypted or system message. |
+| `GET` | `/messages/:messageId` | Yes | One message by id, tombstone included. 404 outside a channel the caller can see. |
 | `PATCH` | `/messages/:messageId` | Yes | Edits message ciphertext or content. |
 | `DELETE` | `/messages/:messageId` | Yes | Soft-deletes a message (renders tombstone). |
 | `POST` | `/messages/:messageId/reactions` | Yes | Adds an emoji reaction to a message. |

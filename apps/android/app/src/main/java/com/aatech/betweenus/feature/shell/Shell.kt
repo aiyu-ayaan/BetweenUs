@@ -53,6 +53,7 @@ import com.aatech.betweenus.core.store.Workspace
 import com.aatech.betweenus.feature.chat.ChatScreen
 import com.aatech.betweenus.feature.home.AddFriendScreen
 import com.aatech.betweenus.feature.home.FriendsScreen
+import com.aatech.betweenus.feature.chat.ThreadScreen
 import com.aatech.betweenus.feature.members.MembersScreen
 import com.aatech.betweenus.feature.status.StatusScreen
 import com.aatech.betweenus.feature.remote.RemoteMachinesScreen
@@ -229,6 +230,8 @@ fun Shell(user: PublicUser) {
     val switcherDirects by Workspace.directChannels.collectAsState()
     var serverId by rememberSaveable { mutableStateOf(LastPlace.serverId) }
     var channelId by rememberSaveable { mutableStateOf(LastPlace.channelId) }
+    /** The root of the thread on screen, when [Route.Thread] is. */
+    var threadRootId by rememberSaveable { mutableStateOf<String?>(null) }
 
     /**
      * The voice channel, kept apart from the text one. They are both "the
@@ -591,6 +594,10 @@ fun Shell(user: PublicUser) {
                                 self = user,
                                 onOpenMenu = openMenu,
                                 onOpenMembers = { navigation.navigate(Route.Members) },
+                                onOpenThread = { rootId ->
+                                    threadRootId = rootId
+                                    navigation.navigate(Route.Thread)
+                                },
                                 // The call button in a text channel means the voice
                                 // channel of the server it is in - a text channel
                                 // id is not something the call service will admit.
@@ -630,6 +637,18 @@ fun Shell(user: PublicUser) {
                                         }
                                     }
                                 },
+                            )
+                        }
+                    }
+                    composable(Route.Thread) {
+                        val root = threadRootId
+                        val channel = channelId
+                        if (root != null && channel != null) {
+                            ThreadScreen(
+                                channelId = channel,
+                                rootId = root,
+                                self = user,
+                                onBack = { navigation.popBackStack() },
                             )
                         }
                     }
@@ -971,6 +990,7 @@ object Route {
     const val AddFriend = "add-friend"
     const val Chat = "chat"
     const val Members = "members"
+    const val Thread = "thread"
     const val Voice = "voice"
     const val Settings = "settings"
     const val AccountSettings = "account-settings"

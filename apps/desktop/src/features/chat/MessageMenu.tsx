@@ -3,6 +3,7 @@ import { QUICK_REACTIONS } from './emoji';
 import {
   ClockIcon,
   CopyIcon,
+  MessageIcon,
   ReplyIcon,
   PencilIcon,
   PinIcon,
@@ -14,6 +15,11 @@ export interface MessageMenuActions {
   onReact: (emoji: string) => void;
   /** Answers this message. Absent on a tombstone, which has nothing to quote. */
   onReply?: () => void;
+  /**
+   * Opens this message's thread. Absent on a tombstone with no thread, on a
+   * one-time message, and on a message that is itself a thread reply.
+   */
+  onThread?: () => void;
   /**
    * Carries this message into another channel. Absent when there is nothing
    * to carry: a tombstone, or a one-time message, whose whole bargain is that
@@ -82,6 +88,7 @@ export function MessageMenu({
     1 +
     [
       actions.onReply,
+      actions.onThread,
       actions.onForward,
       actions.onRemind,
       actions.onEdit,
@@ -140,6 +147,16 @@ export function MessageMenu({
           label="Reply"
           onClick={() => {
             actions.onReply?.();
+            onClose();
+          }}
+        />
+      )}
+      {actions.onThread && (
+        <Item
+          icon={<MessageIcon className="h-4 w-4" />}
+          label="Reply in thread"
+          onClick={() => {
+            actions.onThread?.();
             onClose();
           }}
         />

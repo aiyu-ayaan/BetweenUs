@@ -78,10 +78,11 @@ not the process.
 
 | Method | Path | What it does |
 | --- | --- | --- |
-| GET | `/` | Page a channel's history |
+| GET | `/` | Page a channel's history; `?threadRootId=` pages that root's thread instead |
+| GET | `/:messageId` | One message by id, tombstone included (after the literal `/pins`, `/unfurl` routes) |
 | GET | `/unfurl` | Link preview metadata |
 | GET | `/pins` | A channel's pinned messages |
-| POST | `/` | Send a message |
+| POST | `/` | Send a message; `threadRootId` posts it into that root's thread |
 | PATCH | `/:messageId` | Edit (author only) |
 | DELETE | `/:messageId` | Delete (author, or `DELETE_MESSAGE`) |
 | POST | `/:messageId/burn` | Report a one-time message opened — destroys it |
@@ -107,6 +108,40 @@ The cut is published as `chats.cleared` — carrying the instant and the
 every device holds a cache of decrypted messages that no refetch would clear. A
 scoped clear drops only that channel's cache; dropping the lot would turn one
 clear into a spinner on the next several conversations opened.
+
+### Threads
+
+A thread hangs off a root message in the same channel. A reply is an ordinary
+sealed message with one extra field the server can see, `threadRootId`; the
+body is sealed with the channel key exactly like any other, so the server
+learns *that* a thread exists and how busy it is and never what was said.
+This is not the quote reply: `MessageBody.replyTo` is a snapshot inside the
+envelope of a message that stays in the timeline.
+
+- **Access** is the channel's, from `resolveChannelAccess`: `SEND_MESSAGE` to
+  reply, `VIEW_CHANNEL` to page or fetch. A thread in a channel the caller
+  cannot see answers the same 404 as one that does not exist.
+- **Timeline.** `GET /messages?channelId=` (no `threadRootId`) returns only
+  rows with a null `threadRootId`; `?threadRootId=` returns only that root's
+  replies, paged newest-first by the same cursor and the same page size.
+- **Validation** (`threads.ts`). The root must be in the reply's channel, must
+  not itself be a reply (one level only), must be a bodied kind (not an arrival
+  notice) and must not be a one-time message; a reply cannot be one-time
+  either. Codes: `MESSAGE_NOT_FOUND` (404), `THREAD_NOT_ALLOWED` (400).
+- **Root summary.** The root carries `thread: { replyCount, lastReplyAt }`
+  (columns `threadReplyCount`, `threadLastReplyAt`). They are *recomputed*
+  from the live replies whenever a reply is sent, deleted or expires - never
+  incremented - and published as an ordinary `message.updated` for the root,
+  after the reply's own `message.created`.
+- **Realtime.** A reply travels as `message.created` carrying `threadRootId`,
+  edits and deletions as `message.updated` - the same events as any message.
+  Clients keep replies out of the timeline and its cache.
+- **Deleting a root** is a tombstone like any other, so the thread stays
+  reachable: the root reads "Original message deleted" and the chip remains.
+  A root destroyed outright (disappearing window) takes its thread with it via
+  the foreign key's cascade; the sweeper announces each reply's removal too.
+- **Unread.** Replies are excluded from the channel unread counts, because
+  they are not in the timeline a badge would open onto.
 
 ### How a message stops existing
 

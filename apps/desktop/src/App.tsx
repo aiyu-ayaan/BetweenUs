@@ -38,6 +38,7 @@ import { RemoteSessionView } from './features/remote/RemoteSessionView';
 import { MemberList } from './features/members/MemberList';
 import { ChatView } from './features/chat/ChatView';
 import { PinnedPanel } from './features/chat/PinnedPanel';
+import { ThreadPanel } from './features/chat/ThreadPanel';
 import { SearchPanel } from './features/chat/SearchPanel';
 import { ScheduledPanel } from './features/chat/ScheduledPanel';
 import { followScheduledNotification, useScheduledStore } from './stores/scheduled';
@@ -457,6 +458,7 @@ function Workbench(): JSX.Element {
     rightPanel === 'pins' ||
     rightPanel === 'search' ||
     rightPanel === 'scheduled' ||
+    rightPanel === 'thread' ||
     (rightPanel === 'members' && view === 'server');
   const rightSheet = useFocusTrap<HTMLDivElement>(isRightPanelOpen);
 
@@ -635,6 +637,7 @@ function Workbench(): JSX.Element {
                 {rightPanel === 'pins' && <PinnedPanel onClose={handleCloseRightPanel} />}
                 {rightPanel === 'search' && <SearchPanel onClose={handleCloseRightPanel} />}
                 {rightPanel === 'scheduled' && <ScheduledPanel onClose={handleCloseRightPanel} />}
+                {rightPanel === 'thread' && <ThreadPanel onClose={handleCloseRightPanel} />}
                 {rightPanel === 'members' && view === 'server' && (
                   <MemberList onClose={handleCloseRightPanel} />
                 )}
@@ -676,6 +679,9 @@ function Workbench(): JSX.Element {
             )}
             {rightPanel === 'scheduled' && (
               <ScheduledPanel onClose={handleCloseRightPanel} className="h-full w-full border-none bg-surface-900" />
+            )}
+            {rightPanel === 'thread' && (
+              <ThreadPanel onClose={handleCloseRightPanel} className="h-full w-full border-none bg-surface-900" />
             )}
             {rightPanel === 'members' && view === 'server' && (
               <MemberList onClose={handleCloseRightPanel} className="h-full w-full border-none bg-surface-900 flex" />
