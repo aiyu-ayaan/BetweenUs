@@ -73,7 +73,7 @@ export interface WebSocketMessage<T = unknown> {
 | Opcode | Payload Schema | Description |
 | :--- | :--- | :--- |
 | `chat.message_created` | `Message` | Broadcasts a newly posted message (plaintext or encrypted). |
-| `chat.message_updated` | `Message` | Broadcasts an edited message or content modification. |
+| `chat.message_updated` | `Message` | Broadcasts an edited message or content modification. A vote, a retraction and a close on a poll arrive as this event too, carrying the whole `Message` with its refreshed `poll.tallies` - who chose what, by user id, the way `reactions` carries who reacted. |
 | `chat.message_deleted` | `{ channelId: string; messageId: string }` | Broadcasts message deletion / tombstone render. |
 | `chat.reaction_added` | `{ messageId: string; emoji: string; userId: string }` | Real-time emoji reaction addition. |
 | `chat.reaction_removed`| `{ messageId: string; emoji: string; userId: string }` | Real-time emoji reaction removal. |

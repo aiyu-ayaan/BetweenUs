@@ -77,6 +77,7 @@ BetweenUs guarantees absolute message privacy. Messages and uploaded files are e
 - **Zero-Knowledge Backend**: Servers, database operators, and network intermediaries cannot inspect message content, channel names, or attachments.
 - **Rich Markdown Formatting**: Full support for headings, bold/italic inline marks, blockquotes, ordered/unordered lists, code snippets, and syntax-highlighted code blocks.
 - **Interactive Messaging**: Real-time typing indicators, emoji reactions with custom pickers, threaded replies, message pinning, and edit histories.
+- **Polls**: Ask a question with two to ten options, single or multi-choice, with an optional closing time. Live bars, counts and who-chose-what update as people vote; change or retract your vote; the author (or a moderator) closes it. The question and options are inside the encrypted message; the server only counts option indexes.
 - **Encrypted Media & Attachments**: Images, videos, PDFs, and archives up to 100 MB are encrypted in memory prior to upload and decrypted on the recipient device.
 - **Local Persistence & Search**: Decrypted messages are indexed into encrypted SQLite/Room storage for instant full-text search.
 

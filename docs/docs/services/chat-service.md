@@ -34,6 +34,45 @@ one. `server.updated` goes to the `server:<id>` room.
 See [Events](/system-design/events) for why edits, deletes, pins and
 reactions all arrive as one `message.updated` shape.
 
+## Polls: refereed, not decrypted
+
+A poll is an ordinary `USER` message. Its question and option labels sit inside
+the encrypted envelope; the server holds a `MessagePoll` row beside it with
+only `optionCount`, `multiChoice`, `closesAt` and `closedAt`, and a `PollVote`
+row per chosen option index. It applies [Play Together](/architecture/play-together)'s
+referee shape to a message: **a vote is a number**. The client sends indexes,
+the server checks them against rules it can evaluate without reading anything
+(`poll-rules.ts`: the poll is open, every index is below `optionCount`, a
+single-choice poll took at most one), counts, and broadcasts the tally, and
+every client draws what came back rather than a count of its own.
+
+**Why chat-service and not call-service.** call-service referees a live,
+in-memory, ordered board and is single-replica for that reason. A poll has none
+of that: it is stored in Postgres, sent down the send route, deleted, pinned,
+expired and fanned out with its message, and its votes must survive a restart.
+Putting the referee in call-service would have split one message's lifecycle
+across two services for the sake of a metaphor. What is reused is the shape,
+not the process.
+
+- **Access** is `resolveChannelAccess` (via `requireChannelAccess`), never
+  inline. Voting takes `SEND_MESSAGE`; a channel the caller cannot see and a
+  message that is not a poll both answer `404`.
+- **A ballot is the whole ballot.** `PUT .../poll/vote` replaces the caller's
+  rows in one transaction (delete plus insert), so it is idempotent, a switch
+  is never counted twice, and `[]` retracts. The unique index on
+  `(messageId, userId, option)` covers two devices voting at once.
+- **Closing** is the author, or `MANAGE_MESSAGE` in a server channel (there is
+  no role in a DM, so only the author). A poll is closed if `closedAt` is set
+  *or* `closesAt` has passed; the second is evaluated on every read and vote,
+  so no sweeper is needed and none can be late.
+- **No edits.** The labels are sealed, so the server cannot tell a typo fix from
+  swapping "yes" and "no" under everybody's votes. `PATCH` on a poll is refused.
+  Deleting the message deletes the poll and its votes in the same transaction.
+- **Notifications** carry only the ciphertext envelope like any message. The
+  poll preview ("Poll: <question>") is built on the receiving client after it
+  opens the envelope; no service ever has the question to put in one.
+
+
 ## `/api/v1/messages`
 
 | Method | Path | What it does |
@@ -48,6 +87,8 @@ reactions all arrive as one `message.updated` shape.
 | PUT | `/:messageId/pin` | Pin (`MANAGE_MESSAGE` in a server channel, free in a DM) |
 | DELETE | `/:messageId/pin` | Unpin |
 | POST | `/:messageId/reactions` | React |
+| PUT | `/:messageId/poll/vote` | Replace the caller's ballot on a poll (option indexes) |
+| POST | `/:messageId/poll/close` | Close a poll (author, or `MANAGE_MESSAGE`) |
 | POST | `/clear` | Hide **this account's own** history: one channel, or all |
 
 `/clear` is a filter and never a delete. With a `channelId` it stamps

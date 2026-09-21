@@ -393,6 +393,15 @@ with an ordinary envelope, and there is no endpoint for it.
   "one-time" a promise kept only by software the sender does not control, which
   is not a promise. Nothing about the content leaks — not its name, type or
   size beyond what the `Attachment` row already says.
+- **A poll announces that it is one, and how it stands.** The server sees that
+  a message is a poll, its option count, whether it is multi-choice, when it
+  closes, and per-user votes as option indexes (`MessagePoll`, `PollVote`) -
+  the same class of leak as reactions, and for the same reason: it has to count
+  for readers who may not hold the key at the moment they ask. The question
+  and the option labels stay inside the envelope, the server refuses a `poll`
+  field that carries anything but numbers, and a vote index means nothing
+  without the sealed labels it points into. Push notifications carry only the
+  ciphertext, so the preview is built on the device.
 - **A message's expiry is plaintext** (`Message.expiresAt`). The server has to
   know when to delete the row, which is the whole feature.
 - **Avatars and server icons are unencrypted** by necessity — an `<img>`
