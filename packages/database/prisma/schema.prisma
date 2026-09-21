@@ -196,6 +196,9 @@ model User {
   statuses        Status[]             @relation("StatusAuthor")
   statusViews     StatusView[]         @relation("StatusViewer")
   statusReactions StatusReaction[]     @relation("StatusReactor")
+  /// Votes this account has cast, and the polls it closed. See MessagePoll.
+  pollVotes       PollVote[]           @relation("PollVoter")
+  pollsClosed     MessagePoll[]        @relation("PollClosedBy")
 
   @@map("users")
 }
@@ -1097,6 +1100,8 @@ model Message {
   reactions   MessageReaction[]
   attachments Attachment[]
   views       MessageView[]
+  /// Set when this message is a poll. See MessagePoll.
+  poll        MessagePoll?
 
   // History paging reads newest-first within a channel.
   @@index([channelId, createdAt])
@@ -1153,6 +1158,64 @@ model MessageReaction {
   @@unique([messageId, userId, emoji])
   @@index([messageId])
   @@map("message_reactions")
+}
+
+/// The part of a poll the server referees.
+///
+/// A poll is an ordinary `USER` message: the question and every option label
+/// are inside the encrypted envelope, and this row holds nothing a reader of
+/// the database could learn them from. What it holds is what the server needs
+/// to count - how many options there are, whether more than one may be
+/// chosen, and whether voting has stopped. It is Play Together's referee
+/// shape applied to a message: a vote is a number, the server checks the
+/// number is legal and counts it, and it never reads the words the number
+/// points at.
+///
+/// Keyed on the message rather than given an id of its own, because a poll is
+/// not a thing apart from the message that asks it. Deleting the message
+/// deletes the poll and every vote.
+model MessagePoll {
+  messageId   String    @id
+  /// How many options the envelope carries, 2 to 10. The server cannot see
+  /// the labels, so this is the only bound it can check a vote against.
+  optionCount Int
+  /// Whether a voter may choose more than one option.
+  multiChoice Boolean   @default(false)
+  /// When voting stops by itself, stamped from the chosen duration at send
+  /// time. Null means it stays open until somebody closes it.
+  closesAt    DateTime?
+  /// When the author or a moderator closed it early. Either this or a past
+  /// `closesAt` closes a poll; nothing sweeps the second into the first.
+  closedAt    DateTime?
+  closedById  String?
+  createdAt   DateTime  @default(now())
+
+  message  Message    @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  closedBy User?      @relation("PollClosedBy", fields: [closedById], references: [id], onDelete: SetNull)
+  votes    PollVote[]
+
+  @@map("message_polls")
+}
+
+/// One person's choice of one option in one poll.
+///
+/// A row per chosen option rather than an array per voter, so a multi-choice
+/// ballot is several rows and the unique index is what stops the same option
+/// being counted twice. `option` is an index into the labels inside the
+/// envelope - a number, never a word.
+model PollVote {
+  id        String   @id @default(uuid())
+  messageId String
+  userId    String
+  option    Int
+  createdAt DateTime @default(now())
+
+  poll MessagePoll @relation(fields: [messageId], references: [messageId], onDelete: Cascade)
+  user User        @relation("PollVoter", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, option])
+  @@index([messageId])
+  @@map("poll_votes")
 }
 
 /// One uploaded blob, and which message claims it.
