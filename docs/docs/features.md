@@ -29,6 +29,7 @@ import useBaseUrl from '@docusaurus/useBaseUrl';
 | **Remote Desktop Control** | 🖥️ Agent & Controller | 🎮 Controller Only | 👁️ Viewer Only |
 | **Moments (24h Ephemeral Stories)** | ✅ Full Support | ✅ Full Support | ✅ Full Support |
 | **Multi-Theme Engine (16 Themes)** | ✅ 16 Themes + Accents | ✅ 16 Themes + Accents | ✅ 16 Themes + Material You |
+| **Channel Categories (collapse, drag to reorder)** | ✅ Full, folding per machine | ✅ Full, folding per machine | 👁️ Grouped and collapsible, no reordering |
 | **Server Rail Folders** | ✅ Collapsible, per machine | ✅ Collapsible, per machine | ➖ Flat rail |
 | **Granular Server RBAC & Roles** | ✅ Full Administration | ✅ Full Administration | ✅ Member Views |
 | **E2EE Key Backup & Machine Revocation** | ✅ Full Device Registry | ✅ Full Device Registry | ✅ Passphrase Backup |

@@ -95,7 +95,7 @@ Zero inbound port dial-out, live low-latency stream, telemetry monitor.
 | --- | --- |
 | Accounts | Register, login, refresh-token rotation with reuse detection, Google and GitHub sign-in, admin panel |
 | Servers | Servers, custom roles with colours, per-member permission overrides, invite links that expire and can be revoked, custom emoji, incoming webhooks, server settings |
-| Channels | Public and private text channels, private channels as an allowlist, direct messages between friends |
+| Channels | Public and private text channels, private channels as an allowlist, categories you can fold away and drag into order, direct messages between friends |
 | Messages & Chat | End-to-end encrypted, realtime over WebSocket, history paging in both directions, replies, `:` emoji search, per-server custom emoji including animated, reactions with who-reacted names, drag-and-drop and a preview before sending, full-screen zoomable image viewer, integrated video player, and local media album saving |
 | Voice and video | Peer-to-peer voice channels, camera, one screen share at a time with takeover, join and leave tones, manual quality override, end-to-end encrypted media, no media server |
 | Listen together | A shared YouTube queue inside a voice call: everyone hears the same track in step, from their own connection, at full quality. Audio only - no picture, and no stream between anybody. The desktop app plays the real youtube.com, so a label's music video plays where an embed refuses it. Browse the site inside the app, signed in as yourself, and queue what you are looking at. Anybody can add, skip or pause; music ducks under whoever is talking |
@@ -148,6 +148,7 @@ to be framed, so no browser tab can ever show it.
 | Per-member permission overrides | ✅ | ✅ | ✅ |
 | Add a friend to a server, kick, change role | ✅ | ✅ | ✅ |
 | Text and voice channels, private channel allowlists | ✅ | ✅ | ✅ |
+| Channel categories: collapse, drag or keyboard to reorder | ✅ | ✅ | 👁️ Grouped and collapsible; reordering on desktop and web |
 | Custom emoji: add and remove | ✅ | ✅ | ✅ |
 | **Messaging** | | | |
 | End-to-end encrypted messages, realtime, history paging | ✅ | ✅ | ✅ |

@@ -63,6 +63,11 @@ Base Route: `/api/v1/servers`
 | `DELETE` | `/:serverId` | Yes | Permanently deletes server (requires `OWNER` role). |
 | `GET` | `/:serverId/channels` | Yes | Lists text and voice channels within the server. |
 | `POST` | `/:serverId/channels` | Yes | Creates a new channel (`TEXT` or `VOICE`). |
+| `GET` | `/:serverId/categories` | Yes | Lists the server's channel categories. |
+| `POST` | `/:serverId/categories` | Yes | Creates a category (`MANAGE_CHANNEL`). |
+| `PATCH` | `/:serverId/categories/:categoryId` | Yes | Renames a category (`MANAGE_CHANNEL`). |
+| `DELETE` | `/:serverId/categories/:categoryId` | Yes | Deletes a category; its channels move to uncategorized (`MANAGE_CHANNEL`). |
+| `PUT` | `/:serverId/channel-layout` | Yes | Reorders categories and moves channels between them, atomically (`MANAGE_CHANNEL`). |
 | `GET` | `/:serverId/members` | Yes | Lists enrolled members with assigned roles and joined timestamps. |
 | `POST` | `/:serverId/invites` | Yes | Creates a shareable invite code with max uses and TTL. |
 | `POST` | `/invites/:code/join` | Yes | Joins a server using an active invite link. |
