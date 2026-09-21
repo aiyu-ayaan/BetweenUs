@@ -27,13 +27,16 @@
  * this design exists to make unreachable. `assertPortableRemains` is that rule
  * and it is the only thing here that ever refuses a delete.
  */
+import { createDecipheriv } from 'node:crypto';
 import { BadRequestException, ConflictException, ForbiddenException, Injectable } from '@nestjs/common';
+import { openSecret, sealSecret } from '@betweenus/auth';
 import { prisma } from '@betweenus/database';
 import {
   PORTABLE_FACTOR_KINDS,
   isPortableFactor,
   type AccountVaultResponse,
   type CreateVaultRequest,
+  type VaultEscrowResponse,
   type PutVaultFactorRequest,
   type RotateVaultRequest,
   type VaultFactor,
@@ -50,6 +53,15 @@ import {
  * hammering the endpoint rather than somebody with fifty laptops.
  */
 const MAX_PENDING_GRANTS = 20;
+
+/**
+ * The factor row the server-held master key is filed under.
+ *
+ * Kept out of `VaultFactorKind` on purpose: clients never see it in a factor
+ * list, never try to open it themselves, and cannot put or delete it through
+ * the factor routes. It has routes of its own.
+ */
+export const ESCROW_KIND = 'server';
 
 @Injectable()
 export class VaultService {
@@ -75,7 +87,7 @@ export class VaultService {
         publicKey: row.publicKey,
         generation: row.generation,
         keyring: { v: 1, iv: row.keyringIv, ct: row.keyringCiphertext },
-        factors: row.factors.map(toFactor),
+        factors: row.factors.filter((factor) => factor.kind !== ESCROW_KIND).map(toFactor),
         createdAt: row.createdAt.toISOString(),
         updatedAt: row.updatedAt.toISOString(),
       },
@@ -94,7 +106,8 @@ export class VaultService {
    * client read the one that exists.
    */
   async createVault(userId: string, dto: CreateVaultRequest): Promise<AccountVaultResponse> {
-    assertPortablePresent(dto.factors.map((factor) => factor.kind));
+    if (dto.escrow === undefined) assertPortablePresent(dto.factors.map((factor) => factor.kind));
+    if (dto.escrow !== undefined) assertOpensKeyring(dto.escrow, dto.keyring.iv, dto.keyring.ct);
 
     const existing = await prisma.accountVault.findUnique({ where: { userId } });
     if (existing) {
@@ -121,6 +134,11 @@ export class VaultService {
           ...factorColumns(factor),
         })),
       });
+      if (dto.escrow !== undefined) {
+        await tx.accountVaultFactor.create({
+          data: { vaultId: vault.id, userId, ...escrowColumns(dto.escrow) },
+        });
+      }
     });
 
     return this.vault(userId);
@@ -231,7 +249,8 @@ export class VaultService {
 
     if (isPortableFactor(kind)) {
       const portable = await prisma.accountVaultFactor.count({
-        where: { userId, kind: { in: [...PORTABLE_FACTOR_KINDS] } },
+        // The server-held key counts: it survives every machine being lost.
+        where: { userId, kind: { in: [...PORTABLE_FACTOR_KINDS, ESCROW_KIND] } },
       });
       const removing = await prisma.accountVaultFactor.count({ where: { userId, kind } });
       if (removing > 0 && portable - removing < 1) {
@@ -244,6 +263,84 @@ export class VaultService {
     }
 
     await prisma.accountVaultFactor.deleteMany({ where: { userId, kind, deviceId: scoped } });
+    return { ok: true };
+  }
+
+  /**
+   * The master key as the server holds it, for a signed-in session of the
+   * account it belongs to - and nobody else, because `userId` comes from the
+   * access token rather than from anything the caller said.
+   *
+   * This is what lets a new phone, a reinstalled laptop or a provider sign-in
+   * with no password open the whole history with nothing typed. Null when no
+   * key is held, or when the one held was sealed under a settings secret this
+   * deployment no longer has: either way the next machine that holds the key
+   * puts it back.
+   */
+  async escrow(userId: string): Promise<VaultEscrowResponse> {
+    const row = await prisma.accountVaultFactor.findUnique({
+      where: { userId_kind_deviceId: { userId, kind: ESCROW_KIND, deviceId: '' } },
+      select: { ciphertext: true },
+    });
+    return { masterKey: row ? openSecret(row.ciphertext) : null };
+  }
+
+  /**
+   * Stores the master key for the server to hold.
+   *
+   * Only a key that opens the account's keyring is accepted. The server can
+   * check that - it holds the sealed keyring - and it is the check that
+   * matters: an escrowed key that did not open it would hand every new machine
+   * of this account a key to nothing.
+   */
+  async putEscrow(userId: string, masterKey: string): Promise<{ ok: true }> {
+    const vault = await prisma.accountVault.findUnique({ where: { userId } });
+    if (!vault) {
+      throw new BadRequestException({ code: 'NO_VAULT', message: 'This account has no vault' });
+    }
+    assertOpensKeyring(masterKey, vault.keyringIv, vault.keyringCiphertext);
+
+    const columns = escrowColumns(masterKey);
+    await prisma.accountVaultFactor.upsert({
+      where: { userId_kind_deviceId: { userId, kind: ESCROW_KIND, deviceId: '' } },
+      update: columns,
+      create: { vaultId: vault.id, userId, ...columns },
+    });
+    return { ok: true };
+  }
+
+  /**
+   * Starts the account's vault over, for an account nobody can open any more.
+   *
+   * The way out of the state vaults created before the server held a key could
+   * reach: every machine locked, the recovery code never written down, and no
+   * password factor because the vault was created on a launch that had none.
+   * Nothing in that vault can be opened by anybody, so replacing it loses
+   * nothing that was not already lost.
+   *
+   * Refused while the server holds a key that opens the vault - then there is
+   * a way in, and a client asking to reset is a client with a bug.
+   *
+   * The account-scoped channel keys addressed to the old identity are left in
+   * place. They open for nobody, but they are the record of which epochs this
+   * account was entitled to: rows older than the new vault are treated as
+   * stale, and `E2eeService.gaps` lists those epochs so the other members'
+   * clients re-seal them to the new identity. That is how a two-person chat
+   * gets its history back after a reset.
+   */
+  async reset(userId: string): Promise<{ ok: true }> {
+    const { masterKey } = await this.escrow(userId);
+    if (masterKey) {
+      throw new ConflictException({
+        code: 'VAULT_ESCROWED',
+        message: 'This vault can still be opened; fetch the held key instead',
+      });
+    }
+
+    await prisma.$transaction([
+      prisma.accountVault.deleteMany({ where: { userId } }),
+      prisma.vaultGrantRequest.deleteMany({ where: { userId } }),
+    ]);
     return { ok: true };
   }
 
@@ -427,4 +524,48 @@ function toFactor(row: {
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
+}
+
+/** The escrow row: the master key sealed with the deployment's settings secret. */
+function escrowColumns(masterKey: string) {
+  return {
+    kind: ESCROW_KIND,
+    deviceId: '',
+    kdf: 'SETTINGS-SECRET',
+    iterations: 0,
+    salt: '',
+    iv: '',
+    ciphertext: sealSecret(masterKey),
+    senderPublicKey: '',
+  };
+}
+
+/**
+ * Refuses a master key that does not open the keyring.
+ *
+ * The keyring is AES-256-GCM under the raw master key, with WebCrypto's layout:
+ * the 16-byte tag at the end of the ciphertext. Exported for the check file.
+ */
+export function assertOpensKeyring(masterKey: string, iv: string, ciphertext: string): void {
+  if (!opensKeyring(masterKey, iv, ciphertext)) {
+    throw new BadRequestException({
+      code: 'WRONG_MASTER_KEY',
+      message: 'That key does not open this account\'s keyring',
+    });
+  }
+}
+
+export function opensKeyring(masterKey: string, iv: string, ciphertext: string): boolean {
+  const key = Buffer.from(masterKey, 'base64');
+  const sealed = Buffer.from(ciphertext, 'base64');
+  if (key.length !== 32 || sealed.length <= 16) return false;
+  try {
+    const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(iv, 'base64'));
+    decipher.setAuthTag(sealed.subarray(sealed.length - 16));
+    decipher.update(sealed.subarray(0, sealed.length - 16));
+    decipher.final();
+    return true;
+  } catch {
+    return false;
+  }
 }

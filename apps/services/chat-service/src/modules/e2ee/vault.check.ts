@@ -15,7 +15,9 @@ import {
   isClientDeviceId,
   isPortableFactor,
 } from '@betweenus/shared-types';
-import { promotableEpochs } from './e2ee.service';
+import { createCipheriv, randomBytes } from 'node:crypto';
+import { isStaleWrap, owedEpochs, promotableEpochs } from './e2ee.service';
+import { opensKeyring } from './vault.service';
 
 // --- The reserved namespace --------------------------------------------------
 //
@@ -91,6 +93,69 @@ assert.deepEqual(
     { epoch: 5, recipientDeviceId: 'laptop' },
   ]),
   [2, 5, 9],
+);
+
+// --- The server-held key ------------------------------------------------------
+//
+// The server only accepts a master key that opens the keyring, sealed the way
+// WebCrypto seals it: AES-256-GCM with the tag on the end. An escrowed key to
+// nothing would hand every new machine of the account a key to nothing.
+
+const master = randomBytes(32);
+const iv = randomBytes(12);
+const cipher = createCipheriv('aes-256-gcm', master, iv);
+const keyringCt = Buffer.concat([cipher.update('[{"generation":1}]'), cipher.final(), cipher.getAuthTag()]);
+assert.equal(opensKeyring(master.toString('base64'), iv.toString('base64'), keyringCt.toString('base64')), true);
+assert.equal(
+  opensKeyring(randomBytes(32).toString('base64'), iv.toString('base64'), keyringCt.toString('base64')),
+  false,
+  'a key that does not open the keyring is refused',
+);
+assert.equal(opensKeyring('short', iv.toString('base64'), keyringCt.toString('base64')), false);
+
+// --- A reset vault is owed its history back ---------------------------------
+//
+// A wrap older than the account's current vault was sealed to an identity that
+// no longer exists. It must stop counting as held, and the epoch must be
+// listed as owed, so another member's client re-seals it to the new identity.
+
+const before = new Date('2026-09-01T00:00:00Z');
+const resetAt = new Date('2026-09-21T00:00:00Z');
+const after = new Date('2026-09-22T00:00:00Z');
+
+assert.equal(isStaleWrap({ recipientDeviceId: ACCOUNT_SCOPE, createdAt: before }, resetAt), true);
+assert.equal(isStaleWrap({ recipientDeviceId: ACCOUNT_SCOPE, createdAt: after }, resetAt), false);
+assert.equal(isStaleWrap({ recipientDeviceId: 'laptop', createdAt: before }, resetAt), false, 'v1 rows are untouched');
+assert.equal(isStaleWrap({ recipientDeviceId: ACCOUNT_SCOPE, createdAt: before }, undefined), false);
+
+const owed = owedEpochs(
+  [
+    { epoch: 1, recipientUserId: 'me', recipientDeviceId: ACCOUNT_SCOPE, createdAt: before },
+    { epoch: 1, recipientUserId: 'them', recipientDeviceId: ACCOUNT_SCOPE, createdAt: before },
+    { epoch: 2, recipientUserId: 'me', recipientDeviceId: ACCOUNT_SCOPE, createdAt: after },
+    { epoch: 2, recipientUserId: 'them', recipientDeviceId: ACCOUNT_SCOPE, createdAt: before },
+  ],
+  new Map([
+    ['me', resetAt],
+    ['them', before],
+  ]),
+  new Set(),
+);
+assert.deepEqual([...owed.entries()], [[1, ['me']]], 'only the epoch the reset account lost is owed');
+
+// A member let in with the history is still owed every epoch they lack.
+assert.deepEqual(
+  [
+    ...owedEpochs(
+      [{ epoch: 3, recipientUserId: 'them', recipientDeviceId: ACCOUNT_SCOPE, createdAt: before }],
+      new Map([
+        ['them', before],
+        ['newcomer', before],
+      ]),
+      new Set(['newcomer']),
+    ).entries(),
+  ],
+  [[3, ['newcomer']]],
 );
 
 console.log('vault: ok');

@@ -24,6 +24,7 @@ import {
   type CreateVaultRequest,
   type PublishChannelKeysRequest,
   type PutIdentityBackupRequest,
+  type PutVaultEscrowRequest,
   type PutVaultFactorRequest,
   type RegisterDeviceKeyRequest,
   type RotateVaultRequest,
@@ -294,6 +295,18 @@ export class CreateVaultDto implements CreateVaultRequest {
   @ValidateNested({ each: true })
   @Type(() => VaultFactorDto)
   factors!: VaultFactorDto[];
+
+  /** The master key for the server to hold. Base64 of 32 bytes is 44 characters. */
+  @IsOptional()
+  @IsString()
+  @Length(44, 44)
+  escrow?: string;
+}
+
+export class PutVaultEscrowDto implements PutVaultEscrowRequest {
+  @IsString()
+  @Length(44, 44)
+  masterKey!: string;
 }
 
 export class RotateVaultDto implements RotateVaultRequest {

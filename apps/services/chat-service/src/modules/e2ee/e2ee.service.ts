@@ -25,6 +25,7 @@ import {
   type PutIdentityBackupRequest,
 } from '@betweenus/shared-types';
 import { MessagesService } from '../messages/messages.service';
+import { ESCROW_KIND } from './vault.service';
 
 /**
  * How many epochs back a re-wrap is offered in one response.
@@ -238,7 +239,7 @@ export class E2eeService {
   async keysForUser(userId: string, channelId: string): Promise<ChannelKeysResponse> {
     await this.messages.requireChannelAccess(userId, channelId, PERMISSIONS.VIEW_CHANNEL);
 
-    const [rows, latest] = await Promise.all([
+    const [all, latest] = await Promise.all([
       prisma.channelKey.findMany({
         // Every row addressed to the caller's account, account-scoped and
         // per-device alike: a client holds the account keyring plus this
@@ -252,6 +253,10 @@ export class E2eeService {
     ]);
 
     const epoch = latest._max.epoch ?? 0;
+    // Rows sealed to an identity this account has since reset away open for
+    // nobody; handing them over only makes the client try every one.
+    const since = (await vaultsCreatedAt([userId])).get(userId);
+    const rows = all.filter((row) => !isStaleWrap(row, since));
 
     return {
       channelId,
@@ -285,15 +290,17 @@ export class E2eeService {
    * implying somebody is coming.
    */
   async keyHealth(userId: string): Promise<KeyHealthResponse> {
-    const [rows, portableFactors] = await Promise.all([
+    const [all, portableFactors, since] = await Promise.all([
       prisma.channelKey.findMany({
         where: { recipientUserId: userId },
-        select: { channelId: true, epoch: true, recipientDeviceId: true },
+        select: { channelId: true, epoch: true, recipientDeviceId: true, createdAt: true },
       }),
       prisma.accountVaultFactor.count({
-        where: { userId, kind: { in: ['password', 'passphrase', 'recovery-code'] } },
+        where: { userId, kind: { in: ['password', 'passphrase', 'recovery-code', ESCROW_KIND] } },
       }),
+      vaultsCreatedAt([userId]).then((map) => map.get(userId)),
     ]);
+    const rows = all.filter((row) => !isStaleWrap(row, since));
 
     const scoped = new Map<string, boolean>();
     for (const row of rows) {
@@ -358,24 +365,24 @@ export class E2eeService {
     channelId: string,
   ): Promise<Array<{ epoch: number; recipients: AccountKeyRecipient[] }>> {
     const memberIds = await this.memberIds(channelId);
-    const withHistory = await this.historySharedWith(channelId, memberIds);
-    if (withHistory.size === 0) return [];
-
-    const [covered, recipients] = await Promise.all([
+    const [withHistory, covered, since] = await Promise.all([
+      this.historySharedWith(channelId, memberIds),
       prisma.channelKey.findMany({
         where: { channelId, recipientDeviceId: ACCOUNT_SCOPE },
-        select: { epoch: true, recipientUserId: true },
+        select: { epoch: true, recipientUserId: true, recipientDeviceId: true, createdAt: true },
       }),
-      this.recipients([...withHistory]),
+      vaultsCreatedAt(memberIds),
     ]);
 
-    const has = new Set(covered.map((row) => `${row.epoch}:${row.recipientUserId}`));
-    const epochs = [...new Set(covered.map((row) => row.epoch))].sort((a, b) => b - a);
+    const owed = owedEpochs(covered, since, withHistory);
+    if (owed.size === 0) return [];
+    const recipients = await this.recipients([...new Set([...owed.values()].flat())]);
 
-    return epochs
+    return [...owed.keys()]
+      .sort((a, b) => b - a)
       .map((at) => ({
         epoch: at,
-        recipients: recipients.filter((who) => !has.has(`${at}:${who.userId}`)),
+        recipients: recipients.filter((who) => owed.get(at)?.includes(who.userId)),
       }))
       .filter((gap) => gap.recipients.length > 0)
       // The newest epochs matter most - they are what the next message uses -
@@ -512,10 +519,15 @@ export class E2eeService {
     } else {
       // Any of the caller's devices holding this epoch is enough: the check is
       // "do you already have this key", and the person is the one who has it.
-      const holdsKey = await prisma.channelKey.findFirst({
-        where: { channelId: dto.channelId, epoch: dto.epoch, recipientUserId: userId },
-        select: { id: true },
-      });
+      const [held, since] = await Promise.all([
+        prisma.channelKey.findMany({
+          where: { channelId: dto.channelId, epoch: dto.epoch, recipientUserId: userId },
+          select: { recipientDeviceId: true, createdAt: true },
+        }),
+        vaultsCreatedAt([userId]).then((map) => map.get(userId)),
+      ]);
+      // A wrap to an identity this account reset away is not holding the key.
+      const holdsKey = held.some((row) => !isStaleWrap(row, since));
       if (!holdsKey) {
         throw new ForbiddenException({
           code: 'EPOCH_NOT_HELD',
@@ -554,7 +566,7 @@ export class E2eeService {
     // which is indistinguishable from the data loss this all exists to end.
     const vaults = await prisma.accountVault.findMany({
       where: { userId: { in: [...new Set(dto.entries.map((entry) => entry.recipientUserId))] } },
-      select: { userId: true },
+      select: { userId: true, createdAt: true },
     });
     const hasVault = new Set(vaults.map((row) => row.userId));
     for (const entry of dto.entries) {
@@ -580,7 +592,21 @@ export class E2eeService {
       });
     }
 
-    const result = await prisma.channelKey.createMany({
+    // "Existing entries are never overwritten" has one exception: a wrap to an
+    // identity its account has since reset away. It opens for nobody, and
+    // leaving it would make the fresh one below a skipped duplicate.
+    const stale = vaults.map((vault) =>
+      prisma.channelKey.deleteMany({
+        where: {
+          channelId: dto.channelId,
+          epoch: dto.epoch,
+          recipientUserId: vault.userId,
+          recipientDeviceId: ACCOUNT_SCOPE,
+          createdAt: { lt: vault.createdAt },
+        },
+      }),
+    );
+    const store = prisma.channelKey.createMany({
       data: dto.entries.map((entry) => ({
         channelId: dto.channelId,
         epoch: dto.epoch,
@@ -594,8 +620,10 @@ export class E2eeService {
       })),
       skipDuplicates: true,
     });
-
-    return { epoch: dto.epoch, stored: result.count };
+    // Deletes first, in the same transaction, so a fresh wrap never collides
+    // with the stale row it replaces.
+    const results = await prisma.$transaction([...stale, store]);
+    return { epoch: dto.epoch, stored: results.at(-1)?.count ?? 0 };
   }
 
   /**
@@ -645,15 +673,21 @@ export class E2eeService {
    */
   private async missingAtEpoch(channelId: string, epoch: number): Promise<AccountKeyRecipient[]> {
     const memberIds = await this.memberIds(channelId);
-    const [covered, recipients] = await Promise.all([
+    const [covered, recipients, since] = await Promise.all([
       prisma.channelKey.findMany({
         where: { channelId, epoch, recipientDeviceId: ACCOUNT_SCOPE },
-        select: { recipientUserId: true },
+        select: { recipientUserId: true, recipientDeviceId: true, createdAt: true },
       }),
       this.recipients(memberIds),
+      vaultsCreatedAt(memberIds),
     ]);
 
-    const has = new Set(covered.map((row) => row.recipientUserId));
+    // A wrap to an identity the member has since reset away covers nothing.
+    const has = new Set(
+      covered
+        .filter((row) => !isStaleWrap(row, since.get(row.recipientUserId)))
+        .map((row) => row.recipientUserId),
+    );
     return recipients.filter((who) => !has.has(who.userId));
   }
 }
@@ -737,4 +771,76 @@ export function toDeviceKey(row: {
     lastSeenAt: row.lastSeenAt.toISOString(),
     createdAt: row.createdAt.toISOString(),
   };
+}
+
+/** When each account's current vault was created. Absent for no vault. */
+async function vaultsCreatedAt(userIds: string[]): Promise<Map<string, Date>> {
+  if (userIds.length === 0) return new Map();
+  const rows = await prisma.accountVault.findMany({
+    where: { userId: { in: userIds } },
+    select: { userId: true, createdAt: true },
+  });
+  return new Map(rows.map((row) => [row.userId, row.createdAt]));
+}
+
+/**
+ * Whether an account-scoped wrap was sealed to an identity its account has
+ * since reset away (`VaultService.reset`). A reset replaces the vault, so a
+ * wrap older than the account's current vault opens for nobody.
+ *
+ * Per-device v1 rows are never stale by this rule: they are sealed to a
+ * machine's own key, which a vault reset does not touch.
+ */
+export function isStaleWrap(
+  row: { recipientDeviceId: string; createdAt: Date },
+  vaultCreatedAt: Date | undefined,
+): boolean {
+  return (
+    isAccountScope(row.recipientDeviceId) &&
+    vaultCreatedAt !== undefined &&
+    row.createdAt < vaultCreatedAt
+  );
+}
+
+/**
+ * Which accounts are owed which epochs, keyed by epoch.
+ *
+ * Two kinds of member are owed an epoch they hold no working wrap for:
+ *
+ * - one let in *with* the history (`historyShared`), for every epoch;
+ * - one whose wrap for that epoch is stale because the account reset its
+ *   vault. They were entitled to it before and still are - the reset changed
+ *   the key, not who is in the channel.
+ *
+ * Kept free of the database so the rule can be checked on its own.
+ */
+export function owedEpochs(
+  covered: Array<{ epoch: number; recipientUserId: string; recipientDeviceId: string; createdAt: Date }>,
+  vaultCreatedAt: Map<string, Date>,
+  withHistory: Set<string>,
+): Map<number, string[]> {
+  const fresh = new Set<string>();
+  const stale = new Set<string>();
+  for (const row of covered) {
+    const at = `${row.epoch}:${row.recipientUserId}`;
+    if (isStaleWrap(row, vaultCreatedAt.get(row.recipientUserId))) stale.add(at);
+    else fresh.add(at);
+  }
+
+  const epochs = [...new Set(covered.map((row) => row.epoch))];
+  const owed = new Map<number, string[]>();
+  for (const epoch of epochs) {
+    const who = new Set<string>();
+    for (const userId of withHistory) {
+      if (!fresh.has(`${epoch}:${userId}`)) who.add(userId);
+    }
+    for (const key of stale) {
+      const [at, userId] = key.split(':') as [string, string];
+      if (Number(at) === epoch && !fresh.has(key)) who.add(userId);
+    }
+    // Only accounts with a vault can be sealed to.
+    const withVault = [...who].filter((userId) => vaultCreatedAt.has(userId));
+    if (withVault.length > 0) owed.set(epoch, withVault);
+  }
+  return owed;
 }

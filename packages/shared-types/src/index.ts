@@ -2198,6 +2198,33 @@ export interface CreateVaultRequest {
    * machine it still has.
    */
   factors: Array<Omit<VaultFactor, 'createdAt' | 'updatedAt'>>;
+  /**
+   * The master key itself (base64, 32 bytes), for the server to hold. See
+   * {@link VaultEscrowResponse}. Stored in the same transaction as the vault,
+   * so an account is never created into a state only one machine can open.
+   */
+  escrow?: string;
+}
+
+/**
+ * The account master key as the server holds it.
+ *
+ * This is the door that makes signing in anywhere open everything with
+ * nothing typed and no other machine online - the way Discord or Slack work -
+ * and it is a deliberate trade: whoever runs the server can open the vault.
+ * The key is sealed at rest with the deployment's settings secret, released
+ * only to a signed-in session of the same account, and checked against the
+ * keyring before it is stored so a confused client cannot escrow the wrong
+ * key. Null when none is held yet (or the settings secret was rotated away);
+ * any machine that holds the key puts it back on its next sign-in.
+ */
+export interface VaultEscrowResponse {
+  masterKey: string | null;
+}
+
+/** Hands the server the master key to hold. Refused unless it opens the keyring. */
+export interface PutVaultEscrowRequest {
+  masterKey: string;
 }
 
 /**

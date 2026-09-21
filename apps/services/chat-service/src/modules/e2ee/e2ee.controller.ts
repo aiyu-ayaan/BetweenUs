@@ -20,6 +20,7 @@ import type {
   DeviceKey,
   IdentityBackupResponse,
   KeyHealthResponse,
+  VaultEscrowResponse,
   VaultFactor,
   VaultFactorKind,
   VaultGrantsResponse,
@@ -30,6 +31,7 @@ import {
   CreateVaultDto,
   PublishChannelKeysDto,
   PutIdentityBackupDto,
+  PutVaultEscrowDto,
   PutVaultFactorDto,
   RegisterDeviceKeyDto,
   RequestVaultGrantDto,
@@ -78,6 +80,27 @@ export class E2eeController {
     @Body() dto: RotateVaultDto,
   ): Promise<AccountVaultResponse> {
     return this.vaults.rotate(user.id, dto);
+  }
+
+  /** The master key the server holds for this account, or null. */
+  @Get('vault/escrow')
+  escrow(@CurrentUser() user: AuthenticatedUser): Promise<VaultEscrowResponse> {
+    return this.vaults.escrow(user.id);
+  }
+
+  /** Hands the server the master key to hold. Refused unless it opens the keyring. */
+  @Put('vault/escrow')
+  putEscrow(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: PutVaultEscrowDto,
+  ): Promise<{ ok: true }> {
+    return this.vaults.putEscrow(user.id, dto.masterKey);
+  }
+
+  /** Starts over a vault nobody can open. Refused while the server holds its key. */
+  @Post('vault/reset')
+  resetVault(@CurrentUser() user: AuthenticatedUser): Promise<{ ok: true }> {
+    return this.vaults.reset(user.id);
   }
 
   /** Adds or replaces one door into the vault. */
