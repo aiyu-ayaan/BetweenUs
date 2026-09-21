@@ -43,7 +43,7 @@ export class MessagesController {
     @CurrentUser() user: AuthenticatedUser,
     @Query() query: MessageQueryDto,
   ): Promise<Paginated<Message>> {
-    return this.messages.history(user.id, query.channelId, query.before);
+    return this.messages.history(user.id, query.channelId, query.before, query.threadRootId);
   }
 
   // Ahead of `:messageId` routes, or `unfurl` is read as a message id.
@@ -84,7 +84,21 @@ export class MessagesController {
       dto.content,
       dto.attachmentKeys,
       dto.viewOnce,
+      dto.threadRootId,
     );
+  }
+
+  /**
+   * One message, tombstone included. After every literal route above it, so
+   * `pins` and `unfurl` are never read as an id - and `ParseUUIDPipe` refuses
+   * anything that is not one.
+   */
+  @Get(':messageId')
+  one(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('messageId', ParseUUIDPipe) messageId: string,
+  ): Promise<Message> {
+    return this.messages.one(user.id, messageId);
   }
 
   @Patch(':messageId')

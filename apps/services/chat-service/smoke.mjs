@@ -635,6 +635,112 @@ const secondDelete = await fetch(`${CHAT}/api/v1/messages/${doomed.id}`, {
 });
 ok('an already deleted message is not found', secondDelete.status === 404);
 
+// --- Threads ------------------------------------------------------------------
+//
+// A thread reply is an ordinary sealed message with a root pointer the server
+// can see. It stays out of the channel's timeline, is paged under its root, and
+// moves the root's "N replies" summary.
+
+const threadRoot = await json(`${CHAT}/api/v1/messages`, {
+  method: 'POST',
+  headers: authed,
+  body: JSON.stringify({ channelId: channel.id, content: 'start a thread here' }),
+});
+ok('a new message has no thread', threadRoot.thread === null && threadRoot.threadRootId === null);
+
+const threadReply = await json(`${CHAT}/api/v1/messages`, {
+  method: 'POST',
+  headers: other,
+  body: JSON.stringify({
+    channelId: channel.id,
+    content: 'answered in the thread',
+    threadRootId: threadRoot.id,
+  }),
+});
+ok('a thread reply carries its root', threadReply.threadRootId === threadRoot.id);
+
+const timelineAfterThread = await json(`${CHAT}/api/v1/messages?channelId=${channel.id}`, {
+  headers: authed,
+});
+ok(
+  'a thread reply stays out of the channel timeline',
+  !timelineAfterThread.items.some((item) => item.id === threadReply.id),
+);
+const rootInTimeline = timelineAfterThread.items.find((item) => item.id === threadRoot.id);
+ok(
+  'the root carries the reply count',
+  rootInTimeline?.thread?.replyCount === 1 && typeof rootInTimeline?.thread?.lastReplyAt === 'string',
+);
+
+const threadPage = await json(
+  `${CHAT}/api/v1/messages?channelId=${channel.id}&threadRootId=${threadRoot.id}`,
+  { headers: authed },
+);
+ok(
+  'the thread pages its replies',
+  threadPage.items.length === 1 && threadPage.items[0]?.id === threadReply.id,
+);
+
+const fetchedRoot = await json(`${CHAT}/api/v1/messages/${threadRoot.id}`, { headers: other });
+ok('a root can be fetched by id', fetchedRoot.id === threadRoot.id);
+
+const strangerThread = await statusOf(
+  `${CHAT}/api/v1/messages?channelId=${channel.id}&threadRootId=${threadRoot.id}`,
+  { headers: rejected },
+);
+ok('a thread is exactly as private as its channel', strangerThread === 404, String(strangerThread));
+const strangerRoot = await statusOf(`${CHAT}/api/v1/messages/${threadRoot.id}`, {
+  headers: rejected,
+});
+ok('a message is not fetchable from outside its channel', strangerRoot === 404, String(strangerRoot));
+
+const nested = await statusOf(`${CHAT}/api/v1/messages`, {
+  method: 'POST',
+  headers: authed,
+  body: JSON.stringify({ channelId: channel.id, content: 'nested', threadRootId: threadReply.id }),
+});
+ok('a thread reply cannot start a thread', nested === 400, String(nested));
+
+const oneTimeReply = await statusOf(`${CHAT}/api/v1/messages`, {
+  method: 'POST',
+  headers: authed,
+  body: JSON.stringify({
+    channelId: channel.id,
+    content: 'once',
+    threadRootId: threadRoot.id,
+    viewOnce: true,
+  }),
+});
+ok('a thread reply cannot be one-time', oneTimeReply === 400, String(oneTimeReply));
+
+// Deleting the reply takes it out of the count; deleting the root leaves the
+// thread reachable under a tombstone.
+await fetch(`${CHAT}/api/v1/messages/${threadReply.id}`, { method: 'DELETE', headers: other });
+const rootAfterReplyDelete = await json(`${CHAT}/api/v1/messages/${threadRoot.id}`, {
+  headers: authed,
+});
+ok('a deleted reply stops counting', rootAfterReplyDelete.thread === null);
+
+const survivor = await json(`${CHAT}/api/v1/messages`, {
+  method: 'POST',
+  headers: other,
+  body: JSON.stringify({ channelId: channel.id, content: 'still here', threadRootId: threadRoot.id }),
+});
+await fetch(`${CHAT}/api/v1/messages/${threadRoot.id}`, { method: 'DELETE', headers: authed });
+const orphanPage = await json(
+  `${CHAT}/api/v1/messages?channelId=${channel.id}&threadRootId=${threadRoot.id}`,
+  { headers: other },
+);
+ok(
+  'a deleted root keeps its thread',
+  orphanPage.items.some((item) => item.id === survivor.id),
+);
+const tombstonedRoot = await json(`${CHAT}/api/v1/messages/${threadRoot.id}`, { headers: other });
+ok(
+  'the tombstoned root still says how busy its thread is',
+  tombstonedRoot.deletedAt !== null && tombstonedRoot.thread?.replyCount === 1,
+);
+
 // --- Adding someone to a server --------------------------------------------
 
 const thirdAuth = await json(`${AUTH}/api/v1/auth/register`, {

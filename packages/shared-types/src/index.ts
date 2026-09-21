@@ -1654,6 +1654,34 @@ export interface Message {
    * everyone who could see it apart from the author.
    */
   viewedBy: string[];
+  /**
+   * The root this message answers, when it is a thread reply; null otherwise.
+   *
+   * A thread reply is an ordinary sealed message that the server keeps out of
+   * the channel's own timeline. Only this pointer is in the clear - it has to
+   * be, because paging a thread and leaving it out of the channel are both
+   * the server's work. Not a quote reply: `MessageBody.replyTo` is a snapshot
+   * inside the envelope and the message stays in the timeline.
+   *
+   * Optional so a message from a build older than threads still fits; read
+   * absent as null.
+   */
+  threadRootId?: string | null;
+  /**
+   * On a root: its thread's "N replies · last reply X ago" summary. Null when
+   * nothing has been said in a thread under it, and on every thread reply.
+   * Arrives on `message.updated` for the root whenever a reply is sent,
+   * deleted or expires.
+   */
+  thread?: MessageThreadSummary | null;
+}
+
+/** What a root message says about the thread hanging off it. */
+export interface MessageThreadSummary {
+  /** Live replies - a deleted or expired one is not counted. */
+  replyCount: number;
+  /** When the newest live reply was sent, or null once there are none. */
+  lastReplyAt: string | null;
 }
 
 /**
@@ -1688,6 +1716,13 @@ export interface CreateMessageRequest {
    * cannot read the body cannot be told by the body.
    */
   viewOnce?: boolean;
+  /**
+   * Send this into the thread under that root rather than into the channel.
+   * The root must be a live-or-tombstoned message in the same channel that is
+   * not itself a thread reply and not a one-time message. A thread reply
+   * cannot be one-time either.
+   */
+  threadRootId?: string;
 }
 
 /** Replaces the body; the author only, and it stamps `editedAt`. */
@@ -3214,8 +3249,14 @@ export interface MessagePushData {
   /** The sealed envelope, so a client that holds the key can show the words. */
   content: string;
   createdAt: string;
-  /** "1" when this channel is mentions-only for this recipient. */
+  /**
+   * "1" when this recipient should only be told if they are mentioned: the
+   * channel is mentions-only for them, or this is a thread reply in a thread
+   * they have not taken part in.
+   */
   mentionsOnly?: string;
+  /** Set when this is a thread reply: the root it hangs off. */
+  threadRootId?: string;
 }
 
 /**
