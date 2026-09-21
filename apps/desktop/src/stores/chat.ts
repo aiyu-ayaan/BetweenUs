@@ -29,6 +29,7 @@ import {
   syncChannelKeys,
 } from '../services/e2ee';
 import { decodeBody, encodeBody } from '../services/message-body';
+import { pollPreview } from '../services/polls';
 import {
   dismissChannelNotification,
   notifyMessage,
@@ -56,6 +57,12 @@ export interface DecryptedMessage extends Message {
   forwardedFrom?: MessageForward;
   /** Set when this message answers a moment. See `MessageMoment`. */
   momentRef?: MessageMoment;
+  /**
+   * A poll's option labels, out of the envelope. Drawn as a card only when the
+   * server's `poll` is present too - the labels without the tally are words
+   * nobody can vote on, and the tally without the labels is numbers.
+   */
+  pollOptions?: string[];
 }
 
 interface ChatState {
@@ -237,6 +244,21 @@ interface ChatState {
   togglePin: (messageId: string) => Promise<void>;
   /** Adds the emoji, or takes it back when it is already yours. */
   react: (messageId: string, emoji: string) => Promise<void>;
+  /**
+   * Sends a poll to the open channel. The question and labels are sealed like
+   * any message; the server is told only how many options there are, whether
+   * more than one may be chosen, and for how long.
+   */
+  sendPoll: (
+    question: string,
+    options: string[],
+    multiChoice: boolean,
+    durationSeconds: number | null,
+  ) => Promise<void>;
+  /** Replaces this account's ballot on a poll. Empty takes the vote back. */
+  votePoll: (messageId: string, options: number[]) => Promise<void>;
+  /** Stops voting early. */
+  closePoll: (messageId: string) => Promise<void>;
   loadPins: () => Promise<void>;
   /** Who else has read the open channel. Cheap, and only for the open one. */
   loadReceipts: (channelId: string) => Promise<void>;
@@ -823,6 +845,33 @@ export const useChatStore = create<ChatState>((set, get) => ({
     await api.reactToMessage(messageId, emoji);
   },
 
+  sendPoll: async (question, options, multiChoice, durationSeconds) => {
+    const channelId = get().activeChannelId;
+    if (!channelId) return;
+    // The question is the text, so a client that has never heard of polls
+    // still shows what was asked. The labels ride beside it in the envelope.
+    const envelope = await encryptForChannel(
+      channelId,
+      encodeBody({ text: question, attachments: [], poll: { options } }),
+    );
+    await api.sendMessage(channelId, envelope, [], false, {
+      optionCount: options.length,
+      multiChoice,
+      durationSeconds,
+    });
+  },
+
+  // No optimistic update for either: the tally that comes back over the
+  // socket is the referee's, and a bar that jumped and then jumped back would
+  // be the client deciding a vote the server had not.
+  votePoll: async (messageId, options) => {
+    await api.votePoll(messageId, options);
+  },
+
+  closePoll: async (messageId) => {
+    await api.closePoll(messageId);
+  },
+
   loadReceipts: async (channelId) => {
     const receipts = await api.channelReads(channelId).catch(() => null);
     if (receipts === null) return;
@@ -1066,6 +1115,7 @@ function toDecrypted(message: Message, plaintext: string): DecryptedMessage {
     ...(body.emoji ? { emoji: body.emoji } : {}),
     ...(body.forwardedFrom ? { forwardedFrom: body.forwardedFrom } : {}),
     ...(body.momentRef ? { momentRef: body.momentRef } : {}),
+    ...(body.poll ? { pollOptions: body.poll.options } : {}),
   };
 }
 
@@ -1077,6 +1127,9 @@ function notificationText(message: DecryptedMessage): string | null {
   // pointed a webhook at a chat channel in the first place.
   if (!hasBody(message.kind)) return null;
   if (message.content === UNDECRYPTABLE) return null;
+  // Built here, from the opened envelope: the push carried ciphertext, so the
+  // question never passed through anything that could read it.
+  if (message.poll && message.pollOptions) return pollPreview(message.content);
   if (message.content.trim()) return message.content;
   return message.attachments.length > 0 ? 'Sent an attachment' : null;
 }

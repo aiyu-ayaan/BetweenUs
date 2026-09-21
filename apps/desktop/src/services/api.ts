@@ -2,6 +2,8 @@ import { sampleServerClock } from './server-clock';
 import { objectSlot, retryDelayMs, worthRetrying } from './object-fetch';
 import type {
   BackupSecretKind,
+  CreatePollSettings,
+  VotePollRequest,
   CreateServerInviteRequest,
   ApiErrorBody,
   AuthResponse,
@@ -503,11 +505,27 @@ export const api = {
     content: string,
     attachmentKeys?: string[],
     viewOnce?: boolean,
+    /** Numbers only - the question and labels are sealed inside `content`. */
+    poll?: CreatePollSettings,
   ): Promise<Message> =>
     request('/api/v1/messages', {
       method: 'POST',
-      body: JSON.stringify({ channelId, content, attachmentKeys, viewOnce }),
+      body: JSON.stringify({ channelId, content, attachmentKeys, viewOnce, poll }),
     }),
+
+  /**
+   * Replaces this account's whole ballot on a poll: option indexes, never
+   * labels. An empty list takes the vote back.
+   */
+  votePoll: (messageId: string, options: number[]): Promise<Message> =>
+    request(`/api/v1/messages/${messageId}/poll/vote`, {
+      method: 'PUT',
+      body: JSON.stringify({ options } satisfies VotePollRequest),
+    }),
+
+  /** Stops voting early. The author, or a moderator in a server channel. */
+  closePoll: (messageId: string): Promise<Message> =>
+    request(`/api/v1/messages/${messageId}/poll/close`, { method: 'POST' }),
 
   /** Author or moderator; the row survives as a tombstone, the body does not. */
   deleteMessage: (messageId: string): Promise<void> =>

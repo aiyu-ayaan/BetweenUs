@@ -112,6 +112,23 @@ async function main(): Promise<void> {
     undefined,
   );
 
+  // A poll is a document: the question is the text, so a client that has never
+  // heard of polls still shows what was asked, and the labels ride beside it.
+  const poll = { text: 'Lunch?', attachments: [], poll: { options: ['Pizza', 'Ramen'] } };
+  assert.deepEqual(decodeBody(encodeBody(poll)), poll);
+  assert.notEqual(encodeBody(poll), 'Lunch?');
+
+  // A damaged label list is dropped, not drawn: a vote is an index into it, so
+  // a wrong list would put somebody's vote under the wrong words.
+  for (const options of ['["one"]', '[1,2]', '"ab"', JSON.stringify(Array(11).fill('x'))]) {
+    assert.equal(
+      decodeBody(`\u0000betweenus-body:1\n{"text":"q","attachments":[],"poll":{"options":${options}}}`)
+        .poll,
+      undefined,
+      options,
+    );
+  }
+
   // An over-long message becomes a text file that keeps every character.
   const long = 'x'.repeat(OVERFLOW_CHARS + 500);
   const overflow = overflowFile(long);
