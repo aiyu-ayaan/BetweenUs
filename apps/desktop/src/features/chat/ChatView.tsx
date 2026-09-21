@@ -40,6 +40,8 @@ import { AttachmentList } from './Attachments';
 import { EmojiPicker } from './EmojiPicker';
 import { ChannelMenu } from './ChannelMenu';
 import { ForwardDialog } from './ForwardDialog';
+import { PollCard } from './PollCard';
+import { PollComposer } from './PollComposer';
 import { MessageMenu } from './MessageMenu';
 import { WhenPicker } from './WhenPicker';
 import { useScheduledStore } from '../../stores/scheduled';
@@ -104,6 +106,7 @@ import {
   MessageIcon,
   MicIcon,
   PaperclipIcon,
+  PollIcon,
   PhoneIcon,
   PinIcon,
   ReplyIcon,
@@ -1223,6 +1226,19 @@ function MessageList({
                             <MessageLinkPreviews content={message.content} />
                           </>
                         )}
+                        {/* The referee's tally beside the sealed labels. Both
+                            must be present: labels without a tally cannot be
+                            voted on, a tally without labels is only numbers. */}
+                        {message.poll && message.pollOptions && (
+                          <PollCard
+                            messageId={message.id}
+                            poll={message.poll}
+                            labels={message.pollOptions}
+                            meId={me?.id}
+                            authorId={message.author.id}
+                            canModerate={canPin && channel.serverId !== null}
+                          />
+                        )}
                         <AttachmentList
                           channelId={channel.id}
                           attachments={message.attachments}
@@ -1313,10 +1329,14 @@ function MessageList({
               if (!target || target.deletedAt) return undefined;
               return (at: { x: number; y: number }) => setReminding({ id: menu.id, at });
             })(),
-            onEdit:
-              messages.find((item) => item.id === menu.id)?.author.id === me?.id
+            // Not a poll: its labels are sealed, so the server could not tell a
+            // typo fix from a swap under everybody's votes, and refuses.
+            onEdit: (() => {
+              const target = messages.find((item) => item.id === menu.id);
+              return target?.author.id === me?.id && !target?.poll
                 ? () => setEditing(menu.id)
-                : undefined,
+                : undefined;
+            })(),
             onPin: canPin ? () => report(togglePin(menu.id)) : undefined,
             pinDisabledReason: 'Needs the “Pin and unpin messages” permission',
             onCopy: () => {
@@ -2285,6 +2305,7 @@ function MessageComposer({
   const [viewOnce, setViewOnce] = useState(false);
   const scheduleMessage = useScheduledStore((state) => state.scheduleMessage);
   const [scheduling, setScheduling] = useState<{ x: number; y: number } | null>(null);
+  const [creatingPoll, setCreatingPoll] = useState(false);
   const [uploading, setUploading] = useState<{ name: string; percent: number } | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
@@ -2809,6 +2830,18 @@ function MessageComposer({
           >
             <PaperclipIcon className="h-5 w-5" />
           </button>
+
+          <button
+            type="button"
+            onClick={() => setCreatingPoll(true)}
+            disabled={sending}
+            aria-label="Create a poll"
+            title="Create a poll"
+            className="flex h-9 w-9 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:h-auto sm:w-auto cursor-pointer items-center justify-center rounded-md p-1.5 text-slate-300 transition-colors duration-200 hover:text-accent disabled:cursor-not-allowed disabled:text-slate-600"
+          >
+            <PollIcon className="h-5 w-5" />
+          </button>
+          {creatingPoll && <PollComposer onClose={() => setCreatingPoll(false)} />}
 
           <button
             type="button"

@@ -28,7 +28,9 @@ import {
   PinQueryDto,
   ReactToMessageDto,
   UpdateMessageDto,
+  VotePollDto,
 } from './dto';
+import { PollsService } from './polls.service';
 
 @Controller('messages')
 @UseGuards(JwtAuthGuard)
@@ -36,6 +38,7 @@ export class MessagesController {
   constructor(
     private readonly messages: MessagesService,
     private readonly unfurlService: UnfurlService,
+    private readonly polls: PollsService,
   ) {}
 
   @Get()
@@ -84,6 +87,7 @@ export class MessagesController {
       dto.content,
       dto.attachmentKeys,
       dto.viewOnce,
+      dto.poll,
     );
   }
 
@@ -147,5 +151,29 @@ export class MessagesController {
     @Body() dto: ReactToMessageDto,
   ): Promise<Message> {
     return this.messages.react(user.id, messageId, dto.emoji);
+  }
+
+  /**
+   * Replaces the caller's ballot on a poll. A PUT because the body is the
+   * whole ballot rather than a change to it, so sending it twice is the same
+   * as sending it once - and an empty list is how a vote is taken back.
+   */
+  @Put(':messageId/poll/vote')
+  vote(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('messageId', ParseUUIDPipe) messageId: string,
+    @Body() dto: VotePollDto,
+  ): Promise<Message> {
+    return this.polls.vote(user.id, messageId, dto.options);
+  }
+
+  /** Stops voting early. The author, or a moderator in a server channel. */
+  @Post(':messageId/poll/close')
+  @HttpCode(200)
+  closePoll(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('messageId', ParseUUIDPipe) messageId: string,
+  ): Promise<Message> {
+    return this.polls.close(user.id, messageId);
   }
 }

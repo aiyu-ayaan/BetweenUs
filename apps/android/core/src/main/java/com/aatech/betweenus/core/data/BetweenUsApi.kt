@@ -541,6 +541,25 @@ object BetweenUsApi {
         )
     }
 
+    /**
+     * Replaces this account's whole ballot on a poll: option indexes, never
+     * labels. An empty list takes the vote back.
+     */
+    suspend fun votePoll(messageId: String, options: List<Int>): Message = io {
+        Message.from(
+            authed(
+                "PUT",
+                "/api/v1/messages/$messageId/poll/vote",
+                obj("options" to JSONArray(options)),
+            ),
+        )
+    }
+
+    /** Stops voting early. The author, or a moderator in a server channel. */
+    suspend fun closePoll(messageId: String): Message = io {
+        Message.from(authed("POST", "/api/v1/messages/$messageId/poll/close"))
+    }
+
     suspend fun editMessage(messageId: String, content: String): Message = io {
         Message.from(authed("PATCH", "/api/v1/messages/$messageId", obj("content" to content)))
     }

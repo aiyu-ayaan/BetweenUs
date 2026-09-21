@@ -777,6 +777,57 @@ data class MessageReaction(val emoji: String, val userIds: List<String>) {
 }
 
 /**
+ * Who chose one poll option, by user id - the same shape as [MessageReaction],
+ * for the same reason: the object is broadcast to everybody, so each client
+ * counts the list and looks for itself in it.
+ */
+data class PollTally(val option: Int, val userIds: List<String>) {
+    fun toJson(): JSONObject = JSONObject()
+        .put("option", option)
+        .put("userIds", jsonArrayOf(userIds))
+
+    companion object {
+        fun from(json: JSONObject) = PollTally(
+            option = json.optInt("option"),
+            userIds = json.strings("userIds"),
+        )
+    }
+}
+
+/**
+ * What the server knows about a poll: numbers, never words. The question and
+ * the option labels are inside the sealed body - see [MessageBody.pollOptions].
+ * Byte for byte the desktop's `MessagePoll`.
+ */
+data class MessagePoll(
+    val optionCount: Int,
+    val multiChoice: Boolean,
+    val closesAt: String?,
+    val closedAt: String?,
+    val closedBy: String?,
+    val tallies: List<PollTally>,
+) {
+    fun toJson(): JSONObject = JSONObject()
+        .put("optionCount", optionCount)
+        .put("multiChoice", multiChoice)
+        .put("closesAt", closesAt)
+        .put("closedAt", closedAt)
+        .put("closedBy", closedBy)
+        .put("tallies", jsonArrayOfObjects(tallies) { it.toJson() })
+
+    companion object {
+        fun from(json: JSONObject) = MessagePoll(
+            optionCount = json.optInt("optionCount"),
+            multiChoice = json.optBoolean("multiChoice", false),
+            closesAt = json.stringOrNull("closesAt"),
+            closedAt = json.stringOrNull("closedAt"),
+            closedBy = json.stringOrNull("closedBy"),
+            tallies = json.optJSONArray("tallies")?.map { PollTally.from(it) }.orEmpty(),
+        )
+    }
+}
+
+/**
  * How a webhook is drawn on a message it posted.
  *
  * [id] is null once the webhook has been deleted - the messages it sent stay,
@@ -904,6 +955,8 @@ data class Message(
      * output to a person.
      */
     val webhook: MessageWebhook? = null,
+    /** Set when this message is a poll: the referee's counts. See [MessagePoll]. */
+    val poll: MessagePoll? = null,
 ) {
     val deleted: Boolean get() = deletedAt != null
     val pinned: Boolean get() = pinnedAt != null
@@ -965,6 +1018,7 @@ data class Message(
         .put("viewOnce", viewOnce)
         .put("viewedBy", jsonArrayOf(viewedBy))
         .put("webhook", webhook?.toJson())
+        .put("poll", poll?.toJson())
 
     companion object {
         /** A message somebody wrote. What every row was before [kind] existed. */
@@ -1001,6 +1055,7 @@ data class Message(
             viewOnce = json.optBoolean("viewOnce", false),
             viewedBy = json.strings("viewedBy"),
             webhook = json.optJSONObject("webhook")?.let { MessageWebhook.from(it) },
+            poll = json.optJSONObject("poll")?.let { MessagePoll.from(it) },
         )
     }
 }
@@ -1274,10 +1329,16 @@ data class MessageBody(
     val forwardedFrom: MessageForward? = null,
     /** Set when this message answers a moment. See [MessageMoment]. */
     val momentRef: MessageMoment? = null,
+    /**
+     * The option labels when this message is a poll; [text] is the question.
+     * Vote indexes count into this list, so a list of the wrong length is
+     * dropped on decode rather than drawn under the wrong words.
+     */
+    val pollOptions: List<String>? = null,
 ) {
     fun encode(): String =
         if (attachments.isEmpty() && replyTo == null && emoji.isEmpty() &&
-            forwardedFrom == null && momentRef == null
+            forwardedFrom == null && momentRef == null && pollOptions == null
         ) {
             text
         } else {
@@ -1287,6 +1348,11 @@ data class MessageBody(
                 .apply { replyTo?.let { put("replyTo", it.toJson()) } }
                 .apply { forwardedFrom?.let { put("forwardedFrom", it.toJson()) } }
                 .apply { momentRef?.let { put("momentRef", it.toJson()) } }
+                .apply {
+                    pollOptions?.let { options ->
+                        put("poll", JSONObject().put("options", JSONArray(options)))
+                    }
+                }
                 .apply {
                     if (emoji.isNotEmpty()) {
                         put("emoji", JSONArray().also { a -> emoji.forEach { a.put(it.toJson()) } })
@@ -1298,6 +1364,10 @@ data class MessageBody(
     companion object {
         /** Byte for byte the desktop's `BODY_MARKER`. Changing one changes both. */
         const val BODY_MARKER = "\u0000betweenus-body:1\n"
+
+        /** The fewest and most options a poll may offer; the desktop's `POLL_MIN_OPTIONS`. */
+        const val POLL_MIN_OPTIONS = 2
+        const val POLL_MAX_OPTIONS = 10
 
         fun decode(plaintext: String): MessageBody {
             if (!plaintext.startsWith(BODY_MARKER)) return MessageBody(plaintext)
@@ -1315,6 +1385,10 @@ data class MessageBody(
                     forwardedFrom = json.optJSONObject("forwardedFrom")
                         ?.let { MessageForward.from(it) },
                     momentRef = json.optJSONObject("momentRef")?.let { MessageMoment.from(it) },
+                    pollOptions = json.optJSONObject("poll")
+                        ?.optJSONArray("options")
+                        ?.let { array -> (0 until array.length()).map { array.optString(it) } }
+                        ?.takeIf { it.size in POLL_MIN_OPTIONS..POLL_MAX_OPTIONS },
                 )
             }
                 // A body we cannot read is still a message; show it rather than

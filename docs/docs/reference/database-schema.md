@@ -162,6 +162,7 @@ model Message {
   attachments        MessageAttachment[]
   reactions          MessageReaction[]
   pinned             PinnedMessage?
+  poll               MessagePoll?
 
   @@index([channelId, createdAt(sort: Desc)])
 }

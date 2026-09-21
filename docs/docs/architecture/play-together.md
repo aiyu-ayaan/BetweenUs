@@ -368,6 +368,13 @@ the *move* the thing the player means (a column, not a square, when a column is
 what they clicked), and let the rules decide whose turn is next rather than
 alternating it.
 
+## The same shape, in chat: polls
+
+The referee shape is not specific to games. A [poll](/services/chat-service#polls-refereed-not-decrypted)
+is a vote that is a number, judged against rules the server can evaluate
+without reading the words the number points at. It lives in `chat-service`
+rather than here because a poll is a stored message, not a live board.
+
 ## A single replica, for now
 
 The board is held in process, exactly like the call roster and the listening

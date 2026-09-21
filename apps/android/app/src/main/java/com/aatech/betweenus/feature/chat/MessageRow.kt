@@ -205,6 +205,11 @@ fun MessageRow(
     onOpenSeenBy: () -> Unit = {},
     onOpenQuoted: (String) -> Unit = {},
     onReact: (String) -> Unit,
+    /** Replaces this account's whole ballot on a poll. Empty takes it back. */
+    onVotePoll: (List<Int>) -> Unit = {},
+    onClosePoll: () -> Unit = {},
+    /** Holds MANAGE_MESSAGE here, so may close somebody else's poll. */
+    canModeratePolls: Boolean = false,
     onViewImage: (Bitmap, String) -> Unit = { _, _ -> },
     onPlayVideo: (Uri, String) -> Unit = { _, _ -> },
     /**
@@ -745,6 +750,23 @@ fun MessageRow(
                                         mine = isSelf,
                                     )
                                 } else {
+
+                                // The referee's tally beside the sealed labels.
+                                // Both must be present: labels without a tally
+                                // cannot be voted on, a tally without labels is
+                                // only numbers.
+                                val poll = message.poll
+                                val labels = readable.pollOptions
+                                if (poll != null && labels != null) {
+                                    PollCard(
+                                        poll = poll,
+                                        labels = labels,
+                                        selfId = self.id,
+                                        canClose = isSelf || canModeratePolls,
+                                        onVote = onVotePoll,
+                                        onClose = onClosePoll,
+                                    )
+                                }
 
                                 // Two or more photos are an album rather than
                                 // two attachments that happen to be pictures.

@@ -87,7 +87,17 @@ Base Route: `/api/v1`
 | `POST` | `/messages/:messageId/reactions` | Yes | Adds an emoji reaction to a message. |
 | `DELETE` | `/messages/:messageId/reactions` | Yes | Removes the caller's emoji reaction. |
 | `POST` | `/messages/:messageId/pin` | Yes | Pins a message to the channel's pinned list. |
+| `PUT` | `/messages/:messageId/poll/vote` | Yes | Replaces the caller's whole ballot on a poll: `{ options: number[] }`, option indexes only. An empty list retracts. `400 INVALID_VOTE` / `SINGLE_CHOICE_POLL`, `409 POLL_CLOSED`, `404 POLL_NOT_FOUND`. Needs `SEND_MESSAGE`. |
+| `POST` | `/messages/:messageId/poll/close` | Yes | Stops voting early. The author, or `MANAGE_MESSAGE` in a server channel. Idempotent. |
 | `POST` | `/channels/:channelId/attachments/upload` | Yes | Initiates single or multipart encrypted file upload. |
+
+A poll is sent through the ordinary send route with one extra field,
+`poll: { optionCount: 2-10, multiChoice?: boolean, durationSeconds?: 3600 | 86400 | 259200 | 604800 | null }`.
+`content` is the sealed envelope carrying the question and the option labels;
+the server is told only the numbers, refuses any other field inside `poll`
+(`400`), and refuses to edit a poll's `content` afterwards (`POLL_NOT_EDITABLE`).
+Every `Message` that is a poll carries `poll: { optionCount, multiChoice,
+closesAt, closedAt, closedBy, tallies: [{ option, userIds }] }`.
 
 #### Example: `POST /api/v1/channels/:channelId/messages`
 ```json

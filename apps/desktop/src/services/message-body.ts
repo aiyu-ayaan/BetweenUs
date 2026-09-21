@@ -11,7 +11,12 @@
  * hidden behind a marker starting with a NUL - a character a textarea cannot
  * produce, so nobody can type a message that pretends to be one.
  */
-import type { MessageBody } from '@betweenus/shared-types';
+import {
+  POLL_MAX_OPTIONS,
+  POLL_MIN_OPTIONS,
+  type MessageBody,
+  type MessageBodyPoll,
+} from '@betweenus/shared-types';
 import { previewText } from './markup';
 
 /** Longer than this and a message is sent as a text file, the way Discord does. */
@@ -25,6 +30,7 @@ export function encodeBody(body: MessageBody): string {
     !body.replyTo &&
     !body.forwardedFrom &&
     !body.momentRef &&
+    !body.poll &&
     (body.emoji?.length ?? 0) === 0;
   if (plain) return body.text;
   return BODY_MARKER + JSON.stringify(body);
@@ -38,6 +44,7 @@ export function decodeBody(content: string): MessageBody {
     const reply = parsed.replyTo;
     const forwarded = parsed.forwardedFrom;
     const moment = parsed.momentRef;
+    const poll = readPoll(parsed.poll);
     return {
       text: typeof parsed.text === 'string' ? parsed.text : '',
       attachments: Array.isArray(parsed.attachments) ? parsed.attachments : [],
@@ -77,11 +84,31 @@ export function decodeBody(content: string): MessageBody {
             },
           }
         : {}),
+      // The labels of a poll. A list that is not a list of strings, or has
+      // too few or too many to be a poll, is dropped: the message still shows
+      // its question as text rather than a card nobody can vote on correctly.
+      ...(poll ? { poll } : {}),
     };
   } catch {
     // A body we cannot read is still a message; show it rather than nothing.
     return { text: content, attachments: [] };
   }
+}
+
+/**
+ * The poll half of a decoded body, or null when there is not a usable one.
+ *
+ * The index a vote carries is a position in this list, so a damaged list is
+ * worse than none: a card drawn from it would put somebody's vote under the
+ * wrong words.
+ */
+function readPoll(value: unknown): MessageBodyPoll | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const options = (value as { options?: unknown }).options;
+  if (!Array.isArray(options)) return null;
+  if (options.length < POLL_MIN_OPTIONS || options.length > POLL_MAX_OPTIONS) return null;
+  if (!options.every((option): option is string => typeof option === 'string')) return null;
+  return { options };
 }
 
 /** How much of the quoted message a reply carries with it. */

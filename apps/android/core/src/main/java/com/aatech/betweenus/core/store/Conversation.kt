@@ -50,6 +50,9 @@ data class ReadableMessage(
     /** The moment this answers, when it answers one. */
     val momentRef: MessageMoment? get() = body.momentRef
 
+    /** The sealed labels of a poll, when this is one. See [MessageBody.pollOptions]. */
+    val pollOptions: List<String>? get() = body.pollOptions
+
     /** What a reply to this message quotes. */
     fun quote(): MessageReply = MessageReply(
         id = message.id,
@@ -605,6 +608,18 @@ object Conversation {
 
     suspend fun react(message: Message, emoji: String) {
         replace(read(BetweenUsApi.reactToMessage(message.id, emoji)))
+    }
+
+    /**
+     * Replaces this account's ballot. The server referees it and answers with
+     * the tally, which is what gets drawn - no optimistic bar.
+     */
+    suspend fun votePoll(message: Message, options: List<Int>) {
+        replace(read(BetweenUsApi.votePoll(message.id, options)))
+    }
+
+    suspend fun closePoll(message: Message) {
+        replace(read(BetweenUsApi.closePoll(message.id)))
     }
 
     suspend fun pin(message: Message, pinned: Boolean) {

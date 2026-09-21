@@ -290,6 +290,9 @@ erDiagram
     Channel ||--o{ Message : has
     User ||--o{ Message : authors
     Message ||--o{ MessageReaction : has
+    Message ||--o| MessagePoll : "may be"
+    MessagePoll ||--o{ PollVote : counts
+    User ||--o{ PollVote : casts
     Message ||--o{ Attachment : claims
     User ||--o{ Attachment : uploads
 ```
@@ -340,6 +343,21 @@ one-time, which both clients already draw on screen.
 the whole schema, documented in [`E2EE.md`](/security/e2ee), because the
 server has to group and count reactions for recipients who don't currently
 hold the channel key.
+
+### `MessagePoll`
+The part of a poll the server referees, keyed on the message
+(`messageId` is the primary key: a poll is not a thing apart from the message
+that asks it, and deleting the message cascades). Holds `optionCount` (2-10),
+`multiChoice`, `closesAt` (stamped from the chosen duration on the server's
+clock), `closedAt` and `closedById`. It holds no text. The question and labels
+are inside `Message.content`, sealed; see
+[Polls](/services/chat-service#polls-refereed-not-decrypted).
+
+### `PollVote`
+One row per chosen option: `(messageId, userId, option)`, unique, indexed on
+`messageId`. `option` is an index into the sealed labels, a number and never a
+word. A multi-choice ballot is several rows. Cascades from both the poll and the
+voter. Migration `20260922110000_polls`.
 
 ### `MessageView`
 One person's one look at a one-time message, unique per `(messageId, userId)`.

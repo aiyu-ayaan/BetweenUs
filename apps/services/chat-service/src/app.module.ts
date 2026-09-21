@@ -7,6 +7,7 @@ import { createHealthController } from '@betweenus/nest-common';
 import { MessagesController } from './modules/messages/messages.controller';
 import { MessagesService } from './modules/messages/messages.service';
 import { UnfurlService } from './modules/messages/unfurl.service';
+import { PollsService } from './modules/messages/polls.service';
 import { ArrivalsService } from './modules/messages/arrivals.service';
 import { DisappearingSweeper } from './modules/messages/disappearing-sweeper';
 import { UploadsController } from './modules/uploads/uploads.controller';
@@ -54,6 +55,7 @@ const SERVICE_NAME = 'chat-service';
   providers: [
     MessagesService,
     UnfurlService,
+    PollsService,
     ArrivalsService,
     E2eeService,
     VaultService,
