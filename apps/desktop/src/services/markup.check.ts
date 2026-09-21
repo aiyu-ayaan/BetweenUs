@@ -19,6 +19,8 @@ import {
   isPlain,
   parse,
   parseNotes,
+  previewText,
+  SPOILER_MASK,
   styleRuns,
   wantsNewline,
   type Block,
@@ -452,5 +454,69 @@ assert.deepEqual(
     { text: 'c', styles: ['bold'] },
   ],
 );
+
+// --- spoilers ------------------------------------------------------------------
+
+// `||` hides its words and loses its marks, like any other style.
+{
+  const block = one('the end: ||he was the ghost|| ok');
+  assert.equal(block.text, 'the end: he was the ghost ok');
+  assert.deepEqual(block.spans, [{ start: 9, end: 25, style: 'spoiler' }]);
+}
+
+// A spoiler holds other marks, and code holds a spoiler's marks literally.
+assert.deepEqual(spans('||**a**||'), [
+  { start: 0, end: 1, style: 'bold' },
+  { start: 0, end: 1, style: 'spoiler' },
+]);
+{
+  const block = one('`a || b || c`');
+  assert.equal(block.text, 'a || b || c');
+  assert.deepEqual(block.spans, [{ start: 0, end: 11, style: 'code' }]);
+}
+
+// A single pipe is nothing, an unclosed pair is two pipes, and an escaped
+// pipe is a pipe.
+assert.deepEqual(spans('a | b'), []);
+assert.equal(one('a || b').text, 'a || b');
+assert.equal(one('\\||not||').text, '||not||');
+assert.deepEqual(spans('\\||not||'), []);
+assert.equal(isPlain('a || b'), false);
+
+// The composer sees the pipes as marks and the words between as a spoiler.
+assert.deepEqual(highlight('||x||'), [
+  { start: 0, end: 2, style: 'mark' },
+  { start: 2, end: 3, style: 'spoiler' },
+  { start: 3, end: 5, style: 'mark' },
+]);
+
+// --- fence languages -----------------------------------------------------------
+
+{
+  const blocks = parse('```TypeScript\nconst a = 1\n```\n```\nplain\n```\n```py title="x"\npass\n```');
+  assert.deepEqual(
+    blocks.map((block) => [block.kind, block.lang, block.text]),
+    [
+      ['code', 'typescript', 'const a = 1'],
+      ['code', '', 'plain'],
+      ['code', 'py', 'pass'],
+    ],
+  );
+  // Nothing but a code block names a language.
+  assert.equal(one('hello').lang, '');
+}
+
+// --- previewText -----------------------------------------------------------------
+
+// A notification never prints what the message list hides, and never tells
+// how long it was.
+assert.equal(previewText('it was ||snape|| all along'), `it was ${SPOILER_MASK} all along`);
+assert.equal(previewText('||a|| and ||a much longer secret||'), `${SPOILER_MASK} and ${SPOILER_MASK}`);
+// Marks come out, but a spoiler inside code is not one.
+assert.equal(previewText('**bold** and `||code||`'), 'bold and ||code||');
+// A spoiler inside a quote or a list item is hidden too.
+assert.equal(previewText('> ||q||\n- ||item||\n1. x'), `${SPOILER_MASK}\n• ${SPOILER_MASK}\n1. x`);
+// A spoiler nested in bold is still found.
+assert.equal(previewText('**a ||b|| c**'), `a ${SPOILER_MASK} c`);
 
 console.log('markup.check.ts ok');
