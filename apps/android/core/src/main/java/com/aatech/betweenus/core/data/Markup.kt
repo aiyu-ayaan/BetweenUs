@@ -25,7 +25,7 @@ package com.aatech.betweenus.core.data
  */
 object Markup {
 
-    enum class Style { Bold, Italic, Strike, Code }
+    enum class Style { Bold, Italic, Strike, Code, Spoiler }
 
     /** A style over `[start, end)` of the block's own text. */
     data class Span(val start: Int, val end: Int, val style: Style)
@@ -42,19 +42,29 @@ object Markup {
      *
      * [ordinal] is the number a `Number` item is drawn with, and the level of
      * a `Heading` - `## Install` is 2. Zero for everything else.
+     *
+     * [lang] is what a `Code` block's opening fence named - ```` ```ts ```` is
+     * `ts` - lower-cased, and empty for a bare fence and every other kind. It
+     * is only ever a hint to [Syntax], which falls back to plain text for a
+     * language it does not know.
      */
     data class Block(
         val kind: Kind,
         val text: String,
         val spans: List<Span> = emptyList(),
         val ordinal: Int = 0,
+        val lang: String = "",
     )
 
     private data class Delimiter(val token: String, val style: Style)
 
     // Longest first: `**` has to be tried before `*` or every bold is two
     // italics with nothing between them.
+    //
+    // `||` is a spoiler. A single pipe is nothing, so a table row or a shell
+    // pipeline is left alone; only the doubled one hides anything.
     private val DELIMITERS = listOf(
+        Delimiter("||", Style.Spoiler),
         Delimiter("**", Style.Bold),
         Delimiter("~~", Style.Strike),
         Delimiter("*", Style.Italic),
@@ -62,7 +72,7 @@ object Markup {
         Delimiter("`", Style.Code),
     )
 
-    private const val ESCAPABLE = "*_~`\\>"
+    private const val ESCAPABLE = "*_~`|\\>"
 
     /**
      * A list marker, and the space after it.
@@ -73,6 +83,12 @@ object Markup {
      */
     private val BULLET = Regex("^ {0,3}[-*+] +(.*)$")
     private val NUMBER = Regex("^ {0,3}(\\d{1,9})[.)] +(.*)$")
+
+    /**
+     * What an opening fence names: ```` ```ts ````, ```` ```Python ````. The
+     * first word only, so ```` ```js title="x" ```` still reads as `js`.
+     */
+    private val FENCE_LANG = Regex("^\\s*```\\s*([\\w+#.-]*)")
 
     /** `### Features`. The space is what keeps a `#channel` mention from being one. */
     private val HEADING = Regex("^ {0,3}(#{1,6}) +(.*?)\\s*#*\\s*$")
@@ -117,6 +133,7 @@ object Markup {
 
             if (line.trimStart().startsWith("```")) {
                 flush()
+                val lang = FENCE_LANG.find(line)?.groupValues?.get(1).orEmpty().lowercase()
                 val fence = mutableListOf<String>()
                 i++
                 while (i < lines.size && !lines[i].trimStart().startsWith("```")) {
@@ -127,7 +144,7 @@ object Markup {
                 // one and hit send meant the rest to be code; drawing it as
                 // prose with three backticks in front of it helps nobody.
                 if (i < lines.size) i++
-                blocks += Block(Kind.Code, fence.joinToString("\n").trim('\n'))
+                blocks += Block(Kind.Code, fence.joinToString("\n").trim('\n'), lang = lang)
                 continue
             }
 
@@ -309,8 +326,42 @@ object Markup {
 
     /** Whether anything at all would be drawn differently. Saves a rebuild. */
     fun isPlain(text: String): Boolean =
-        text.none { it == '*' || it == '_' || it == '~' || it == '`' || it == '\\' } &&
+        text.none { it == '*' || it == '_' || it == '~' || it == '`' || it == '|' || it == '\\' } &&
             text.lineSequence().none {
                 it.startsWith("> ") || it == ">" || BULLET.matches(it) || NUMBER.matches(it)
             }
+
+    /** What a spoiler reads as anywhere it cannot be tapped to reveal. */
+    const val SPOILER_MASK = "▒▒▒▒"
+
+    /**
+     * A message as one run of plain words, for the places that quote it
+     * rather than draw it: a notification, the snippet a reply carries.
+     *
+     * The marks come out - a notification showing `**done**` with its
+     * asterisks is one somebody has to read past - and every spoiler becomes
+     * [SPOILER_MASK]. That second half is why this goes through [parse] rather
+     * than a regex: only the parser knows that `||x||` inside backticks is
+     * code and not a spoiler. Hiding it in the list and printing it in the
+     * shade would make the mark worthless. The mask is a fixed width on
+     * purpose, so it does not give away how long the hidden words are.
+     *
+     * Line for line the desktop's `previewText`. Changing one changes both.
+     */
+    fun previewText(text: String): String =
+        parse(text).joinToString("\n") { block ->
+            var words = block.text
+            // From the end, so cutting one spoiler never moves the next one's offsets.
+            block.spans
+                .filter { it.style == Style.Spoiler }
+                .sortedByDescending { it.start }
+                .forEach { span ->
+                    words = words.substring(0, span.start) + SPOILER_MASK + words.substring(span.end)
+                }
+            when (block.kind) {
+                Kind.Bullet -> "• $words"
+                Kind.Number -> "${block.ordinal}. $words"
+                else -> words
+            }
+        }
 }

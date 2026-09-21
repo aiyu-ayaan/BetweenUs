@@ -51,6 +51,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -92,6 +96,7 @@ import com.aatech.betweenus.core.data.CustomEmoji
 import com.aatech.betweenus.core.data.Endpoint
 import com.aatech.betweenus.core.data.LinkPreview
 import com.aatech.betweenus.core.data.Markup
+import com.aatech.betweenus.core.data.Syntax
 import com.aatech.betweenus.core.data.MessageAttachment
 import com.aatech.betweenus.core.data.MessageCustomEmoji
 import com.aatech.betweenus.core.data.PresenceStatus
@@ -1665,8 +1670,18 @@ private fun MessageText(
 ) {
     val blocks = remember(readable.id, readable.text) { Markup.parse(readable.text) }
 
+    // One message's spoilers open together, and stay open while the process
+    // lives: the list recycles a row that scrolls away, and a spoiler that
+    // folded itself back up would be tapped a dozen times. Not persisted -
+    // tomorrow it is a spoiler again.
+    var revealed by remember(readable.id) { mutableStateOf(readable.id in revealedMessages) }
+    val reveal = {
+        revealedMessages += readable.id
+        revealed = true
+    }
+
     if (blocks.size == 1 && blocks[0].kind == Markup.Kind.Body) {
-        MarkupBody(blocks[0], readable.body.emoji, channelId = channelId, onOpenProfile = onOpenProfile)
+        MarkupBody(blocks[0], readable.body.emoji, channelId = channelId, onOpenProfile = onOpenProfile, revealed = revealed, onReveal = reveal)
         return
     }
 
@@ -1678,7 +1693,7 @@ private fun MessageText(
                 // this branch exists for the compiler rather than for a
                 // message, and drawing it as words is the honest answer if one
                 // ever arrives.
-                Markup.Kind.Body, Markup.Kind.Heading -> MarkupBody(block, readable.body.emoji, channelId = channelId, onOpenProfile = onOpenProfile)
+                Markup.Kind.Body, Markup.Kind.Heading -> MarkupBody(block, readable.body.emoji, channelId = channelId, onOpenProfile = onOpenProfile, revealed = revealed, onReveal = reveal)
                 Markup.Kind.Quote -> Row(modifier = Modifier.height(IntrinsicSize.Min)) {
                     Box(
                         modifier = Modifier
@@ -1688,26 +1703,15 @@ private fun MessageText(
                             .background(Edge),
                     )
                     Spacer(Modifier.width(8.dp))
-                    MarkupBody(block, readable.body.emoji, dim = true, channelId = channelId, onOpenProfile = onOpenProfile)
+                    MarkupBody(block, readable.body.emoji, dim = true, channelId = channelId, onOpenProfile = onOpenProfile, revealed = revealed, onReveal = reveal)
                 }
-                Markup.Kind.Code -> Text(
-                    text = block.text,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontFamily = FontFamily.Monospace,
-                    color = Slate100,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(Surface950)
-                        .border(1.dp, Edge, RoundedCornerShape(6.dp))
-                        .padding(horizontal = 10.dp, vertical = 8.dp),
-                )
+                Markup.Kind.Code -> CodeBlock(block)
                 // The marker sits in a gutter of its own so a wrapped item
                 // lines up under its own first word rather than under the
                 // bullet - which is the only thing that makes a list of long
                 // items readable as a list.
-                Markup.Kind.Bullet -> MarkupItem("•", block, readable.body.emoji, channelId = channelId, onOpenProfile = onOpenProfile)
-                Markup.Kind.Number -> MarkupItem("${block.ordinal}.", block, readable.body.emoji, channelId = channelId, onOpenProfile = onOpenProfile)
+                Markup.Kind.Bullet -> MarkupItem("•", block, readable.body.emoji, channelId = channelId, onOpenProfile = onOpenProfile, revealed = revealed, onReveal = reveal)
+                Markup.Kind.Number -> MarkupItem("${block.ordinal}.", block, readable.body.emoji, channelId = channelId, onOpenProfile = onOpenProfile, revealed = revealed, onReveal = reveal)
             }
         }
     }
@@ -1721,6 +1725,8 @@ private fun MarkupItem(
     emoji: List<MessageCustomEmoji>,
     channelId: String = "",
     onOpenProfile: (UserSummary) -> Unit = {},
+    revealed: Boolean = false,
+    onReveal: () -> Unit = {},
 ) {
     Row(modifier = Modifier.fillMaxWidth()) {
         Text(
@@ -1732,8 +1738,47 @@ private fun MarkupItem(
                 .widthIn(min = 20.dp)
                 .padding(end = 8.dp),
         )
-        MarkupBody(block, emoji, channelId = channelId, onOpenProfile = onOpenProfile)
+        MarkupBody(block, emoji, channelId = channelId, onOpenProfile = onOpenProfile, revealed = revealed, onReveal = onReveal)
     }
+}
+
+/** Messages whose spoilers have been opened, for as long as this process lives. */
+private val revealedMessages = mutableSetOf<String>()
+
+/** A fenced block, coloured when its fence named a language `Syntax` knows. */
+@Composable
+private fun CodeBlock(block: Markup.Block) {
+    val tokens = remember(block.text, block.lang) { Syntax.tokenize(block.text, block.lang) }
+    val keyword = Accent
+    val literal = Color(0xFFF59E0B).copy(alpha = 0.85f).compositeOver(Slate100.copy(alpha = 0.4f))
+    val string = Color(0xFF22C55E).copy(alpha = 0.85f).compositeOver(Slate100.copy(alpha = 0.4f))
+    val text = remember(tokens, keyword, literal, string) {
+        buildAnnotatedString {
+            tokens.forEach { token ->
+                val style = when (token.kind) {
+                    Syntax.Kind.Plain -> null
+                    Syntax.Kind.Keyword -> SpanStyle(color = keyword, fontWeight = FontWeight.SemiBold)
+                    Syntax.Kind.Literal, Syntax.Kind.Number -> SpanStyle(color = literal)
+                    Syntax.Kind.String -> SpanStyle(color = string)
+                    Syntax.Kind.Comment -> SpanStyle(color = Slate500, fontStyle = FontStyle.Italic)
+                }
+                if (style == null) append(token.text) else withStyle(style) { append(token.text) }
+            }
+        }
+    }
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodyMedium,
+        fontFamily = FontFamily.Monospace,
+        color = Slate100,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(6.dp))
+            .background(Surface950)
+            .border(1.dp, Edge, RoundedCornerShape(6.dp))
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+    )
 }
 
 private fun Markup.Style.span(): SpanStyle = when (this) {
@@ -1741,6 +1786,8 @@ private fun Markup.Style.span(): SpanStyle = when (this) {
     Markup.Style.Italic -> SpanStyle(fontStyle = FontStyle.Italic)
     Markup.Style.Strike -> SpanStyle(textDecoration = TextDecoration.LineThrough)
     Markup.Style.Code -> SpanStyle(fontFamily = FontFamily.Monospace, background = Surface950)
+    // Only reached once revealed; a hidden one is drawn by `MarkupBody`.
+    Markup.Style.Spoiler -> SpanStyle(background = Slate500.copy(alpha = 0.2f))
 }
 
 @Composable
@@ -1750,6 +1797,8 @@ private fun MarkupBody(
     dim: Boolean = false,
     channelId: String = "",
     onOpenProfile: (UserSummary) -> Unit = {},
+    revealed: Boolean = false,
+    onReveal: () -> Unit = {},
 ) {
     val uriHandler = LocalUriHandler.current
     val pieces = remember(block.text, emoji) { CustomEmoji.split(block.text, emoji) }
@@ -1786,7 +1835,16 @@ private fun MarkupBody(
             // was measured against and this one has been rebuilt.
             val from = span.start.coerceIn(0, length)
             val to = span.end.coerceIn(from, length)
-            if (to > from) addStyle(span.style.span(), from, to)
+            if (to <= from) return@forEach
+            if (span.style == Markup.Style.Spoiler && !revealed) {
+                // The words are painted the colour of their own cover, so an
+                // emoji or a link inside is hidden along with them; the tag is
+                // what a tap is matched against.
+                addStyle(SpanStyle(color = Slate500, background = Slate500), from, to)
+                addStringAnnotation("SPOILER", "", from, to)
+            } else {
+                addStyle(span.style.span(), from, to)
+            }
         }
     }
 
@@ -1803,6 +1861,10 @@ private fun MarkupBody(
             detectTapGestures { pos ->
                 layoutResult?.let { layout ->
                     val offset = layout.getOffsetForPosition(pos)
+                    if (annotated.getStringAnnotations(tag = "SPOILER", start = offset, end = offset).isNotEmpty()) {
+                        onReveal()
+                        return@detectTapGestures
+                    }
                     annotated.getStringAnnotations(tag = "URL", start = offset, end = offset)
                         .firstOrNull()?.let { annotation ->
                             runCatching { uriHandler.openUri(annotation.item) }

@@ -360,4 +360,46 @@ class MarkupTest {
             blocks.map { it.kind to it.text },
         )
     }
+
+    @Test
+    fun `a spoiler hides its words and loses its marks`() {
+        val block = Markup.parse("the end: ||he was the ghost|| ok").single()
+        assertEquals("the end: he was the ghost ok", block.text)
+        assertEquals(listOf(Span(9, 25, Style.Spoiler)), block.spans)
+    }
+
+    @Test
+    fun `code holds spoiler marks literally and a single pipe is nothing`() {
+        val code = Markup.parse("`a || b || c`").single()
+        assertEquals("a || b || c", code.text)
+        assertEquals(listOf(Span(0, 11, Style.Code)), code.spans)
+        assertTrue(Markup.parse("a | b").single().spans.isEmpty())
+        assertEquals("a || b", Markup.parse("a || b").single().text)
+        assertTrue(Markup.parse("\\||not||").single().spans.isEmpty())
+        assertTrue(!Markup.isPlain("a || b"))
+    }
+
+    @Test
+    fun `a fence names its language`() {
+        val blocks = Markup.parse("```TypeScript\nconst a = 1\n```\n```\nplain\n```\n```py title=\"x\"\npass\n```")
+        assertEquals(
+            listOf(
+                Triple(Kind.Code, "typescript", "const a = 1"),
+                Triple(Kind.Code, "", "plain"),
+                Triple(Kind.Code, "py", "pass"),
+            ),
+            blocks.map { Triple(it.kind, it.lang, it.text) },
+        )
+        assertEquals("", Markup.parse("hello").single().lang)
+    }
+
+    @Test
+    fun `previewText masks spoilers and drops marks`() {
+        val mask = Markup.SPOILER_MASK
+        assertEquals("it was $mask all along", Markup.previewText("it was ||snape|| all along"))
+        assertEquals("$mask and $mask", Markup.previewText("||a|| and ||a much longer secret||"))
+        assertEquals("bold and ||code||", Markup.previewText("**bold** and `||code||`"))
+        assertEquals("$mask\n• $mask\n1. x", Markup.previewText("> ||q||\n- ||item||\n1. x"))
+        assertEquals("a $mask c", Markup.previewText("**a ||b|| c**"))
+    }
 }

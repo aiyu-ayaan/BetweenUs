@@ -1102,7 +1102,10 @@ data class MessageReply(val id: String, val author: String, val preview: String)
 
         /** One line, however many the original had. */
         fun preview(text: String): String {
-            val line = text.replace(Regex("\\s+"), " ").trim()
+            // Marks out and spoilers masked: the quote is copied into the reply
+            // and drawn as plain text, so a spoiler quoted verbatim would be
+            // printed in full under the message that hid it.
+            val line = Markup.previewText(text).replace(Regex("\\s+"), " ").trim()
             return if (line.length > PREVIEW_CHARS) line.take(PREVIEW_CHARS - 1) + "…" else line
         }
     }
