@@ -1654,6 +1654,115 @@ export interface Message {
    * everyone who could see it apart from the author.
    */
   viewedBy: string[];
+  /**
+   * The refereed half of a poll, when this message is one. Absent on every
+   * other message and on a build older than polls.
+   *
+   * Only numbers: the question and the option labels are inside `content`,
+   * sealed like any other body - see `MessageBodyPoll`.
+   */
+  poll?: MessagePoll;
+}
+
+// --- Polls ---
+//
+// A poll is refereed, not decrypted. It is Play Together's shape applied to a
+// message: a vote is a number, the server checks that the number is legal and
+// counts it, and the words the number points at never leave the envelope.
+
+/** The fewest options a poll may offer. One option is not a question. */
+export const POLL_MIN_OPTIONS = 2;
+/** The most options a poll may offer. */
+export const POLL_MAX_OPTIONS = 10;
+/** Longest question a client will seal. Checked by clients: the server cannot see it. */
+export const POLL_QUESTION_MAX_CHARS = 300;
+/** Longest option label a client will seal. Same caveat. */
+export const POLL_OPTION_MAX_CHARS = 80;
+
+/**
+ * How long a poll may run before it closes by itself, in seconds: an hour, a
+ * day, three days, a week. Null - no limit - is always allowed and means it
+ * runs until somebody closes it. A list rather than a free number for the same
+ * reason as `DISAPPEARING_WINDOWS`: a picker, not a form.
+ */
+export const POLL_DURATIONS = [3600, 86400, 259200, 604800] as const;
+
+export type PollDuration = (typeof POLL_DURATIONS)[number];
+
+/** Whether a duration came off the list. Null and absent - "no limit" - are always allowed. */
+export function isPollDuration(seconds: number | null | undefined): boolean {
+  return (
+    seconds === null ||
+    seconds === undefined ||
+    (POLL_DURATIONS as readonly number[]).includes(seconds)
+  );
+}
+
+/**
+ * Who chose one option, by user id - the same shape as
+ * `MessageReactionSummary.userIds`, for the same reason: the object is
+ * broadcast to everybody, so each client counts the list and looks for itself
+ * in it rather than trusting a per-caller flag.
+ */
+export interface MessagePollTally {
+  option: number;
+  userIds: string[];
+}
+
+/** What the server knows about a poll: numbers, never words. */
+export interface MessagePoll {
+  /** How many options the sealed body carries. A vote is an index below this. */
+  optionCount: number;
+  multiChoice: boolean;
+  /** When voting stops by itself, or null for never. */
+  closesAt: string | null;
+  /** When somebody stopped it early, or null. */
+  closedAt: string | null;
+  /** Who stopped it early, by user id. */
+  closedBy: string | null;
+  /** One entry per option, in option order, including options nobody chose. */
+  tallies: MessagePollTally[];
+}
+
+/**
+ * Whether voting has stopped. Either an explicit close or a `closesAt` in the
+ * past - the second is never swept into the first, so every reader asks this
+ * rather than looking at `closedAt` alone.
+ */
+export function isPollClosed(poll: Pick<MessagePoll, 'closesAt' | 'closedAt'>, now = Date.now()): boolean {
+  if (poll.closedAt !== null) return true;
+  return poll.closesAt !== null && Date.parse(poll.closesAt) <= now;
+}
+
+/** The options one user has chosen, in option order. */
+export function pollChoicesOf(poll: Pick<MessagePoll, 'tallies'>, userId: string): number[] {
+  return poll.tallies.filter((tally) => tally.userIds.includes(userId)).map((tally) => tally.option);
+}
+
+/** How many distinct people have voted at all. */
+export function pollVoterCount(poll: Pick<MessagePoll, 'tallies'>): number {
+  return new Set(poll.tallies.flatMap((tally) => tally.userIds)).size;
+}
+
+/**
+ * What a client tells the server when it sends a poll - the settings, never
+ * the words. `optionCount` has to agree with the labels sealed in the body;
+ * the server cannot check that, and a client that lied would only be drawing
+ * a poll its own readers cannot vote on.
+ */
+export interface CreatePollSettings {
+  optionCount: number;
+  multiChoice?: boolean;
+  /** One of `POLL_DURATIONS`, or null/absent for no limit. */
+  durationSeconds?: number | null;
+}
+
+/**
+ * Replaces the caller's whole ballot. An empty list retracts it; a
+ * single-choice poll takes at most one index.
+ */
+export interface VotePollRequest {
+  options: number[];
 }
 
 /**
@@ -1688,6 +1797,11 @@ export interface CreateMessageRequest {
    * cannot read the body cannot be told by the body.
    */
   viewOnce?: boolean;
+  /**
+   * Send this as a poll. The question and labels go in `content`, sealed; this
+   * carries only what the server needs to referee votes. See `MessagePoll`.
+   */
+  poll?: CreatePollSettings;
 }
 
 /** Replaces the body; the author only, and it stamps `editedAt`. */
@@ -1994,6 +2108,17 @@ export interface MessageBody {
   forwardedFrom?: MessageForward;
   /** Set when this message answers a moment. See [MessageMoment]. */
   momentRef?: MessageMoment;
+  /**
+   * Set when this message is a poll. `text` is the question - so a client that
+   * has never heard of polls still shows what was asked - and this carries the
+   * option labels, in the order the server's indexes count them.
+   */
+  poll?: MessageBodyPoll;
+}
+
+/** The sealed half of a poll: the words. The server holds only their count. */
+export interface MessageBodyPoll {
+  options: string[];
 }
 
 // --- End-to-end encryption ---
