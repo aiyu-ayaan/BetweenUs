@@ -76,7 +76,8 @@ BetweenUs guarantees absolute message privacy. Messages and uploaded files are e
 ### Key Capabilities
 - **Zero-Knowledge Backend**: Servers, database operators, and network intermediaries cannot inspect message content, channel names, or attachments.
 - **Rich Markdown Formatting**: Full support for headings, bold/italic inline marks, blockquotes, ordered/unordered lists, code snippets, and syntax-highlighted code blocks.
-- **Interactive Messaging**: Real-time typing indicators, emoji reactions with custom pickers, threaded replies, message pinning, and edit histories.
+- **Interactive Messaging**: Real-time typing indicators, emoji reactions with custom pickers, quote replies, message pinning, and edit histories.
+- **Threads**: "Reply in thread" on any message opens a side conversation under it - a side panel on desktop and web, its own screen on Android. Replies stay out of the channel timeline; the root wears an "N replies · last reply X ago" chip. A thread is as private as its channel and sealed with the same key, so the server knows which message a reply hangs off and how many there are, never what was said. Only the people in a thread (its root's author and whoever has replied) are notified of a reply, and anyone else only when they are @mentioned. Deleting the root leaves the thread reachable under "Original message deleted"; a root that disappears takes its thread with it. Threads are one level deep, are not offered on one-time messages, and the thread composer is text only in this build.
 - **Encrypted Media & Attachments**: Images, videos, PDFs, and archives up to 100 MB are encrypted in memory prior to upload and decrypted on the recipient device.
 - **Local Persistence & Search**: Decrypted messages are indexed into encrypted SQLite/Room storage for instant full-text search.
 

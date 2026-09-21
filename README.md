@@ -158,6 +158,7 @@ to be framed, so no browser tab can ever show it.
 | One-time photos, video and voice, destroyed once seen | ✅ capture blocked | — opens in the app | ✅ `FLAG_SECURE` |
 | Voice messages, with a waveform, played in place | ✅ | ✅ | ✅ |
 | Replies, edit, delete, reactions | ✅ | ✅ | ✅ |
+| Threads — a side conversation under one message, with an "N replies" chip | ✅ side panel | ✅ side panel | ✅ own screen |
 | Pinned messages | ✅ | ✅ | ✅ |
 | Custom emoji in messages | ✅ | ✅ | ✅ |
 | `:` emoji suggestion menu while typing | ✅ | ✅ | ✅ a bar |
