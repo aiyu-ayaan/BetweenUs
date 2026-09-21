@@ -13,12 +13,17 @@ import {
   MaxLength,
   Min,
   ValidateIf,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { SERVER_ROLES } from '@betweenus/permissions';
 import { DISAPPEARING_WINDOWS, UPLOADED_PICTURE_URL } from '@betweenus/shared-types';
 import type {
   AddServerMemberRequest,
+  ChannelLayoutEntry,
+  ChannelLayoutRequest,
   ChannelType,
+  CreateChannelCategoryRequest,
   CreateChannelRequest,
   CreateServerEmojiRequest,
   CreateServerRequest,
@@ -26,6 +31,7 @@ import type {
   ServerRole,
   UpdateServerRoleRequest,
   SetChannelMembersRequest,
+  UpdateChannelCategoryRequest,
   UpdateChannelRequest,
   UpdateServerMemberRequest,
   UpdateServerRequest,
@@ -116,6 +122,53 @@ export class CreateChannelDto implements CreateChannelRequest {
   @IsUUID('4', { each: true })
   @ArrayMaxSize(256)
   memberIds?: string[];
+
+  /** Null or absent for uncategorized. Checked against the server in the service. */
+  @IsOptional()
+  @ValidateIf((_object, value) => value !== null)
+  @IsUUID()
+  categoryId?: string | null;
+}
+
+export class CreateChannelCategoryDto implements CreateChannelCategoryRequest {
+  @IsString()
+  @Length(1, 64)
+  name!: string;
+}
+
+export class UpdateChannelCategoryDto implements UpdateChannelCategoryRequest {
+  @IsString()
+  @Length(1, 64)
+  name!: string;
+}
+
+export class ChannelLayoutEntryDto implements ChannelLayoutEntry {
+  @IsUUID()
+  id!: string;
+
+  @ValidateIf((_object, value) => value !== null)
+  @IsUUID()
+  categoryId!: string | null;
+}
+
+/**
+ * Bounded so a body cannot be arbitrarily large; the ids themselves are
+ * checked against the server in the service, which is the only place that
+ * knows which of them the caller may see.
+ */
+export class ChannelLayoutDto implements ChannelLayoutRequest {
+  @IsOptional()
+  @IsArray()
+  @IsUUID('all', { each: true })
+  @ArrayMaxSize(200)
+  categoryIds?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(500)
+  @ValidateNested({ each: true })
+  @Type(() => ChannelLayoutEntryDto)
+  channels?: ChannelLayoutEntryDto[];
 }
 
 export class UpdateChannelDto implements UpdateChannelRequest {

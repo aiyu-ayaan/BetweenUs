@@ -1,6 +1,8 @@
 import { create } from 'zustand';
-import { hasBody } from '@betweenus/shared-types';
+import { applyChannelLayout, hasBody } from '@betweenus/shared-types';
 import type {
+  ChannelCategory,
+  ChannelLayoutRequest,
   Channel,
   ChannelReadReceipt,
   ChannelType,
@@ -63,6 +65,8 @@ interface ChatState {
   view: 'home' | 'server';
   servers: ServerWithRole[];
   channels: Channel[];
+  /** The open server's categories, in the order they are drawn. */
+  categories: ChannelCategory[];
   /** Open conversations, kept apart from a server's channels. */
   directs: Channel[];
   members: ServerMember[];
@@ -280,6 +284,18 @@ interface ChatState {
   updateMember: (userId: string, change: UpdateServerMemberRequest) => Promise<void>;
   kickMember: (userId: string) => Promise<void>;
   deleteChannel: (channelId: string) => Promise<void>;
+  createCategory: (name: string) => Promise<void>;
+  renameCategory: (categoryId: string, name: string) => Promise<void>;
+  /** Its channels fall back to uncategorized; none is deleted. */
+  deleteCategory: (categoryId: string) => Promise<void>;
+  /**
+   * Applies a new sidebar arrangement at once and asks the server to make it
+   * true. If the server says no, the arrangement the sidebar had is put back
+   * and the error is rethrown for the caller to show.
+   */
+  arrangeChannels: (request: ChannelLayoutRequest) => Promise<void>;
+  /** Re-reads the open server's channels and categories, without reselecting. */
+  refreshChannelList: () => Promise<void>;
   /** Drops a server from the client after leaving or deleting it. */
   forgetServer: (serverId: string) => void;
   reset: () => void;
@@ -289,6 +305,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   view: 'home',
   servers: [],
   channels: [],
+  categories: [],
   directs: [],
   members: [],
   roles: [],
@@ -431,6 +448,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       view: 'server',
       activeServerId: serverId,
       channels: [],
+      categories: [],
       members: [],
       roles: [],
       messages: [],
@@ -451,11 +469,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
     void loadEmoji(serverId);
 
     let channels: Channel[];
+    let categories: ChannelCategory[];
     let members: ServerMember[];
     let roles: ServerCustomRole[];
     try {
-      [channels, members, roles] = await Promise.all([
+      [channels, categories, members, roles] = await Promise.all([
         api.channels(serverId),
+        // A server that predates categories, or an older deployment, simply
+        // has none: the sidebar then draws exactly the flat list it always did.
+        api.channelCategories(serverId).catch(() => []),
         // Members carry the display names presence attaches status to.
         api.members(serverId).catch(() => []),
         // And the roles turn a member's `roleIds` into names, which is what
@@ -474,7 +496,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // fetch in flight and owns the flag now.
       if (get().activeServerId === serverId) set({ loadingServer: false });
     }
-    set({ channels, members, roles });
+    set({ channels, categories, members, roles });
     void cache.putChannels(serverId, channels).catch(() => undefined);
     // Keep the rail's map current for the server that is actually open -
     // the background fetch in `loadServers` may still be in flight, or this
@@ -487,7 +509,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // another channel has to arrive for it to be counted or notified about.
     chatSocket.syncSubscriptions(subscribable(channels, get().directs));
 
-    const first = channels.find((channel) => channel.type === 'TEXT');
+    const first = sidebarOrder(categories, channels).find((channel) => channel.type === 'TEXT');
     if (first) await get().selectChannel(first.id);
   },
 
@@ -943,6 +965,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       activeServerId: null,
       activeChannelId: null,
       channels: [],
+      categories: [],
       members: [],
       roles: [],
       messages: [],
@@ -987,6 +1010,68 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
+  createCategory: async (name) => {
+    const serverId = get().activeServerId;
+    if (!serverId) return;
+    const category = await api.createChannelCategory(serverId, name);
+    if (get().activeServerId === serverId && !get().categories.some((c) => c.id === category.id)) {
+      set({ categories: [...get().categories, category] });
+    }
+  },
+
+  renameCategory: async (categoryId, name) => {
+    const serverId = get().activeServerId;
+    if (!serverId) return;
+    const category = await api.renameChannelCategory(serverId, categoryId, name);
+    set({ categories: get().categories.map((item) => (item.id === categoryId ? category : item)) });
+  },
+
+  deleteCategory: async (categoryId) => {
+    const serverId = get().activeServerId;
+    if (!serverId) return;
+    await api.deleteChannelCategory(serverId, categoryId);
+    // The server appends its channels to the uncategorized list; re-reading is
+    // the one way to land on exactly the positions it chose.
+    await get().refreshChannelList();
+  },
+
+  arrangeChannels: async (request) => {
+    const serverId = get().activeServerId;
+    if (!serverId) return;
+    const before = { categories: get().categories, channels: get().channels };
+
+    // Optimistic: the same pure function the server runs, so what is drawn now
+    // is what the refetch will say a moment later.
+    const next = applyChannelLayout(before.categories, before.channels, request);
+    set({ categories: next.categories, channels: next.channels });
+
+    try {
+      await api.setChannelLayout(serverId, request);
+    } catch (failure) {
+      // Only roll back if nothing else has replaced the lists in the meantime.
+      if (get().activeServerId === serverId) {
+        set({ categories: before.categories, channels: before.channels });
+      }
+      throw failure;
+    }
+  },
+
+  refreshChannelList: async () => {
+    const serverId = get().activeServerId;
+    if (!serverId) return;
+    const [channels, categories] = await Promise.all([
+      api.channels(serverId),
+      api.channelCategories(serverId).catch(() => get().categories),
+    ]);
+    if (get().activeServerId !== serverId) return;
+    set({ channels, categories });
+    void cache.putChannels(serverId, channels).catch(() => undefined);
+    const channelServerId = { ...get().channelServerId };
+    for (const channel of channels) channelServerId[channel.id] = serverId;
+    set({ channelServerId });
+    chatSocket.syncSubscriptions(subscribable(channels, get().directs));
+  },
+
   reset: () => {
     setUnread({});
     forgetMarkers();
@@ -995,6 +1080,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       view: 'home',
       servers: [],
       channels: [],
+      categories: [],
       directs: [],
       members: [],
       roles: [],
@@ -1131,6 +1217,29 @@ function toDirectChannel(direct: DirectChannel): Channel {
     isPrivate: true,
     createdAt: direct.createdAt,
   };
+}
+
+/**
+ * The channels in the order the sidebar draws them: loose ones first, then
+ * each category's in category order. What "the first text channel" means
+ * once there are categories - the one at the top of the list, not the
+ * oldest.
+ */
+export function sidebarOrder(categories: ChannelCategory[], channels: Channel[]): Channel[] {
+  const laid = applyChannelLayout(categories, channels, {});
+  const byPosition = (a: Channel, b: Channel): number =>
+    (a.position ?? 0) - (b.position ?? 0) || a.createdAt.localeCompare(b.createdAt);
+  const known = new Set(categories.map((category) => category.id));
+  const inGroup = (id: string | null): Channel[] =>
+    laid.channels
+      .filter((channel) => (channel.categoryId && known.has(channel.categoryId) ? channel.categoryId : null) === id)
+      .sort(byPosition);
+  return [
+    ...inGroup(null),
+    ...[...laid.categories]
+      .sort((a, b) => a.position - b.position)
+      .flatMap((category) => inGroup(category.id)),
+  ];
 }
 
 /** Channels a message can arrive in - everything except voice. */
@@ -1482,6 +1591,15 @@ chatSocket.on((event) => {
         await store.refreshMembers();
       }
     })();
+    return;
+  }
+
+  // A channel or category was created, renamed, moved or deleted by somebody.
+  // Re-read, because which channels appear is per member (private ones).
+  if (event.type === 'server.channels.changed') {
+    if (event.serverId === useChatStore.getState().activeServerId) {
+      void useChatStore.getState().refreshChannelList().catch(() => undefined);
+    }
     return;
   }
 

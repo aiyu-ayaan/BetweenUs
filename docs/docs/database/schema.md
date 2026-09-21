@@ -167,6 +167,8 @@ erDiagram
     User ||--o{ ServerMember : "has memberships"
     Server ||--o{ ServerMember : has
     Server ||--o{ Channel : has
+    Server ||--o{ ChannelCategory : organises
+    ChannelCategory |o--o{ Channel : "files (SetNull)"
     Server ||--o{ ServerInvite : has
     Server ||--o{ ServerCustomRole : has
     Server ||--o{ ServerEmoji : has
@@ -225,6 +227,23 @@ whole server.
 `type` is `TEXT` / `VOICE` / `DM`. `isPrivate` + `ChannelMember` rows form an
 allowlist; server membership grants nothing to a private channel, not even
 to an administrator.
+
+`categoryId` (nullable, `SetNull`) files a channel under a `ChannelCategory`;
+null means "uncategorized", drawn above every category. `position` orders it
+inside its category (or among the uncategorized ones), lowest first. It is not
+unique: ties, including every channel that predates categories (all `0`), fall
+back to `createdAt`, so an untouched server draws exactly the order it always
+did and the migration needs no backfill.
+
+### `ChannelCategory`
+A heading in a server's channel sidebar - `id`, `serverId` (cascade), `name`,
+`position` (lowest first, ties by `createdAt`), `createdAt`. Shared by the whole
+server and managed with `MANAGE_CHANNEL`; whether a member has one *collapsed*
+is a per-person, per-device preference that never reaches the database. It owns
+nothing and grants nothing: deleting one moves its channels to uncategorized
+(`Channel.categoryId` is `SetNull`) and a private channel is exactly as private
+inside a category as outside one. Migration:
+`20260922100000_channel_categories`.
 
 ### `ChannelMember`
 Rows are meaningful only when the channel is private — a public channel

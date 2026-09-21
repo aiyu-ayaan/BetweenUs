@@ -28,6 +28,13 @@ export const EVENTS = {
   SERVER_MEMBER_UPDATED: 'server.member.updated',
   CHANNEL_CREATED: 'channel.created',
   CHANNEL_DELETED: 'channel.deleted',
+  /**
+   * A server's channel list changed shape without a channel being created or
+   * deleted - a rename, a move, a category created, renamed, deleted or
+   * reordered. The same family as the two above, and the chat gateway turns
+   * all three into one client event, `server.channels.changed`.
+   */
+  CHANNEL_LIST_CHANGED: 'channel.list.changed',
   PRESENCE_CHANGED: 'presence.changed',
   PRESENCE_TYPING: 'presence.typing',
   PRESENCE_VOICE: 'presence.voice',
@@ -149,6 +156,7 @@ export interface EventPayloads {
   [EVENTS.SERVER_MEMBER_UPDATED]: { serverId: string; userId: string };
   [EVENTS.CHANNEL_CREATED]: { channelId: string; serverId: string };
   [EVENTS.CHANNEL_DELETED]: { channelId: string; serverId: string };
+  [EVENTS.CHANNEL_LIST_CHANGED]: { serverId: string };
   [EVENTS.PRESENCE_CHANGED]: { user: PresenceState };
   [EVENTS.PRESENCE_TYPING]: { channelId: string; userId: string; username: string };
   [EVENTS.PRESENCE_VOICE]: { voice: VoiceState };

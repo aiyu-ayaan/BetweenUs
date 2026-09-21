@@ -526,6 +526,11 @@ data class Channel(
     val type: ChannelType,
     val topic: String?,
     val isPrivate: Boolean,
+    /** The category it is filed under, or null for the loose channels on top. */
+    val categoryId: String? = null,
+    /** Where it sits inside its category, lowest first. */
+    val position: Int = 0,
+    val createdAt: String = "",
 ) {
     fun toJson(): JSONObject = JSONObject()
         .put("id", id)
@@ -534,6 +539,9 @@ data class Channel(
         .put("type", type.name)
         .put("topic", topic)
         .put("isPrivate", isPrivate)
+        .put("categoryId", categoryId)
+        .put("position", position)
+        .put("createdAt", createdAt)
 
     companion object {
         fun from(json: JSONObject) = Channel(
@@ -543,8 +551,57 @@ data class Channel(
             type = ChannelType.of(json.optString("type")),
             topic = json.stringOrNull("topic"),
             isPrivate = json.optBoolean("isPrivate"),
+            categoryId = json.stringOrNull("categoryId"),
+            position = json.optInt("position", 0),
+            createdAt = json.optString("createdAt"),
         )
     }
+}
+
+/**
+ * A heading in a server's channel list. Shared by the whole server; whether it
+ * is folded away is one person's choice and stays on the device.
+ */
+data class ChannelCategory(
+    val id: String,
+    val serverId: String,
+    val name: String,
+    val position: Int,
+    val createdAt: String = "",
+) {
+    companion object {
+        fun from(json: JSONObject) = ChannelCategory(
+            id = json.getString("id"),
+            serverId = json.optString("serverId"),
+            name = json.optString("name"),
+            position = json.optInt("position", 0),
+            createdAt = json.optString("createdAt"),
+        )
+    }
+}
+
+/** One heading (null for the loose channels above every category) and what is filed under it. */
+data class ChannelSection(val category: ChannelCategory?, val channels: List<Channel>)
+
+/**
+ * The sections a channel list is drawn as: uncategorized first, then each
+ * category in order, every channel by position and then age - the same rule
+ * `sortByPosition` gives the other clients, so all of them draw one order.
+ *
+ * A channel pointing at a category this device does not hold is drawn loose
+ * rather than dropped: a stale category list must never hide a channel.
+ * Empty categories are kept, because an empty heading is still somebody's
+ * work; the caller decides whether that is worth showing.
+ */
+fun channelSections(categories: List<ChannelCategory>, channels: List<Channel>): List<ChannelSection> {
+    val ordered = categories.sortedWith(compareBy({ it.position }, { it.createdAt }, { it.id }))
+    val known = ordered.map { it.id }.toSet()
+    val byPosition = compareBy<Channel>({ it.position }, { it.createdAt }, { it.id })
+    fun filed(id: String?) = channels
+        .filter { (it.categoryId?.takeIf { own -> own in known }) == id }
+        .sortedWith(byPosition)
+    return listOf(ChannelSection(null, filed(null))) +
+        ordered.map { ChannelSection(it, filed(it.id)) }
 }
 
 data class ChannelMember(val userId: String, val username: String, val displayName: String) {

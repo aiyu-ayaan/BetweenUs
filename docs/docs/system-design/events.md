@@ -84,8 +84,8 @@ negotiates its own WebRTC path directly between peers (see
 
 - **Carried in full** — a chat message is delivered as the whole `Message`
   DTO, because the client has to render it without a round trip.
-- **Announced, then re-fetched** — `friends.changed`, `server.members.changed`
-  and `status.changed` tell a client "something changed, re-read the list." A
+- **Announced, then re-fetched** — `friends.changed`, `server.members.changed`,
+  `server.channels.changed` and `status.changed` tell a client "something changed, re-read the list." A
   `Friend` DTO is written from the reader's own side (who requested, which
   direction), so one payload can't serve both parties of the same friendship
   without being composed twice — a refetch is cheaper and harder to get subtly
@@ -95,6 +95,13 @@ negotiates its own WebRTC path directly between peers (see
   devices — is worked out where the row was written, because that is where the
   friend list already was; the gateway holds sockets and knows nothing about
   friendships.
+
+`server.channels.changed` is announced rather than carried because *which*
+channels a member sees differs per member (a private channel is on some lists
+only). `channel.created`, `channel.deleted` and `channel.list.changed` (a
+rename, a move, a category change) are one family on the bus and one client
+event on the socket; the client re-reads the list, and its own optimistic
+reorder has already drawn the same answer.
 
 `user.updated` and `server.updated` are carried rather than announced, and the
 reason is the opposite of the friendship one: the same four fields are drawn in
@@ -145,7 +152,7 @@ at-most-once delivery becomes the limiting factor.
 ```text
 user.created            user.updated            user.online / user.offline
 server.created           server.updated            server.member.added / removed / updated
-channel.created           channel.deleted
+channel.created           channel.deleted           channel.list.changed
 message.created             message.updated             message.deleted
 chats.cleared (own devices only)
 call.started                  call.ended                    call.participant.joined / left

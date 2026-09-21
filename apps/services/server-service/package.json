@@ -7,7 +7,8 @@
     "build": "nest build",
     "dev": "nest start --watch",
     "start": "node dist/main.js",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "check": "tsx src/modules/servers/channel-layout.check.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.18",
@@ -31,6 +32,7 @@
     "@nestjs/schematics": "^11.0.9",
     "@types/express": "^5.0.6",
     "@types/node": "^20.14.10",
+    "tsx": "^4.16.5",
     "typescript": "^5.5.4"
   }
 }

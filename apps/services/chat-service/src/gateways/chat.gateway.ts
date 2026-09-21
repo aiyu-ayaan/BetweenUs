@@ -209,6 +209,21 @@ export class ChatGateway implements OnModuleDestroy {
       });
     }
 
+    // A channel created, deleted, renamed or moved, or a category changed.
+    // Everyone watching the server re-reads its channel list, which is where
+    // the per-member filter on private channels is applied - carrying the
+    // list here would mean composing a different one per recipient.
+    for (const event of [
+      EVENTS.CHANNEL_CREATED,
+      EVENTS.CHANNEL_DELETED,
+      EVENTS.CHANNEL_LIST_CHANGED,
+    ] as const) {
+      await this.events.subscribe(event, (envelope) => {
+        const { serverId } = envelope.payload;
+        this.broadcast(serverRoom(serverId), { type: 'server.channels.changed', serverId });
+      });
+    }
+
     // A renamed server, or one with a new picture. Everyone watching it is
     // holding the old one in a sidebar.
     await this.events.subscribe(EVENTS.SERVER_UPDATED, (envelope) => {

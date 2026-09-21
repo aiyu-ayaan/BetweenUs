@@ -12,11 +12,16 @@ import {
   EMOJI_NAME_PATTERN,
   MAX_SERVER_EMOJI,
   UPLOADED_PICTURE_URL,
+  applyChannelLayout,
+  sortByPosition,
   type ServerEmoji as ServerEmojiRow,
   type CreateServerEmojiRequest,
 } from '@betweenus/shared-types';
 import type {
   Channel,
+  ChannelCategory as ChannelCategoryDto,
+  ChannelLayout,
+  ChannelLayoutRequest,
   ChannelMember as ChannelMemberDto,
   CreateChannelRequest,
   CreateServerInviteRequest,
@@ -982,13 +987,238 @@ export class ServersService {
     await this.requireMembership(userId, serverId);
 
     const channels = await prisma.channel.findMany({
-      where: {
-        serverId,
-        OR: [{ isPrivate: false }, { members: { some: { userId } } }],
-      },
-      orderBy: { createdAt: 'asc' },
+      where: { serverId, ...visibleTo(userId) },
+      orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
     });
     return channels.map(toChannel);
+  }
+
+  // --- Channel categories ---------------------------------------------------
+
+  /**
+   * Every category, including one whose channels are all private and closed
+   * to this member: a heading is not a secret, and hiding it would make the
+   * layout differ per member for no protection at all.
+   */
+  async listCategories(userId: string, serverId: string): Promise<ChannelCategoryDto[]> {
+    await this.requireMembership(userId, serverId);
+    const rows = await prisma.channelCategory.findMany({
+      where: { serverId },
+      orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
+    });
+    return rows.map(toCategory);
+  }
+
+  /** A new category goes to the bottom of the sidebar. */
+  async createCategory(
+    userId: string,
+    serverId: string,
+    name: string,
+  ): Promise<ChannelCategoryDto> {
+    await this.requirePermission(userId, serverId, PERMISSIONS.MANAGE_CHANNEL);
+
+    const last = await prisma.channelCategory.aggregate({
+      where: { serverId },
+      _max: { position: true },
+    });
+    const row = await prisma.channelCategory.create({
+      data: {
+        serverId,
+        name: normalizeCategoryName(name),
+        position: (last._max.position ?? -1) + 1,
+      },
+    });
+
+    await recordServerAudit({
+      serverId,
+      actorId: userId,
+      targetId: row.id,
+      targetLabel: row.name,
+      action: 'category.created',
+      detail: { name: row.name },
+    });
+    await this.events.publish(EVENTS.CHANNEL_LIST_CHANGED, { serverId });
+    return toCategory(row);
+  }
+
+  async renameCategory(
+    userId: string,
+    serverId: string,
+    categoryId: string,
+    name: string,
+  ): Promise<ChannelCategoryDto> {
+    await this.requirePermission(userId, serverId, PERMISSIONS.MANAGE_CHANNEL);
+    const before = await this.requireCategory(serverId, categoryId);
+
+    const row = await prisma.channelCategory.update({
+      where: { id: categoryId },
+      data: { name: normalizeCategoryName(name) },
+    });
+
+    await recordServerAudit({
+      serverId,
+      actorId: userId,
+      targetId: row.id,
+      targetLabel: row.name,
+      action: 'category.updated',
+      detail: { name: { from: before.name, to: row.name } },
+    });
+    await this.events.publish(EVENTS.CHANNEL_LIST_CHANGED, { serverId });
+    return toCategory(row);
+  }
+
+  /**
+   * Removes the heading and nothing else. Its channels go back to
+   * uncategorized, after the ones already there and in the order they had -
+   * the foreign key would null them on its own, but it would also leave them
+   * at whatever positions they had inside the category, interleaved with the
+   * loose channels by accident.
+   */
+  async deleteCategory(userId: string, serverId: string, categoryId: string): Promise<void> {
+    await this.requirePermission(userId, serverId, PERMISSIONS.MANAGE_CHANNEL);
+    const category = await this.requireCategory(serverId, categoryId);
+
+    const [loose, filed] = await Promise.all([
+      prisma.channel.aggregate({
+        where: { serverId, categoryId: null },
+        _max: { position: true },
+      }),
+      prisma.channel.findMany({
+        where: { categoryId },
+        select: { id: true, position: true, createdAt: true },
+      }),
+    ]);
+    const start = (loose._max.position ?? -1) + 1;
+    const ordered = sortByPosition(
+      filed.map((row) => ({ ...row, createdAt: row.createdAt.toISOString() })),
+    );
+
+    await prisma.$transaction([
+      ...ordered.map((channel, index) =>
+        prisma.channel.update({
+          where: { id: channel.id },
+          data: { categoryId: null, position: start + index },
+        }),
+      ),
+      prisma.channelCategory.delete({ where: { id: categoryId } }),
+    ]);
+
+    await recordServerAudit({
+      serverId,
+      actorId: userId,
+      targetId: categoryId,
+      targetLabel: category.name,
+      action: 'category.deleted',
+      detail: { name: category.name, channelsMovedToUncategorized: ordered.length },
+    });
+
+    await this.events.publish(EVENTS.CHANNEL_LIST_CHANGED, { serverId });
+  }
+
+  /**
+   * Rearranges the sidebar - categories among themselves, and channels within
+   * and between categories - in one request and one transaction, so a drag
+   * is never half-applied.
+   *
+   * The ids are checked, not trusted: every category named must be this
+   * server's, and every channel named must be this server's *and one the
+   * caller can see*. The second half matters because `MANAGE_CHANNEL` does
+   * not open a private channel - somebody who could move a channel they
+   * cannot see could at least learn that its id exists. Anything the request
+   * leaves out keeps its category and goes after what it names, which is what
+   * lets a manager who cannot see every channel still send a layout.
+   */
+  async setChannelLayout(
+    userId: string,
+    serverId: string,
+    request: ChannelLayoutRequest,
+  ): Promise<ChannelLayout> {
+    await this.requirePermission(userId, serverId, PERMISSIONS.MANAGE_CHANNEL);
+
+    const [categoryRows, channelRows] = await Promise.all([
+      prisma.channelCategory.findMany({ where: { serverId } }),
+      prisma.channel.findMany({ where: { serverId, ...visibleTo(userId) } }),
+    ]);
+    const categories = categoryRows.map(toCategory);
+    const channels = channelRows.map(toChannel);
+
+    const categoryIds = new Set(categories.map((category) => category.id));
+    const channelIds = new Set(channels.map((channel) => channel.id));
+
+    requireUnique(request.categoryIds ?? [], 'category');
+    requireUnique((request.channels ?? []).map((entry) => entry.id), 'channel');
+
+    for (const id of request.categoryIds ?? []) {
+      if (!categoryIds.has(id)) throw categoryNotFound();
+    }
+    for (const entry of request.channels ?? []) {
+      if (!channelIds.has(entry.id)) {
+        throw new NotFoundException({ code: 'CHANNEL_NOT_FOUND', message: 'Channel not found' });
+      }
+      if (entry.categoryId !== null && !categoryIds.has(entry.categoryId)) {
+        throw categoryNotFound();
+      }
+    }
+
+    const next = applyChannelLayout(categories, channels, request);
+
+    // Only the rows that actually moved are written: a drag of one channel is
+    // usually a handful of updates, not one per channel in the server.
+    const channelBefore = new Map(channels.map((channel) => [channel.id, channel] as const));
+    const categoryBefore = new Map(categories.map((category) => [category.id, category] as const));
+    const writes = [
+      ...next.categories
+        .filter((category) => categoryBefore.get(category.id)?.position !== category.position)
+        .map((category) =>
+          prisma.channelCategory.update({
+            where: { id: category.id },
+            data: { position: category.position },
+          }),
+        ),
+      ...next.channels
+        .filter((channel) => {
+          const was = channelBefore.get(channel.id);
+          return (
+            was?.position !== channel.position ||
+            (was?.categoryId ?? null) !== (channel.categoryId ?? null)
+          );
+        })
+        .map((channel) =>
+          prisma.channel.update({
+            where: { id: channel.id },
+            data: { position: channel.position ?? 0, categoryId: channel.categoryId ?? null },
+          }),
+        ),
+    ];
+
+    if (writes.length > 0) {
+      await prisma.$transaction(writes);
+      await recordServerAudit({
+        serverId,
+        actorId: userId,
+        action: 'channels.reordered',
+        detail: { rowsChanged: writes.length },
+      });
+      await this.events.publish(EVENTS.CHANNEL_LIST_CHANGED, { serverId });
+    }
+
+    return {
+      categories: sortByPosition(next.categories),
+      channels: sortByPosition(next.channels),
+    };
+  }
+
+  private async requireCategory(
+    serverId: string,
+    categoryId: string,
+  ): Promise<{ id: string; name: string }> {
+    const row = await prisma.channelCategory.findUnique({
+      where: { id: categoryId },
+      select: { id: true, name: true, serverId: true },
+    });
+    // One from another server is not found, the same as one that never was.
+    if (!row || row.serverId !== serverId) throw categoryNotFound();
+    return { id: row.id, name: row.name };
   }
 
   /**
@@ -1005,12 +1235,24 @@ export class ServersService {
       ? await this.serverMemberIds(dto.serverId, [...(dto.memberIds ?? []), userId])
       : [];
 
+    const categoryId = dto.categoryId ?? null;
+    if (categoryId !== null) await this.requireCategory(dto.serverId, categoryId);
+
+    // The end of whichever group it joins, so a new channel never pushes an
+    // arranged list around.
+    const last = await prisma.channel.aggregate({
+      where: { serverId: dto.serverId, categoryId },
+      _max: { position: true },
+    });
+
     const channel = await prisma.channel.create({
       data: {
         serverId: dto.serverId,
         name: normalizeChannelName(dto.name),
         type: dto.type ?? 'TEXT',
         isPrivate,
+        categoryId,
+        position: (last._max.position ?? -1) + 1,
         members: { create: seats.map((memberId) => ({ userId: memberId })) },
       },
     });
@@ -1037,6 +1279,8 @@ export class ServersService {
         ...(dto.topic !== undefined ? { topic: dto.topic } : {}),
       },
     });
+    // A new name is in every member's sidebar, not only the one it was typed in.
+    await this.events.publish(EVENTS.CHANNEL_LIST_CHANGED, { serverId: channel.serverId });
     return toChannel(updated);
   }
 
@@ -1342,6 +1586,8 @@ function toChannel(row: {
   type: string;
   topic: string | null;
   isPrivate: boolean;
+  categoryId: string | null;
+  position: number;
   createdAt: Date;
 }): Channel {
   return {
@@ -1351,8 +1597,56 @@ function toChannel(row: {
     type: row.type === 'VOICE' ? 'VOICE' : row.type === 'DM' ? 'DM' : 'TEXT',
     topic: row.topic,
     isPrivate: row.isPrivate,
+    categoryId: row.categoryId,
+    position: row.position,
     createdAt: row.createdAt.toISOString(),
   };
+}
+
+/**
+ * The channels of a server this member may see: every public one, and the
+ * private ones they are on. The rule `resolveChannelAccess` applies to one
+ * channel at a time, written as a filter for the list queries.
+ */
+function visibleTo(userId: string): {
+  OR: [{ isPrivate: false }, { members: { some: { userId: string } } }];
+} {
+  return { OR: [{ isPrivate: false }, { members: { some: { userId } } }] };
+}
+
+function toCategory(row: {
+  id: string;
+  serverId: string;
+  name: string;
+  position: number;
+  createdAt: Date;
+}): ChannelCategoryDto {
+  return {
+    id: row.id,
+    serverId: row.serverId,
+    name: row.name,
+    position: row.position,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+/** Trimmed and collapsed, and never empty - a blank heading is a gap. */
+export function normalizeCategoryName(name: string): string {
+  return name.trim().replace(/\s+/g, ' ').slice(0, 64) || 'Category';
+}
+
+function categoryNotFound(): NotFoundException {
+  return new NotFoundException({ code: 'CATEGORY_NOT_FOUND', message: 'Category not found' });
+}
+
+/** A layout that names something twice is ambiguous, so it is refused. */
+function requireUnique(ids: string[], what: 'category' | 'channel'): void {
+  if (new Set(ids).size !== ids.length) {
+    throw new BadRequestException({
+      code: 'DUPLICATE_LAYOUT_ENTRY',
+      message: `A ${what} is named more than once`,
+    });
+  }
 }
 
 interface InviteRow {

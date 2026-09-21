@@ -32,7 +32,12 @@ effective-permission resolver every other service calls into.
 | GET | `/:serverId/emoji` | List custom emoji |
 | POST | `/:serverId/emoji` | Upload a custom emoji |
 | DELETE | `/:serverId/emoji/:emojiId` | Delete a custom emoji |
-| GET | `/:serverId/channels` | List a server's channels |
+| GET | `/:serverId/channels` | List a server's channels, in sidebar order (`position`, then age); each carries `categoryId` and `position` |
+| GET | `/:serverId/categories` | List a server's channel categories (membership) |
+| POST | `/:serverId/categories` | Create a category `{ name }`, appended at the bottom (`MANAGE_CHANNEL`) |
+| PATCH | `/:serverId/categories/:categoryId` | Rename a category (`MANAGE_CHANNEL`) |
+| DELETE | `/:serverId/categories/:categoryId` | Delete a category; its channels move to uncategorized, none is deleted (`MANAGE_CHANNEL`) |
+| PUT | `/:serverId/channel-layout` | Reorder categories and move channels within/between them in one transaction (`MANAGE_CHANNEL`) |
 | GET | `/:serverId/audit` | Moderation audit trail: role/permission changes, removals, role create/update/delete, server settings (`MANAGE_SERVER`) |
 
 ## `/api/v1/channels`
@@ -45,6 +50,19 @@ effective-permission resolver every other service calls into.
 | DELETE | `/:channelId` | Delete a channel |
 | GET | `/:channelId/members` | List a private channel's allowlist |
 | PUT | `/:channelId/members` | Replace a private channel's allowlist |
+
+`PUT /:serverId/channel-layout` takes `{ categoryIds?: string[], channels?:
+{ id, categoryId | null }[] }` and answers with `{ categories, channels }` as the
+caller sees them. Both lists are "in the order they should be drawn"; a
+channel's `position` is its index among the entries sharing its category.
+Anything the request leaves out keeps its category and follows what it names,
+which is what lets a manager who cannot see a private channel still send a
+layout. Every id is checked against the server, and a channel must also be one
+the caller can see - `MANAGE_CHANNEL` does not open a private channel. Errors
+use the standard shape: `CATEGORY_NOT_FOUND` (404), `CHANNEL_NOT_FOUND` (404),
+`DUPLICATE_LAYOUT_ENTRY` (400), `MISSING_PERMISSION` (403). Every change is
+written to the server audit trail (`category.created`, `category.updated`,
+`category.deleted`, `channels.reordered`) and publishes `channel.list.changed`.
 
 An invite is previewed (`GET /invites/:code`) before it's accepted — the
 preview is deliberately thin (name, icon, member count, online count from

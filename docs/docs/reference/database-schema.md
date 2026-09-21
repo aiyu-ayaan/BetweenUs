@@ -89,6 +89,7 @@ model Server {
   updatedAt          DateTime       @updatedAt
 
   channels           Channel[]
+  channelCategories  ChannelCategory[]
   members            ServerMember[]
   roles              ServerRoleDefinition[]
   invites            ServerInvite[]
@@ -100,14 +101,35 @@ model Channel {
   serverId           String?
   name               String
   type               ChannelType
+  /// Null for the loose channels drawn above every category.
+  categoryId         String?
+  /// Order inside its category (or among the uncategorized); ties fall back to createdAt.
   position           Int               @default(0)
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
 
   server             Server?           @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  category           ChannelCategory?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   messages           Message[]
   members            ChannelMember[]
   overrides          ChannelOverride[]
+
+  @@index([categoryId])
+}
+
+/// A heading in a server's channel sidebar. Deleting one moves its channels
+/// to uncategorized; it never deletes them.
+model ChannelCategory {
+  id                 String            @id @default(uuid())
+  serverId           String
+  name               String
+  position           Int               @default(0)
+  createdAt          DateTime          @default(now())
+
+  server             Server            @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  channels           Channel[]
+
+  @@index([serverId])
 }
 ```
 

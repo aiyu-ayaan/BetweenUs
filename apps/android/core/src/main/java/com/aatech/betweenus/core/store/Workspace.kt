@@ -2,6 +2,7 @@ package com.aatech.betweenus.core.store
 
 import com.aatech.betweenus.core.crypto.E2ee
 import com.aatech.betweenus.core.data.Channel
+import com.aatech.betweenus.core.data.ChannelCategory
 import com.aatech.betweenus.core.data.ChannelType
 import com.aatech.betweenus.core.data.BlockedUser
 import com.aatech.betweenus.core.data.ChatSocket
@@ -41,6 +42,14 @@ object Workspace {
     /** Channels by server id. Loaded when a server is first opened, then kept. */
     private val _channels = MutableStateFlow<Map<String, List<Channel>>>(emptyMap())
     val channels: StateFlow<Map<String, List<Channel>>> = _channels.asStateFlow()
+
+    /**
+     * Categories by server id. In memory only: they are one small call, fetched
+     * with the channels, and a cold start draws the flat list for the moment
+     * before they arrive rather than a stale grouping from last week.
+     */
+    private val _categories = MutableStateFlow<Map<String, List<ChannelCategory>>>(emptyMap())
+    val categories: StateFlow<Map<String, List<ChannelCategory>>> = _categories.asStateFlow()
 
     private val _directChannels = MutableStateFlow<List<DirectChannel>>(emptyList())
     val directChannels: StateFlow<List<DirectChannel>> = _directChannels.asStateFlow()
@@ -118,6 +127,14 @@ object Workspace {
                             Session.applyProfile(it)
                         }
 
+                    // A channel or category was created, renamed, moved or
+                    // deleted by somebody. Re-read the list rather than patch it:
+                    // which channels appear is per member (private ones).
+                    "server.channels.changed" -> scope.launch {
+                        val serverId = event.optString("serverId")
+                        if (_channels.value.containsKey(serverId)) loadChannels(serverId)
+                    }
+
                     "server.updated" -> {
                         val serverId = event.optString("serverId")
                         val iconUrl =
@@ -182,6 +199,7 @@ object Workspace {
     fun stop() {
         _servers.value = emptyList()
         _channels.value = emptyMap()
+        _categories.value = emptyMap()
         _directChannels.value = emptyList()
         _friends.value = emptyList()
         _blocked.value = emptyList()
@@ -226,6 +244,9 @@ object Workspace {
     }
 
     suspend fun loadChannels(serverId: String) {
+        // An older server has no categories endpoint; that is "none", not a failure.
+        runCatching { BetweenUsApi.channelCategories(serverId) }
+            .onSuccess { categories -> _categories.update { it + (serverId to categories) } }
         runCatching { BetweenUsApi.channels(serverId) }.onSuccess { channels ->
             _channels.update { it + (serverId to channels) }
             Cache.putChannels(_channels.value)

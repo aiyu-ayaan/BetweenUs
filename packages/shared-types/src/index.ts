@@ -1011,6 +1011,18 @@ export interface Channel {
   topic: string | null;
   /** Visible only to the users on its allowlist - see `ChannelMember`. */
   isPrivate: boolean;
+  /**
+   * The category the sidebar files it under, or null for the loose channels
+   * drawn above every category. Absent on a direct message, which has no
+   * sidebar to be filed in, and from a server older than categories.
+   */
+  categoryId?: string | null;
+  /**
+   * Where it sits inside its category, lowest first. Ties - including every
+   * channel that predates categories, all of them 0 - fall back to
+   * `createdAt`. See `sortByPosition`.
+   */
+  position?: number;
   createdAt: string;
 }
 
@@ -1024,11 +1036,171 @@ export interface CreateChannelRequest {
    * list makes a channel only its creator can open.
    */
   memberIds?: string[];
+  /** File it under a category from the start; it goes to the end of it. */
+  categoryId?: string | null;
 }
 
 export interface UpdateChannelRequest {
   name?: string;
   topic?: string | null;
+}
+
+/**
+ * A heading in a server's channel sidebar that channels are filed under.
+ *
+ * Shared by the whole server and edited by whoever holds `MANAGE_CHANNEL`.
+ * Whether it is folded away is the opposite: that is one person's preference
+ * on one device and never reaches the server.
+ *
+ * It owns nothing - deleting one moves its channels back to uncategorized -
+ * and it grants nothing: a private channel is exactly as private inside a
+ * category as outside one.
+ */
+export interface ChannelCategory {
+  id: string;
+  serverId: string;
+  name: string;
+  /** Lowest first; ties fall back to `createdAt`. */
+  position: number;
+  createdAt: string;
+}
+
+export interface CreateChannelCategoryRequest {
+  name: string;
+}
+
+export interface UpdateChannelCategoryRequest {
+  name: string;
+}
+
+/** Where one channel goes: which category (null for none), in list order. */
+export interface ChannelLayoutEntry {
+  id: string;
+  categoryId: string | null;
+}
+
+/**
+ * A new arrangement of a server's sidebar, sent whole rather than as a move.
+ *
+ * `categoryIds` is the categories in the order they should be drawn.
+ * `channels` is channels in the order they should be drawn, each saying which
+ * category it now belongs to; a channel's position is its index among the
+ * entries that share its category. Either half may be left out.
+ *
+ * Anything *not* named keeps its category and goes after the named ones, in
+ * the order it already had. That is not a convenience: somebody with
+ * `MANAGE_CHANNEL` may not be able to see every channel - a private one they
+ * are not on is invisible to them - and a layout that had to name every
+ * channel would be a layout they could never send.
+ */
+export interface ChannelLayoutRequest {
+  categoryIds?: string[];
+  channels?: ChannelLayoutEntry[];
+}
+
+/** A server's sidebar as the caller may see it: its categories and channels. */
+export interface ChannelLayout {
+  categories: ChannelCategory[];
+  channels: Channel[];
+}
+
+/** What `sortByPosition` and `applyChannelLayout` need from a row. */
+interface Positioned {
+  id: string;
+  position?: number;
+  createdAt: string;
+}
+
+/**
+ * The one ordering every sidebar draws: position, then age, then id - so two
+ * clients holding the same rows can never draw them differently.
+ */
+export function sortByPosition<T extends Positioned>(rows: readonly T[]): T[] {
+  return [...rows].sort(
+    (a, b) =>
+      (a.position ?? 0) - (b.position ?? 0) ||
+      a.createdAt.localeCompare(b.createdAt) ||
+      a.id.localeCompare(b.id),
+  );
+}
+
+/**
+ * Applies a `ChannelLayoutRequest` to the rows it describes, returning every
+ * row with its new `position` (and, for a channel, `categoryId`).
+ *
+ * Pure, and shared, because two places have to reach the same answer: the
+ * server, which writes it, and the client, which draws it optimistically
+ * before the server has said yes. If they disagreed the sidebar would jump
+ * the moment the realtime refetch landed.
+ *
+ * Ids the request names that are not among the rows are ignored here; the
+ * server refuses them before it gets this far. A channel named twice keeps
+ * its first placement. A channel moved to a category that is not among the
+ * rows stays where it was.
+ */
+export function applyChannelLayout<
+  K extends Positioned,
+  C extends Positioned & { categoryId?: string | null },
+>(
+  categories: readonly K[],
+  channels: readonly C[],
+  request: ChannelLayoutRequest,
+): { categories: K[]; channels: C[] } {
+  const orderedCategories = placeInOrder(sortByPosition(categories), request.categoryIds ?? []);
+  const nextCategories = orderedCategories.map((category, index) => ({
+    ...category,
+    position: index,
+  }));
+
+  const categoryIds = new Set(categories.map((category) => category.id));
+  const target = new Map<string, string | null>();
+  for (const entry of request.channels ?? []) {
+    if (target.has(entry.id)) continue;
+    if (entry.categoryId !== null && !categoryIds.has(entry.categoryId)) continue;
+    target.set(entry.id, entry.categoryId);
+  }
+
+  const moved = channels.map((channel) =>
+    target.has(channel.id)
+      ? { ...channel, categoryId: target.get(channel.id) ?? null }
+      : { ...channel, categoryId: channel.categoryId ?? null },
+  );
+  const named = [...target.keys()];
+
+  // Positions are per category, so each group is ordered on its own: named
+  // channels first in the order the request gave, then everything else the
+  // group already held, in the order it already had.
+  const groups = new Map<string | null, C[]>();
+  for (const channel of moved) {
+    const key = channel.categoryId ?? null;
+    groups.set(key, [...(groups.get(key) ?? []), channel]);
+  }
+  const position = new Map<string, number>();
+  for (const group of groups.values()) {
+    placeInOrder(sortByPosition(group), named).forEach((channel, index) =>
+      position.set(channel.id, index),
+    );
+  }
+
+  return {
+    categories: nextCategories,
+    channels: moved.map((channel) => ({ ...channel, position: position.get(channel.id) ?? 0 })),
+  };
+}
+
+/** `rows` reordered so the ones `ids` names come first, in that order. */
+function placeInOrder<T extends { id: string }>(rows: T[], ids: readonly string[]): T[] {
+  const byId = new Map(rows.map((row) => [row.id, row] as const));
+  const first: T[] = [];
+  const seen = new Set<string>();
+  for (const id of ids) {
+    const row = byId.get(id);
+    if (row && !seen.has(id)) {
+      first.push(row);
+      seen.add(id);
+    }
+  }
+  return [...first, ...rows.filter((row) => !seen.has(row.id))];
 }
 
 /** One user allowed into a private channel. */
@@ -3467,6 +3639,14 @@ export type ServerChatEvent =
   | { type: 'status.changed'; authorId: string }
   /** Sent to everyone watching the server, and to whoever joined or left it. */
   | { type: 'server.members.changed'; serverId: string }
+  /**
+   * The shape of a server's channel list changed: a channel created, renamed,
+   * deleted or moved, or a category created, renamed, deleted or reordered.
+   * Announced rather than carried, like a member list - the list is small, and
+   * what each member may see of it differs (a private channel is only on some
+   * lists), so the refetch is what applies that filter.
+   */
+  | { type: 'server.channels.changed'; serverId: string }
   /**
    * Somebody changed their picture or their name.
    *

@@ -22,6 +22,7 @@ gateway class handling frames itself.
 | `message.created` / `message.updated` | server → client | New message, or an edit/delete/pin/reaction on an existing one |
 | `friends.changed` | server → client | Re-fetch the friends list |
 | `server.members.changed` | server → client | Re-fetch a server's member list |
+| `server.channels.changed` | server → client | Re-fetch a server's channels and categories (created, renamed, deleted, moved, or a category changed) |
 | `user.updated` | server → client | A changed profile, carried: `{ id, username, displayName, avatarUrl, coverUrl, about }` |
 | `server.updated` | server → client | A renamed server or a new icon, carried |
 | `channel.read` | server → client | Somebody's read marker moved |
