@@ -457,6 +457,11 @@ object BetweenUsApi {
         authedArray("GET", "/api/v1/channels?serverId=${enc(serverId)}").map { Channel.from(it) }
     }
 
+    /** A server's channel categories; reordering is not offered on this client. */
+    suspend fun channelCategories(serverId: String): List<ChannelCategory> = io {
+        authedArray("GET", "/api/v1/servers/${enc(serverId)}/categories").map { ChannelCategory.from(it) }
+    }
+
     suspend fun createChannel(
         serverId: String,
         name: String,

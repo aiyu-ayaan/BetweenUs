@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
@@ -26,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -36,6 +38,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import com.aatech.betweenus.core.data.Channel
 import com.aatech.betweenus.core.data.ChannelType
+import com.aatech.betweenus.core.data.channelSections
 import com.aatech.betweenus.core.data.PublicUser
 import com.aatech.betweenus.core.data.ServerWithRole
 import com.aatech.betweenus.core.data.PresenceStatus
@@ -78,15 +81,13 @@ fun WorkspaceDrawer(
     var addingChannel by remember { mutableStateOf(false) }
 
     val channels by Workspace.channels.collectAsState()
+    val categories by Workspace.categories.collectAsState()
+    // Which categories are folded, on this device and for this run of the app.
+    // Not persisted yet - see the Android note in the channel-categories docs.
+    val collapsed = remember { mutableStateMapOf<String, Boolean>() }
     val unread by Workspace.unread.collectAsState()
     val self by Presence.self.collectAsState()
     val statusRuns by Statuses.runs.collectAsState()
-
-    // Collected, not read: `Presence.voiceMembers()` returns the value at the
-    // moment it is called, so a room that fills up after this drawer was drawn
-    // never redrew it. The member list is what puts names to the ids.
-    val voiceRooms by Presence.voice.collectAsState()
-    val members by Workspace.members.collectAsState()
 
     val server = servers.firstOrNull { it.id == selectedServerId }
 
@@ -225,52 +226,45 @@ fun WorkspaceDrawer(
                 if (server == null) {
                     item { DirectMessageList(onSelectChannel = { onSelectChannel(it) }) }
                 } else {
-                    val all = channels[server.id].orEmpty()
-                    val text = all.filter { it.type == ChannelType.TEXT }
-                    val voice = all.filter { it.type == ChannelType.VOICE }
+                    val sections = channelSections(
+                        categories[server.id].orEmpty(),
+                        channels[server.id].orEmpty(),
+                    )
 
-                    if (text.isNotEmpty()) item { SectionLabel("Text channels") }
-                    items(text, key = { it.id }) { channel ->
-                        ChannelRow(channel, channel.id == selectedChannelId, unread[channel.id] ?: 0) {
-                            onSelectChannel(channel)
+                    for (section in sections) {
+                        val category = section.category
+                        val folded = category != null && collapsed[category.id] == true
+
+                        if (category != null) {
+                            item(key = "category-${category.id}") {
+                                CategoryHeader(
+                                    name = category.name,
+                                    folded = folded,
+                                    // A folded heading still says something
+                                    // happened, and that you are inside it.
+                                    unread = if (folded) section.channels.sumOf { unread[it.id] ?: 0 } else 0,
+                                    containsSelected = folded && section.channels.any { it.id == selectedChannelId },
+                                    onToggle = { collapsed[category.id] = !folded },
+                                )
+                            }
                         }
-                    }
-                    if (voice.isNotEmpty()) item { SectionLabel("Voice channels") }
-                    items(voice, key = { it.id }) { channel ->
-                        // Presence gives user ids; the member list of the
-                        // server is what turns them into people. Without that
-                        // a voice channel could only say how many were in it,
-                        // which is the one thing you can already see.
-                        val inRoom = voiceRooms[channel.id].orEmpty()
-                        val roster = members[channel.serverId].orEmpty()
-                        val occupants = inRoom.map { id -> id to roster.firstOrNull { it.userId == id } }
-                        val occupied = occupants.isNotEmpty()
 
-                        // A card, tinted, only while somebody is actually
-                        // here - an empty channel stays a plain row. The
-                        // tint is what makes "something is happening in
-                        // here" readable at a glance down a list of channels.
-                        Column(
-                            modifier = if (occupied) {
-                                Modifier
-                                    .padding(horizontal = 4.dp, vertical = 2.dp)
-                                    .background(
-                                        MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.35f),
-                                        RoundedCornerShape(12.dp),
-                                    )
-                                    .padding(vertical = 2.dp)
+                        // A folded category still shows the channel you are in.
+                        val visible = if (folded) {
+                            section.channels.filter { it.id == selectedChannelId }
+                        } else {
+                            section.channels
+                        }
+                        items(visible, key = { it.id }) { channel ->
+                            if (channel.type == ChannelType.VOICE) {
+                                VoiceChannelBlock(channel, channel.id == selectedChannelId) {
+                                    onSelectChannel(channel)
+                                }
                             } else {
-                                Modifier
-                            },
-                        ) {
-                            ChannelRow(
-                                channel = channel,
-                                selected = channel.id == selectedChannelId,
-                                unread = 0,
-                                subtitle = if (inRoom.isEmpty()) null else "${inRoom.size} in the room",
-                            ) { onSelectChannel(channel) }
-
-                            for ((id, member) in occupants) VoiceMember(id, member)
+                                ChannelRow(channel, channel.id == selectedChannelId, unread[channel.id] ?: 0) {
+                                    onSelectChannel(channel)
+                                }
+                            }
                         }
                     }
                 }
@@ -319,6 +313,80 @@ fun WorkspaceDrawer(
  * worth joining, and the web has said who all along. Indented to the width of
  * the channel icon, so the list reads as belonging to the channel above it.
  */
+/**
+ * A voice channel row with its occupants underneath. Presence gives user ids;
+ * the member list of the server is what turns them into people. Without that a
+ * voice channel could only say how many were in it, which is the one thing you
+ * can already see.
+ */
+@Composable
+private fun VoiceChannelBlock(channel: Channel, selected: Boolean, onOpen: () -> Unit) {
+    // Collected, not read: `Presence.voiceMembers()` returns the value at the
+    // moment it is called, so a room that fills up after this was drawn never
+    // redrew it.
+    val voiceRooms by Presence.voice.collectAsState()
+    val members by Workspace.members.collectAsState()
+    val inRoom = voiceRooms[channel.id].orEmpty()
+    val roster = members[channel.serverId].orEmpty()
+    val occupants = inRoom.map { id -> id to roster.firstOrNull { it.userId == id } }
+    val occupied = occupants.isNotEmpty()
+
+    // A card, tinted, only while somebody is actually here - an empty channel
+    // stays a plain row.
+    Column(
+        modifier = if (occupied) {
+            Modifier
+                .padding(horizontal = 4.dp, vertical = 2.dp)
+                .background(
+                    MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.35f),
+                    RoundedCornerShape(12.dp),
+                )
+                .padding(vertical = 2.dp)
+        } else {
+            Modifier
+        },
+    ) {
+        ChannelRow(
+            channel = channel,
+            selected = selected,
+            unread = 0,
+            subtitle = if (inRoom.isEmpty()) null else "${inRoom.size} in the room",
+        ) { onOpen() }
+
+        for ((id, member) in occupants) VoiceMember(id, member)
+    }
+}
+
+/** A category heading that folds. Announced as a button with its state. */
+@Composable
+private fun CategoryHeader(
+    name: String,
+    folded: Boolean,
+    unread: Int,
+    containsSelected: Boolean,
+    onToggle: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClickLabel = if (folded) "Expand $name" else "Collapse $name", onClick = onToggle)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = (if (folded) "\u25B8 " else "\u25BE ") + name.uppercase(),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        if (unread > 0) Badge(unread)
+        else if (containsSelected) Text("\u2022", color = MaterialTheme.colorScheme.primary)
+    }
+}
+
 @Composable
 private fun VoiceMember(userId: String, member: com.aatech.betweenus.core.data.ServerMember?) {
     val name = member?.label ?: "Someone"
