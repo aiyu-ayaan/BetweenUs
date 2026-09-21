@@ -133,16 +133,21 @@ generations). Every channel key is wrapped to this account identity, ensuring hi
 
 ### `AccountVaultFactor`
 The doors that unlock the account vault master key. Multiple rows per vault:
+- `server`: the master key held by the server, sealed with `SETTINGS_SECRET`. Never listed to clients; read and written through `/e2ee/vault/escrow`.
 - `password`: master key sealed using PBKDF2 derived from the account password.
 - `passphrase`: master key sealed using PBKDF2 derived from a user-chosen passphrase.
-- `recovery-code`: master key sealed using PBKDF2 derived from an auto-generated Crockford base32 code.
+- `recovery-code`: master key sealed using PBKDF2 derived from a Crockford base32 code, made on request in Settings.
 - `device`: master key sealed using ECDH wrap to a specific trusted `DeviceKey`.
 
-At least one portable factor (`password`, `passphrase`, or `recovery-code`) must always remain standing.
+At least one portable factor (`server`, `password`, `passphrase`, or `recovery-code`) must always remain standing.
+
+A `channel_keys` row addressed to `@account` that is older than its account's `AccountVault.createdAt` is
+**stale**: it was sealed to an identity the account reset away. It stops counting as held and is re-sealed by
+another member.
 
 ### `VaultGrantRequest`
-Ephemeral requests from a newly-enrolled (locked) device requesting a vault grant from an already-authorized
-device. Carries a 12-digit fingerprint computed directly from the requesting device's public key.
+Requests from a device asking for a vault grant from an already-authorized device. Nothing waits on them any
+more: every device opens the vault with the server-held key. Carries a 12-digit fingerprint computed directly from the requesting device's public key.
 
 ### `IdentityBackup` *(Legacy)*
 The v1 per-machine identity backup. Retained so legacy clients or pre-vault accounts can be migrated and

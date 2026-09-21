@@ -31,7 +31,7 @@
 
 A modern, secure communication platform with end-to-end encrypted messaging, peer-to-peer (P2P) WebRTC voice/video channels, interactive screen sharing, picture-in-picture, synchronised listening, and remote desktop access. Built as a high-performance pnpm + Turborepo monorepo of NestJS microservices with Desktop (Electron), Web (React), and Native Mobile (Android Jetpack Compose) clients.
 
-Messages, attachments, and call media are end-to-end encrypted: the server stores and routes ciphertext, never holding any key that can decrypt it. Voice, video, and screen sharing stream directly between participants via a peer-to-peer WebRTC mesh with DTLS-SRTP encryption — requiring zero media server infrastructure.
+Messages and attachments are encrypted on the client, and the server stores and routes only ciphertext. The server also holds each account's vault key, sealed with the deployment's settings secret, so signing in on any device brings the whole history with nothing to type — the Discord-style trade, stated plainly in `development/devdocs/E2EE.md`. Call media is end-to-end encrypted and never touches a server. Voice, video, and screen sharing stream directly between participants via a peer-to-peer WebRTC mesh with DTLS-SRTP encryption — requiring zero media server infrastructure.
 
 `CLAUDE.md` is the target architecture. `development/` tracks what is built, why each decision was taken, and what is deliberately left open. `docs/` is the complete documentation suite covering architecture, services, system design, security, and step-by-step deployment with Docker Compose and Cloudflare Tunnels.
 
@@ -503,10 +503,12 @@ keeps the metadata; blobs never go in a column.
 
 ## Security
 
-- **End-to-end encryption.** ECDH P-256 identity key per device, HKDF key
-  wrapping, AES-256-GCM for messages, attachments and call media. Private keys
-  are sealed with the OS keychain through Electron `safeStorage` and never
-  leave the machine. A call that cannot encrypt aborts rather than downgrading.
+- **Client-side encryption.** One ECDH P-256 identity keyring per account,
+  HKDF key wrapping, AES-256-GCM for messages, attachments and call media. The
+  account's vault key is held by the server (sealed with `SETTINGS_SECRET`) so
+  every device opens the full history on sign-in; a stolen database alone
+  opens nothing, but a compromised running server could. A call that cannot
+  encrypt aborts rather than downgrading.
 - **Attachments are encrypted before upload**, and their manifest - name, real
   type, size - travels inside the encrypted message body, not in columns. The
   server cannot type what it stores, so it serves everything as

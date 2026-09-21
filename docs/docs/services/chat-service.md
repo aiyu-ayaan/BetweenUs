@@ -377,14 +377,17 @@ and `viewCount` differ per reader, so the tray is re-read rather than patched.
 | Method | Path | What it does |
 | --- | --- | --- |
 | GET | `/vault` | Fetch caller's sealed account vault and active factor metadata |
-| POST | `/vault` | Create initial account vault with recovery code and primary factor |
+| POST | `/vault` | Create the account vault, with the master key for the server to hold (`escrow`) |
+| GET | `/vault/escrow` | The master key the server holds for this account, or `null` |
+| PUT | `/vault/escrow` | Hand the server the master key (refused with `WRONG_MASTER_KEY` unless it opens the keyring) |
+| POST | `/vault/reset` | Start over a vault nobody can open (refused with `VAULT_ESCROWED` while a held key opens it) |
 | POST | `/vault/rotate` | Append a new ECDH public key generation to the keyring |
 | PUT | `/vault/factors` | Add or update a factor (`password`, `passphrase`, `recovery-code`, `device`) |
 | DELETE | `/vault/factors/:kind` | Remove a factor (refuses deletion of last portable factor) |
-| POST | `/vault/grants/request` | Locked device requests vault grant authorization |
+| POST | `/vault/grants` | A device asks to be granted the vault |
 | GET | `/vault/grants` | List pending vault grant requests for this account |
-| POST | `/vault/grants/:requestId/approve` | Authorize and seal master key for requesting device |
-| POST | `/vault/grants/:requestId/deny` | Deny and dismiss a grant request |
+| GET | `/vault/grants/:deviceId` | The grant sealed for that device, or `null` (approving is `PUT /vault/factors` with kind `device`) |
+| DELETE | `/vault/grants/:deviceId` | Deny and dismiss a grant request |
 | GET | `/channels` | List all channel IDs this account holds keys for (promotion sweep) |
 | GET | `/recipients?channelId=` | Get account recipient identity keys (`AccountKeyRecipient`) for a channel |
 | GET | `/keys/:channelId` | Fetch wrapped channel keys addressed to caller's account and devices |

@@ -54,17 +54,19 @@ which was advice about a machine that might no longer exist.
 
 ```mermaid
 flowchart TD
-    subgraph T_DOORS ["Four independent ways in — each seals the same master key"]
+    subgraph T_DOORS ["Independent ways in — each seals the same master key"]
         direction TB
-        Code["<b>Recovery code</b><br/><i>130 bits, shown once at sign-up</i>"]
+        Server["<b>Server-held key</b><br/><i>sealed with the settings secret</i>"]
+        Code["<b>Recovery code</b><br/><i>optional, made in Settings</i>"]
         Password["<b>Account password</b><br/><i>PBKDF2-SHA256, 600k rounds</i>"]
         Passphrase["<b>Recovery passphrase</b><br/><i>never sent anywhere</i>"]
         Grant["<b>Device grant</b><br/><i>sealed to one machine by another</i>"]
     end
 
-    Master["<b>Account master key</b><br/><i>32 random bytes — the server never sees it</i>"]
+    Master["<b>Account master key</b><br/><i>32 random bytes</i>"]
     Keyring["<b>Identity keyring</b><br/><i>one ECDH P-256 pair per generation<br/>rotation appends, never replaces</i>"]
 
+    Server --> Master
     Code --> Master
     Password --> Master
     Passphrase --> Master
@@ -82,7 +84,7 @@ flowchart TD
     classDef core fill:#0f172a,stroke:#38bdf8,stroke-width:2px,color:#f8fafc;
     classDef ready fill:#14532d,stroke:#22c55e,stroke-width:2px,color:#ffffff;
 
-    class Code,Password,Passphrase,Grant door;
+    class Server,Code,Password,Passphrase,Grant door;
     class Master,Keyring,Keys core;
     class History ready;
 ```
@@ -92,30 +94,29 @@ a *keyring* rather than a single key — rotating it after losing a laptop
 adds a generation and leaves every earlier one in place, so nothing already
 sealed ever stops opening.
 
-**Every account gets a recovery code at sign-up, shown once.** It is not
-derived from your password, so a password reset does not touch it; it is
-not on any of your devices, so losing them does not touch it. It is the
-reason the answer to "I lost everything" is now a code on a piece of paper
-rather than an apology. The server refuses to let you remove your last
-portable way in.
+**The server holds your vault key.** It keeps a copy of your account's
+master key, sealed with the deployment's settings secret, and gives it only
+to a signed-in session of your own account. That is what lets any device open
+your whole history the moment you sign in — the way Discord or Slack behave.
 
 ### Signing in on a new device
 
-Whichever of these happens, the outcome is the same: your history is there.
+Sign in any way you like — password, Google, GitHub, or a saved session —
+and your history is there. Nothing to type, no recovery code to keep, and no
+other device has to be online.
 
-- **With your password** — the vault opens with nothing extra typed.
-- **With your recovery code or passphrase** — typed once on the unlock
-  screen. Needs no other device.
-- **By approving it from a device already signed in** — the two screens
-  show the same fingerprint, you check they match, and you tap approve.
+### A device is never locked
 
-### A device that cannot get in is locked, not broken
+There is no unlock screen. A device opens the vault from its own keychain,
+then from the server-held key, then from a password or a grant. If none of
+those opens it — only possible for a vault created before the server held
+keys, whose recovery code was lost — the app starts the vault over by itself.
+The server allows that only when it holds no key that opens the old one.
 
-If a device can open none of those — a provider sign-in with no password, a
-launch from a stored session — it says so and stops. It does **not** invent
-an identity, mint keys, or write anything, so nothing about the state is
-one-way. It draws one screen with all three ways in on it, and comes to
-life the moment you use any of them.
+After a reset, the keys sealed to your old identity are marked stale, and the
+other people in each chat have their app re-share them to your new identity
+the next time they open that chat. In a two-person chat, the other person
+opening it brings your history back.
 
 ### Messages written under the old design
 
@@ -279,7 +280,7 @@ action and is also needed.
 
 | Piece | Where it lives | Who can read it |
 | --- | --- | --- |
-| Account master key (32 bytes) | In memory, and each unlocked device's keychain | Whoever can open any one vault door |
+| Account master key (32 bytes) | In memory, each signed-in device's keychain, and held by the server under the settings secret | Whoever can open any one vault door, and the running server |
 | Account identity keyring | `account_vaults`, sealed under the master key | The same |
 | Vault doors, one row each | `account_vault_factors` | Each opens for one secret, or one machine |
 | Account identity public key | `account_vaults.publicKey` | Everyone — it is what others wrap to |
@@ -399,38 +400,21 @@ with an ordinary envelope, and there is no endpoint for it.
   tag can't carry an authorization header, and a member list renders them
   for people who hold no channel key at all.
 
-## The one boundary that moved: password recovery
+## The trade: the server can open vaults
 
-The `password` door is sealed with a key derived from your account
-password, and the password is something a *live* server sees at sign-in. So
-a **stolen database opens nothing** (passwords are bcrypt-hashed, every
-door is ciphertext), but a **compromised running server** could capture a
-password in use and open that account's vault afterwards.
+Holding the vault key is a deliberate choice, and it moves the boundary:
 
-Anyone whose threat model includes the running deployment should turn the
-password door off. That is safe to do now in a way it was not before: every
-account is created with a recovery code, so removing the password door
-leaves one standing by construction — and the server refuses the removal if
-it would not.
+- A **stolen database alone opens nothing**. The held key is ciphertext under
+  a secret that is not stored in the database, and passwords are bcrypt-hashed.
+- A **stolen database plus the settings secret**, or a **compromised running
+  server**, can open every account's vault and read its messages — the same
+  trust a Discord user places in Discord.
+- Message bodies are still encrypted everywhere they are stored or relayed, no
+  endpoint decrypts a message, and call media never touches a server.
 
-### Signing in without a secret
-
-A sign-in that carries no secret — a launch from a stored session, or an
-account that has only ever signed in with GitHub or Google and has no
-password at all — leaves the device **locked** rather than improvising.
-
-It generates nothing, publishes nothing, and writes nothing. It shows one
-screen with three ways in: type the recovery code, type a passphrase, or
-approve the device from one already signed in. The moment any of them
-succeeds, the whole history is there.
-
-This is the part that changed, and it changed because the old behaviour
-lost data. Such a device used to generate an identity of its own and carry
-on looking normal — so the account had two identities, the new one could
-read nothing already sealed for the old one, and it would go on to create
-new keys that the *rest* of the account could not read either. What the
-person saw was a screen of padlocks and a suggestion to open the app on
-their previous device.
+Protect `SETTINGS_SECRET` (or `JWT_SECRET`, when it is not set) as carefully as
+the database credentials. Rotating it with `SETTINGS_SECRET_PREVIOUS` set is
+safe; each device hands the key back to the server on its next sign-in.
 
 ### Approving a device
 

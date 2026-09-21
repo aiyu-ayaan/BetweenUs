@@ -30,9 +30,8 @@ class MissingChannelKeyError : Exception("No channel key on this device yet")
 /**
  * Lifecycle state of this device's access to the account vault.
  *
- * Unlike v1 which minted provisional keys and caused permanent identity forks,
- * a device that cannot unlock the vault enters [Locked] and refuses to write or
- * fork identity.
+ * A signed-in device opens the vault with the key the server holds, so it
+ * reaches [Ready] on its own. A vault nothing can open is reset and recreated.
  */
 sealed interface IdentityStatus {
     data object Absent : IdentityStatus
@@ -45,8 +44,9 @@ sealed interface IdentityStatus {
     data class Ready(val recoverable: Boolean) : IdentityStatus
 
     /**
-     * This device cannot unlock the account vault yet. It displays unlock options
-     * (recovery code, passphrase, or request authorization grant from another active device).
+     * Only reached if a vault reset raced another device's create and the
+     * resulting vault could not be opened; the next sign-in retries. There is
+     * no unlock screen.
      */
     data class Locked(
         val reason: LockedReason,
