@@ -164,6 +164,9 @@ export class NotificationsService {
             // agree with that rather than disagree per surface. A server that
             // gains ten members is not ten things to read.
             kind: 'USER',
+            // Nor is a thread reply: it is not in the channel's timeline, so
+            // a badge promising something new there would open onto nothing.
+            threadRootId: null,
           },
         });
 

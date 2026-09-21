@@ -83,6 +83,7 @@ import { DevicesService } from '../modules/devices/devices.service';
 import { messaging } from './firebase';
 import { focusedAmong } from './focus';
 import { joined, namesOf, rosterChanged, worthAnnouncing } from './roster';
+import { threadMentionsOnly, threadParticipants } from './thread';
 import { sendWebPush, webPushReady } from './webpush';
 
 /** FCM's own ceiling for one `sendEach` call. */
@@ -171,8 +172,15 @@ export class PushService implements OnModuleInit {
     );
     if (audience.length === 0) return;
 
-    const recipients = await this.allowed(audience, message);
-    if (recipients.length === 0) return;
+    const allowed = await this.allowed(audience, message);
+    if (allowed.length === 0) return;
+
+    // A thread reply is a side conversation: it is news to the people in the
+    // thread, and to anybody else only when it mentions them - which their
+    // own client decides, because only it can read the words. See `thread.ts`.
+    const recipients = message.threadRootId
+      ? await this.threadRecipients(message, message.threadRootId, allowed)
+      : allowed;
 
     /**
      * Anybody with this conversation open, on any of their devices, in a
@@ -199,6 +207,31 @@ export class PushService implements OnModuleInit {
         data: this.payload(message, one.mentionsOnly),
       })),
     );
+  }
+
+  /** The mentions-only flag for a thread reply, per recipient. */
+  private async threadRecipients(
+    message: Message,
+    threadRootId: string,
+    recipients: { userId: string; mentionsOnly: boolean }[],
+  ): Promise<{ userId: string; mentionsOnly: boolean }[]> {
+    const [root, replies] = await Promise.all([
+      prisma.message.findUnique({ where: { id: threadRootId }, select: { authorId: true } }),
+      prisma.message.findMany({
+        where: { threadRootId, id: { not: message.id } },
+        select: { authorId: true },
+        distinct: ['authorId'],
+      }),
+    ]);
+    const people = threadParticipants(
+      root?.authorId ?? null,
+      replies.map((reply) => reply.authorId),
+      message.author.id,
+    );
+    return recipients.map((one) => ({
+      userId: one.userId,
+      mentionsOnly: threadMentionsOnly(one.userId, one.mentionsOnly, people),
+    }));
   }
 
   /**
@@ -649,6 +682,7 @@ export class PushService implements OnModuleInit {
     };
     if (message.author.avatarUrl) data.authorAvatarUrl = message.author.avatarUrl;
     if (mentionsOnly) data.mentionsOnly = '1';
+    if (message.threadRootId) data.threadRootId = message.threadRootId;
     return data;
   }
 }
