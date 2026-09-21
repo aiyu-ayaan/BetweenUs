@@ -1,7 +1,7 @@
 {
   "name": "betweenus",
   "private": true,
-  "version": "1.0.7",
+  "version": "1.0.8",
   "packageManager": "pnpm@9.0.0",
   "license": "SEE LICENSE IN LICENSE",
   "scripts": {
