@@ -33,6 +33,22 @@ the desktop renderer on port 5173, which collides with `pnpm dev:duo` (see
 [Testing](/testing)) — use `dev:backend` when you plan to run `dev:duo`
 alongside it.
 
+### A service port something else already holds
+
+Each service listens on `<NAME>_PORT` from the repo `.env` (`AUTH_SERVICE_PORT`,
+`CHAT_SERVICE_PORT`, ...). The Vite proxies, `pnpm dev:gateway` and
+`pnpm dev:duo` read the same values through `scripts/dev-services.mjs`, so
+changing one line in `.env` moves a service for all of them. A `<NAME>_URL`
+exported in the shell still wins, for a service running somewhere else.
+
+If another program already holds a port - 3001 is a common one - that service
+exits with `EADDRINUSE` and the one in its place answers with its own 404s,
+which the sign-in form can only show as "Request failed". The dev gateway checks
+every service's `/health` 15 seconds after it starts and names the port that
+answers as something else. Set that service's `_PORT` in `.env` to a free port
+and restart `pnpm dev`. Production containers pin their ports in Compose and do
+not read these.
+
 ## Desktop client
 
 ```bash
