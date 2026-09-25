@@ -2,14 +2,18 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import electron from 'vite-plugin-electron/simple';
+import { serviceUrls } from '../../scripts/dev-services.mjs';
 
-const AUTH = process.env.AUTH_SERVICE_URL ?? 'http://127.0.0.1:3001';
-const SERVER = process.env.SERVER_SERVICE_URL ?? 'http://127.0.0.1:3003';
-const CHAT = process.env.CHAT_SERVICE_URL ?? 'http://127.0.0.1:3004';
-const CALL = process.env.CALL_SERVICE_URL ?? 'http://127.0.0.1:3007';
-const PRESENCE = process.env.PRESENCE_SERVICE_URL ?? 'http://127.0.0.1:3005';
-const NOTIFICATION = process.env.NOTIFICATION_SERVICE_URL ?? 'http://127.0.0.1:3006';
-const REMOTE = process.env.REMOTE_GATEWAY_URL ?? 'http://127.0.0.1:3008';
+// From the repo .env, the same file the services take their ports from -
+// see scripts/dev-services.mjs.
+const services = serviceUrls();
+const AUTH = services.AUTH_SERVICE;
+const SERVER = services.SERVER_SERVICE;
+const CHAT = services.CHAT_SERVICE;
+const CALL = services.CALL_SERVICE;
+const PRESENCE = services.PRESENCE_SERVICE;
+const NOTIFICATION = services.NOTIFICATION_SERVICE;
+const REMOTE = services.REMOTE_GATEWAY;
 
 // `pnpm dev:duo` starts Electron itself - twice, with separate profiles - so it
 // tells the plugin to build the main/preload bundles and stop there.

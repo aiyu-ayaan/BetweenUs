@@ -13,17 +13,21 @@ import { createRequire } from 'node:module';
 import { existsSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { serviceUrls } from './dev-services.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const desktopDir = path.join(repoRoot, 'apps', 'desktop');
 
-const AUTH = process.env.AUTH_SERVICE_URL ?? 'http://127.0.0.1:3001';
-const SERVER = process.env.SERVER_SERVICE_URL ?? 'http://127.0.0.1:3003';
-const CHAT = process.env.CHAT_SERVICE_URL ?? 'http://127.0.0.1:3004';
-const CALL = process.env.CALL_SERVICE_URL ?? 'http://127.0.0.1:3007';
-const PRESENCE = process.env.PRESENCE_SERVICE_URL ?? 'http://127.0.0.1:3005';
-const NOTIFICATION = process.env.NOTIFICATION_SERVICE_URL ?? 'http://127.0.0.1:3006';
-const REMOTE = process.env.REMOTE_GATEWAY_URL ?? 'http://127.0.0.1:3008';
+// From the repo .env, the same file the services take their ports from -
+// see scripts/dev-services.mjs.
+const services = serviceUrls();
+const AUTH = services.AUTH_SERVICE;
+const SERVER = services.SERVER_SERVICE;
+const CHAT = services.CHAT_SERVICE;
+const CALL = services.CALL_SERVICE;
+const PRESENCE = services.PRESENCE_SERVICE;
+const NOTIFICATION = services.NOTIFICATION_SERVICE;
+const REMOTE = services.REMOTE_GATEWAY;
 const RENDERER = 'http://localhost:5173';
 
 // Must satisfy the password policy in @betweenus/auth: 8+ chars, a letter, a digit.

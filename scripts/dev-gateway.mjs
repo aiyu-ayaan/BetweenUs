@@ -21,6 +21,7 @@ import { readFileSync } from 'node:fs';
 import http from 'node:http';
 import net from 'node:net';
 import { networkInterfaces } from 'node:os';
+import { reportServices, serviceUrls } from './dev-services.mjs';
 
 /**
  * 8090 rather than 8080, which is what the Nginx container listens on. Two
@@ -31,13 +32,16 @@ import { networkInterfaces } from 'node:os';
  */
 const PORT = Number(process.env.GATEWAY_PORT ?? 8090);
 
-const AUTH = process.env.AUTH_SERVICE_URL ?? 'http://127.0.0.1:3001';
-const SERVER = process.env.SERVER_SERVICE_URL ?? 'http://127.0.0.1:3003';
-const CHAT = process.env.CHAT_SERVICE_URL ?? 'http://127.0.0.1:3004';
-const PRESENCE = process.env.PRESENCE_SERVICE_URL ?? 'http://127.0.0.1:3005';
-const NOTIFICATION = process.env.NOTIFICATION_SERVICE_URL ?? 'http://127.0.0.1:3006';
-const CALL = process.env.CALL_SERVICE_URL ?? 'http://127.0.0.1:3007';
-const REMOTE = process.env.REMOTE_GATEWAY_URL ?? 'http://127.0.0.1:3008';
+// From the repo .env, the same file the services take their ports from -
+// see scripts/dev-services.mjs.
+const services = serviceUrls();
+const AUTH = services.AUTH_SERVICE;
+const SERVER = services.SERVER_SERVICE;
+const CHAT = services.CHAT_SERVICE;
+const PRESENCE = services.PRESENCE_SERVICE;
+const NOTIFICATION = services.NOTIFICATION_SERVICE;
+const CALL = services.CALL_SERVICE;
+const REMOTE = services.REMOTE_GATEWAY;
 
 /** Longest prefix wins, so `/api/v1/servers` cannot swallow `/api/v1/servers/x`. */
 const ROUTES = [
@@ -178,6 +182,11 @@ server.listen(PORT, '0.0.0.0', () => {
   }
   console.log('            (same Wi-Fi, and the firewall has to allow inbound %d)', PORT);
   console.log('  routes:   %s', ROUTES.map(([prefix]) => prefix).join(' '));
+
+  // Once the services have had a moment to start: a port held by some other
+  // program answers with its own 404s, which the sign-in form can only show
+  // as "Request failed". Say which service is missing and why, here.
+  setTimeout(() => void reportServices(services), 15_000).unref();
 
   // Also bind port 8080 if free, so emulators/clients pointing at 8080 connect without errors
   const ALT_PORT = 8080;
