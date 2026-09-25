@@ -3,6 +3,8 @@ package com.aatech.betweenus.core.store
 import com.aatech.betweenus.core.crypto.E2ee
 import com.aatech.betweenus.core.data.Channel
 import com.aatech.betweenus.core.data.ChannelCategory
+import com.aatech.betweenus.core.data.ChannelLayoutRequest
+import com.aatech.betweenus.core.data.applyChannelLayout
 import com.aatech.betweenus.core.data.ChannelType
 import com.aatech.betweenus.core.data.BlockedUser
 import com.aatech.betweenus.core.data.ChatSocket
@@ -504,6 +506,36 @@ object Workspace {
         // whoever happens to type in it first.
         if (channel.type == ChannelType.TEXT) runCatching { E2ee.keyChannel(channel.id) }
         return channel
+    }
+
+    /**
+     * Rearranges a server's channel list. Drawn at once through the same
+     * [applyChannelLayout] the server runs, so the refetch that follows lands
+     * on what is already on screen; put back and rethrown when the server
+     * says no.
+     *
+     * The rollback touches only this server's lists, and only while they are
+     * still the ones this drew: a refetch that landed in the meantime is newer
+     * than either copy held here.
+     */
+    suspend fun arrangeChannels(serverId: String, request: ChannelLayoutRequest) {
+        val beforeCategories = _categories.value[serverId].orEmpty()
+        val beforeChannels = _channels.value[serverId].orEmpty()
+        val next = applyChannelLayout(beforeCategories, beforeChannels, request)
+        _categories.update { it + (serverId to next.categories) }
+        _channels.update { it + (serverId to next.channels) }
+        try {
+            BetweenUsApi.setChannelLayout(serverId, request)
+            Cache.putChannels(_channels.value)
+        } catch (failure: Exception) {
+            _categories.update { all ->
+                if (all[serverId] == next.categories) all + (serverId to beforeCategories) else all
+            }
+            _channels.update { all ->
+                if (all[serverId] == next.channels) all + (serverId to beforeChannels) else all
+            }
+            throw failure
+        }
     }
 
     suspend fun deleteChannel(channel: Channel) {
