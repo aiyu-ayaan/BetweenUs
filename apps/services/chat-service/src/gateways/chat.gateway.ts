@@ -177,6 +177,14 @@ export class ChatGateway implements OnModuleDestroy {
       this.broadcast(userRoom(userId), { type: 'chats.cleared', clearedAt, channelId });
     });
 
+    // One account's follow or unread state in one thread. Its own sockets
+    // only: whether somebody follows a thread, and how much of it they have
+    // read, is nobody else's business.
+    await this.events.subscribe(EVENTS.THREAD_FOLLOW_CHANGED, (envelope) => {
+      const { userId, thread } = envelope.payload;
+      this.broadcast(userRoom(userId), { type: 'thread.follow', thread });
+    });
+
     await this.events.subscribe(EVENTS.FRIEND_CHANGED, (envelope) => {
       for (const userId of envelope.payload.userIds) {
         this.broadcast(userRoom(userId), { type: 'friends.changed' });

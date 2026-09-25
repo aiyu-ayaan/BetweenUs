@@ -20,6 +20,7 @@ import {
 import { purgeMessageAttachments } from '../uploads/attachment-sweeper';
 import { judgePollSettings, toPoll, type PollRow } from './poll-rules';
 import { threadRootProblem, threadSummaryOf } from './threads';
+import { publishThreadFollows, recordThreadReply } from './thread-follows';
 
 const PAGE_SIZE = 50;
 /**
@@ -290,7 +291,7 @@ export class MessagesService {
    * ponytail: two lookups per history page, both primary-key reads. Fold them
    * into the access check's query if a profiler ever says otherwise.
    */
-  private async historyFloor(userId: string, channelId: string): Promise<Date | null> {
+  async historyFloor(userId: string, channelId: string): Promise<Date | null> {
     const [account, conversation] = await Promise.all([
       prisma.user.findUnique({
         where: { id: userId },
@@ -446,7 +447,13 @@ export class MessagesService {
     await this.events.publish(EVENTS.MESSAGE_CREATED, { message });
     // The root's "N replies" chip, after the reply itself: a client that sees
     // the count move before the reply exists would open an empty thread.
-    if (threadRootId) await refreshThreadSummaries(this.events, [threadRootId]);
+    if (threadRootId) {
+      // The replier follows the thread and has read up to their own reply; the
+      // root's author follows it unless they said otherwise. Before the
+      // summary, whose fan-out tells every follower their unread count.
+      await recordThreadReply({ authorId: userId, threadRootId, createdAt: row.createdAt });
+      await refreshThreadSummaries(this.events, [threadRootId]);
+    }
     return message;
   }
 
@@ -914,6 +921,8 @@ export async function refreshThreadSummaries(events: EventBus, rootIds: string[]
 
     const root = await prisma.message.findUnique({ where: { id: rootId }, include: MESSAGE_INCLUDE });
     if (root) await events.publish(EVENTS.MESSAGE_UPDATED, { message: toMessage(root) });
+    // Every follower's unread count moved with the replies, up or down.
+    await publishThreadFollows(events, rootId);
   }
 }
 

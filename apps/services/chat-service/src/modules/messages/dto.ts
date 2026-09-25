@@ -21,6 +21,7 @@ import type {
   ClearChatsRequest,
   CreateMessageRequest,
   CreatePollSettings,
+  MarkThreadReadRequest,
   ReactToMessageRequest,
   UpdateMessageRequest,
   VotePollRequest,
@@ -159,4 +160,17 @@ export class ClearChatsDto implements ClearChatsRequest {
   @IsOptional()
   @IsUUID()
   channelId?: string | null;
+}
+
+/** Narrows the followed-threads list to one server; absent means everywhere. */
+export class FollowedThreadsQueryDto {
+  @IsOptional()
+  @IsUUID()
+  serverId?: string;
+}
+
+/** The newest reply the client has on screen in a thread. */
+export class MarkThreadReadDto implements MarkThreadReadRequest {
+  @IsUUID()
+  messageId!: string;
 }

@@ -15,14 +15,18 @@ import {
 import { CurrentUser, JwtAuthGuard, type AuthenticatedUser } from '@betweenus/auth';
 import type {
   ClearChatsResponse,
+  FollowedThread,
   LinkPreview,
   Message,
   Paginated,
+  ThreadFollowState,
 } from '@betweenus/shared-types';
 import { MessagesService } from './messages.service';
 import { UnfurlService } from './unfurl.service';
 import {
   ClearChatsDto,
+  FollowedThreadsQueryDto,
+  MarkThreadReadDto,
   CreateMessageDto,
   MessageQueryDto,
   PinQueryDto,
@@ -31,6 +35,7 @@ import {
   VotePollDto,
 } from './dto';
 import { PollsService } from './polls.service';
+import { ThreadFollowsService } from './thread-follows.service';
 
 @Controller('messages')
 @UseGuards(JwtAuthGuard)
@@ -39,6 +44,7 @@ export class MessagesController {
     private readonly messages: MessagesService,
     private readonly unfurlService: UnfurlService,
     private readonly polls: PollsService,
+    private readonly threadFollows: ThreadFollowsService,
   ) {}
 
   @Get()
@@ -63,6 +69,18 @@ export class MessagesController {
     @Query() query: PinQueryDto,
   ): Promise<Message[]> {
     return this.messages.pins(user.id, query.channelId);
+  }
+
+  /**
+   * The threads this account follows, with roots and unread counts, most
+   * recently active first. Ahead of `:messageId`, or `threads` is read as an id.
+   */
+  @Get('threads/followed')
+  followedThreads(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: FollowedThreadsQueryDto,
+  ): Promise<FollowedThread[]> {
+    return this.threadFollows.list(user.id, query.serverId);
   }
 
   /**
@@ -179,6 +197,34 @@ export class MessagesController {
     @Body() dto: VotePollDto,
   ): Promise<Message> {
     return this.polls.vote(user.id, messageId, dto.options);
+  }
+
+  /** Follows the thread under this root, on every device. Idempotent. */
+  @Put(':messageId/thread/follow')
+  followThread(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('messageId', ParseUUIDPipe) messageId: string,
+  ): Promise<ThreadFollowState> {
+    return this.threadFollows.setFollowing(user.id, messageId, true);
+  }
+
+  /** Stops following, and stays stopped until the caller replies there. */
+  @Delete(':messageId/thread/follow')
+  unfollowThread(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('messageId', ParseUUIDPipe) messageId: string,
+  ): Promise<ThreadFollowState> {
+    return this.threadFollows.setFollowing(user.id, messageId, false);
+  }
+
+  /** Moves the caller's read marker in this thread up to the reply named. */
+  @Put(':messageId/thread/read')
+  readThread(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('messageId', ParseUUIDPipe) messageId: string,
+    @Body() dto: MarkThreadReadDto,
+  ): Promise<ThreadFollowState> {
+    return this.threadFollows.markRead(user.id, messageId, dto.messageId);
   }
 
   /** Stops voting early. The author, or a moderator in a server channel. */

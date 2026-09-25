@@ -837,6 +837,89 @@ const strangerRoot = await statusOf(`${CHAT}/api/v1/messages/${threadRoot.id}`, 
 });
 ok('a message is not fetchable from outside its channel', strangerRoot === 404, String(strangerRoot));
 
+// --- Followed threads -----------------------------------------------------------
+//
+// The root's author follows once somebody answers; the replier follows and has
+// read up to their own reply. Unread is a count of rows, never of words.
+
+const followedByAuthor = await json(
+  `${CHAT}/api/v1/messages/threads/followed?serverId=${server.id}`,
+  { headers: authed },
+);
+const authorFollow = followedByAuthor.find((item) => item.rootId === threadRoot.id);
+ok(
+  "the root's author follows the thread once it is answered",
+  authorFollow?.following === true && authorFollow?.unreadCount === 1,
+  JSON.stringify(authorFollow),
+);
+ok('a followed thread carries its root', authorFollow?.root?.id === threadRoot.id);
+
+const followedByReplier = await json(`${CHAT}/api/v1/messages/threads/followed`, {
+  headers: other,
+});
+const replierFollow = followedByReplier.find((item) => item.rootId === threadRoot.id);
+ok(
+  'the replier follows and has read their own reply',
+  replierFollow?.following === true && replierFollow?.unreadCount === 0,
+  JSON.stringify(replierFollow),
+);
+
+const readThread = await json(`${CHAT}/api/v1/messages/${threadRoot.id}/thread/read`, {
+  method: 'PUT',
+  headers: authed,
+  body: JSON.stringify({ messageId: threadReply.id }),
+});
+ok('reading a thread clears its unread count', readThread.unreadCount === 0);
+
+const notAReply = await statusOf(`${CHAT}/api/v1/messages/${threadRoot.id}/thread/read`, {
+  method: 'PUT',
+  headers: authed,
+  body: JSON.stringify({ messageId: threadRoot.id }),
+});
+ok('only a reply in the thread moves its marker', notAReply === 400, String(notAReply));
+
+const unfollowed = await json(`${CHAT}/api/v1/messages/${threadRoot.id}/thread/follow`, {
+  method: 'DELETE',
+  headers: authed,
+});
+ok('a thread can be unfollowed', unfollowed.following === false);
+
+const quietReply = await json(`${CHAT}/api/v1/messages`, {
+  method: 'POST',
+  headers: other,
+  body: JSON.stringify({ channelId: channel.id, content: 'another', threadRootId: threadRoot.id }),
+});
+const afterUnfollow = await json(`${CHAT}/api/v1/messages/threads/followed`, { headers: authed });
+ok(
+  "an unfollow survives the next reply to the author's root",
+  !afterUnfollow.some((item) => item.rootId === threadRoot.id),
+);
+
+const refollowed = await json(`${CHAT}/api/v1/messages/${threadRoot.id}/thread/follow`, {
+  method: 'PUT',
+  headers: authed,
+});
+ok(
+  'following again keeps the marker, so the new reply is unread',
+  refollowed.following === true && refollowed.unreadCount === 1,
+  JSON.stringify(refollowed),
+);
+
+const strangerFollow = await statusOf(`${CHAT}/api/v1/messages/${threadRoot.id}/thread/follow`, {
+  method: 'PUT',
+  headers: rejected,
+});
+ok('a thread outside your channels cannot be followed', strangerFollow === 404, String(strangerFollow));
+
+const replyFollow = await statusOf(`${CHAT}/api/v1/messages/${threadReply.id}/thread/follow`, {
+  method: 'PUT',
+  headers: authed,
+});
+ok('a reply is not a thread to follow', replyFollow === 404, String(replyFollow));
+
+// Out of the way again, so the counts below are the ones they were written for.
+await fetch(`${CHAT}/api/v1/messages/${quietReply.id}`, { method: 'DELETE', headers: other });
+
 const nested = await statusOf(`${CHAT}/api/v1/messages`, {
   method: 'POST',
   headers: authed,
