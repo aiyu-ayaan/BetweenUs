@@ -4,6 +4,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -108,6 +109,13 @@ fun ListRow(
     trailing: @Composable (RowScope.() -> Unit)? = null,
     titleColor: Color = Color.Unspecified,
     onClick: (() -> Unit)? = null,
+    /**
+     * A second, held gesture - a row's own menu. Named by [onLongClickLabel]
+     * so a screen reader offers it as an action rather than hiding it behind
+     * a gesture nobody can see.
+     */
+    onLongClick: (() -> Unit)? = null,
+    onLongClickLabel: String? = null,
 ) {
     val scheme = MaterialTheme.colorScheme
     val interactions = remember { MutableInteractionSource() }
@@ -141,10 +149,17 @@ fun ListRow(
             .clip(RoundedCornerShape(corner))
             .background(container)
             .let {
-                if (onClick != null) {
-                    it.clickable(interactionSource = interactions, indication = ripple(), onClick = onClick)
-                } else {
-                    it
+                when {
+                    onLongClick != null -> it.combinedClickable(
+                        interactionSource = interactions,
+                        indication = ripple(),
+                        onLongClickLabel = onLongClickLabel,
+                        onLongClick = onLongClick,
+                        onClick = onClick ?: {},
+                    )
+                    onClick != null ->
+                        it.clickable(interactionSource = interactions, indication = ripple(), onClick = onClick)
+                    else -> it
                 }
             }
             .heightIn(min = 56.dp)
