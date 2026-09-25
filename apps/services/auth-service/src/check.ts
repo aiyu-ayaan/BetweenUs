@@ -19,6 +19,7 @@ process.env.LOG_LEVEL = 'error';
 
 import { closeSharedRedis, rateLimitBuckets } from '@betweenus/nest-common';
 import { hashToken as hashOf } from '@betweenus/auth';
+import type { EventBus, EventEnvelope, EventName } from '@betweenus/events';
 import { AuthService } from './modules/auth/auth.service';
 import type { AuthDb } from './modules/auth/auth.db';
 import { BloomFilter, sizing } from './modules/auth/bloom';
@@ -540,6 +541,75 @@ async function checkUsernameAvailability(): Promise<void> {
 }
 
 /**
+ * A bus that is a map in memory and delivers synchronously - every instance
+ * handed the same one hears every other, which is what Redis does for real.
+ */
+function memoryBus(): EventBus {
+  const handlers = new Map<string, Array<(envelope: EventEnvelope) => void>>();
+  const bus = {
+    publish: async (event: EventName, payload: unknown): Promise<void> => {
+      const envelope = { event, payload, emittedAt: new Date().toISOString(), origin: 'auth-service' };
+      for (const handler of handlers.get(event) ?? []) handler(envelope as EventEnvelope);
+    },
+    subscribe: async (event: EventName, handler: (envelope: EventEnvelope) => void): Promise<void> => {
+      handlers.set(event, [...(handlers.get(event) ?? []), handler]);
+    },
+  };
+  return bus as unknown as EventBus;
+}
+
+/**
+ * Two instances, one database, one bus: a name registered on one is refused by
+ * the other at once, without a restart - and without the second instance ever
+ * having queried for it, which is the case the per-process filter got wrong.
+ */
+async function checkUsernameFilterAcrossInstances(): Promise<void> {
+  const db = fakeDb();
+  const bus = memoryBus();
+
+  const directoryA = new UsernameDirectory(db, bus);
+  const instanceA = new AuthService(bus, fakeMail(false), directoryA, db);
+  await directoryA.listen();
+  await directoryA.warm();
+
+  const directoryB = new UsernameDirectory(db, bus);
+  const instanceB = new AuthService(bus, fakeMail(false), directoryB, db);
+  await directoryB.listen();
+  await directoryB.warm();
+
+  // A filter warmed before the row existed and following nobody: the old shape.
+  const isolated = new UsernameDirectory(db);
+  await isolated.warm();
+
+  await instanceA.register({ email: 'eve@betweenus.local', username: 'Eve', password: 'hunter2000' });
+
+  assert.deepEqual(await instanceB.usernameAvailable('eve'), {
+    username: 'eve',
+    available: false,
+    reason: 'taken',
+  });
+  // What the bus fixed: an instance that never heard about it still says yes.
+  assert.equal((await isolated.available('eve')).available, true);
+
+  // A rename travels the same way, on `user.updated`.
+  await bus.publish('user.updated', {
+    user: { id: 'x', username: 'Renamed', displayName: 'r', avatarUrl: null, coverUrl: null, about: '' },
+  });
+  assert.equal((await directoryA.available('renamed')).available, true, 'no row, so the table says free');
+  assert.equal((await instanceB.usernameAvailable('eve')).available, false);
+
+  // The guarantee still holds with the feed attached: nothing heard is ever lost.
+  for (let index = 0; index < 200; index += 1) {
+    await bus.publish('user.created', { userId: `u${index}`, username: `Heard_${index}`, email: `${index}@x` });
+  }
+  for (let index = 0; index < 200; index += 1) {
+    // No row behind any of these, so a "maybe" is settled free by the table -
+    // what is asserted is that the filter said maybe, i.e. it asked.
+    assert.equal(directoryB['filter'].mightHave(`heard_${index}`), true);
+  }
+}
+
+/**
  * The health page's pure logic.
  *
  * Every one of these is a thing that goes wrong silently rather than loudly: a
@@ -791,6 +861,7 @@ async function main(): Promise<void> {
   checkBloom();
   await checkPasswordReset();
   await checkUsernameAvailability();
+  await checkUsernameFilterAcrossInstances();
 
   // The refresh-rotation grace writes to Redis, and an open connection holds the
   // event loop open - so without this the check prints its last line and then
