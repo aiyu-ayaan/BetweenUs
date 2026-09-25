@@ -445,6 +445,16 @@ class PeerLink {
    * `applyShare` - which is exactly how the relay ceiling already works.
    */
   private readonly shareLadder = new ShareLadder();
+  /**
+   * Whether this peer has joined the share, so it is worth encoding for them.
+   *
+   * A mesh encodes the share once per link, and a share is opt-in - everybody
+   * who has not pressed "Join stream" sees a banner, not a picture. Encoding a
+   * picture nobody is looking at was a whole software encoder per person in the
+   * call, spent on nothing. True until the peer says otherwise, because a
+   * client that never says is an older one that shows every share it receives.
+   */
+  private shareWatched = true;
   /** How loud this peer is, 0..1. See `pollAudioLevel`. */
   private level = 0;
   /**
@@ -714,6 +724,9 @@ class PeerLink {
         maxFramerate: Math.min(this.sharePublish.maxFramerate, this.shareLadder.frameRate),
         scaleResolutionDownBy: this.shareLadder.scale,
         priority: this.sharePublish.priority,
+        // Off rather than removed: the track stays on the sender, so joining is
+        // a `setParameters` and a keyframe, not a renegotiation.
+        active: this.shareWatched,
       },
       this.sharePublish.degradationPreference,
     );
@@ -1107,6 +1120,7 @@ class PeerLink {
       maxFramerate?: number;
       scaleResolutionDownBy?: number;
       priority?: RTCPriorityType;
+      active?: boolean;
     },
     degradation?: RTCDegradationPreference,
   ): Promise<void> {
@@ -1127,6 +1141,7 @@ class PeerLink {
           first.scaleResolutionDownBy = encoding.scaleResolutionDownBy;
         }
         if (encoding.priority !== undefined) first.priority = encoding.priority;
+        if (encoding.active !== undefined) first.active = encoding.active;
       }
       if (degradation) parameters.degradationPreference = degradation;
       await sender.setParameters(parameters);
@@ -1153,6 +1168,25 @@ class PeerLink {
   setSharePublish(publish: SharePublish | null): void {
     this.sharePublish = publish;
     this.shareLadder.reset();
+  }
+
+  /** See `shareWatched`. Returns whether anything changed. */
+  setShareWatched(watched: boolean): boolean {
+    if (this.shareWatched === watched) return false;
+    this.shareWatched = watched;
+    return true;
+  }
+
+  /**
+   * The track a slot will play into, whether or not a frame has arrived yet.
+   *
+   * `pollVideo` only hands a track over once it has decoded something, and a
+   * share this client has not joined decodes nothing - its owner is not
+   * encoding it. The declared media state says the share exists; this is the
+   * track it will arrive on once it is joined.
+   */
+  receiverTrack(slot: Slot): MediaStreamTrack | null {
+    return this.transceivers.get(slot)?.receiver.track ?? null;
   }
 
   /** Remembered for the same reason, for the camera. */
@@ -1623,6 +1657,12 @@ export class Mesh {
    * when a `peer.left` is most likely to arrive.
    */
   private readonly peerIsExpected = new Set<string>();
+  /**
+   * Peers who have said they are not watching this client's share. See
+   * `PeerLink.shareWatched`. Kept here rather than on the link so a rebuilt
+   * link starts from what the peer last said.
+   */
+  private readonly unwatched = new Set<string>();
 
   constructor(private readonly options: MeshOptions) {}
 
@@ -1910,6 +1950,7 @@ export class Mesh {
     );
 
     if (this.micEncoding) link.setMicEncoding(this.micEncoding);
+    link.setShareWatched(!this.unwatched.has(peer.peerId));
     if (this.sharePublish) {
       link.setSharePublish(this.sharePublish);
       link.preferShareCodec(this.sharePublish.videoCodec);
@@ -2056,6 +2097,22 @@ export class Mesh {
     await Promise.all([...this.links.values()].map((link) => this.applyTuning(link)));
   }
 
+  /**
+   * Whether one peer has joined this client's share. Their encoder is switched
+   * off while they have not - see `PeerLink.shareWatched`.
+   */
+  async setShareWatched(peerId: string, watched: boolean): Promise<void> {
+    if (watched) this.unwatched.delete(peerId);
+    else this.unwatched.add(peerId);
+    const link = this.links.get(peerId);
+    if (link?.setShareWatched(watched) && this.sharePublish) await link.applyShare();
+  }
+
+  /** See `PeerLink.receiverTrack`. */
+  receiverTrack(peerId: string, slot: Slot): MediaStreamTrack | null {
+    return this.links.get(peerId)?.receiverTrack(slot) ?? null;
+  }
+
   /** Whether this client is driving somebody's share, which changes buffering. */
   setDriving(driving: boolean): void {
     for (const link of this.links.values()) link.setDriving(driving);
@@ -2167,6 +2224,7 @@ export class Mesh {
     // to find here, and must still not have one built for them afterwards.
     this.peerIsExpected.delete(peerId);
     this.rebuilds.delete(peerId);
+    this.unwatched.delete(peerId);
     for (const slot of SLOTS) this.options.onTrack(peerId, slot, null);
     this.announcePeers();
     if (!link) return;

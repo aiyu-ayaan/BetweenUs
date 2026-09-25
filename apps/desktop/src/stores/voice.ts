@@ -27,7 +27,7 @@ import { useListenStore } from './listen';
 import { useAudioSettings } from './audioSettings';
 import { startPushToTalk, stopPushToTalk } from '../services/push-to-talk';
 import { notBeingHeard, type LinkStats } from '../services/call-stats';
-import { visibleVideo } from '../services/media-presence';
+import { joinedShare, visibleVideo } from '../services/media-presence';
 import { NoiseGate } from '../services/mic-gate';
 import { startShareAudio, type ShareAudio } from '../services/share-audio';
 import {
@@ -59,7 +59,12 @@ const VOICE_STATE_TOPIC = 'betweenus.voice-state';
  * turned anything off. Optional, because a client too old to send it simply
  * never holds.
  */
-type MediaState = Record<Slot, boolean> & { hold?: boolean };
+/**
+ * `watching` is the peer id of the share this client has on stage, or null. It
+ * is what lets a sharer stop encoding for everybody who has not joined - see
+ * `Mesh.setShareWatched`. Absent from older clients, which is read as watching.
+ */
+type MediaState = Record<Slot, boolean> & { hold?: boolean; watching?: string | null };
 
 interface MediaStateEnvelope {
   topic: typeof VOICE_STATE_TOPIC;
@@ -745,7 +750,12 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     }
   },
 
-  watch: (identity) => set({ watching: identity }),
+  watch: (identity) => {
+    if (get().watching === identity) return;
+    set({ watching: identity });
+    // The sharer encodes for whoever has joined, so joining has to be said.
+    publishMediaState();
+  },
 
   openCallChannel: async () => {
     const { channelId, callServerId } = get();
@@ -784,7 +794,12 @@ function refresh(): void {
   // and no way out of it but leaving the call.
   const watched = state.watching;
   const stillSharing = next.shares.some((share) => share.identity === watched);
-  useVoiceStore.setState(watched === null || stillSharing ? next : { ...next, watching: null });
+  if (watched === null || stillSharing) {
+    useVoiceStore.setState(next);
+    return;
+  }
+  useVoiceStore.setState({ ...next, watching: null });
+  publishMediaState();
 }
 
 function snapshot(): { tiles: VoiceTile[]; shares: VoiceShare[] } {
@@ -850,10 +865,15 @@ function snapshot(): { tiles: VoiceTile[]; shares: VoiceShare[] } {
     // arrived this second. A still screen decodes nothing for minutes, and
     // reading that as the end is what closed the stage under a viewer and
     // offered them the share again.
-    const track = visibleVideo(
-      remoteMediaStates.get(peer.peerId)?.screen,
-      remoteTracks.get(peer.peerId)?.screen ?? null,
-    );
+    //
+    // A share nobody here has joined yet has no frames at all - its owner only
+    // encodes for the people watching it - so a declared share is shown on the
+    // track it will arrive on, and joining it is what starts the picture.
+    const declared = remoteMediaStates.get(peer.peerId)?.screen;
+    const arrived =
+      remoteTracks.get(peer.peerId)?.screen ??
+      (declared === true ? (mesh?.receiverTrack(peer.peerId, 'screen') ?? null) : null);
+    const track = visibleVideo(declared, arrived);
     if (!track) continue;
     shares.push({
       identity: peer.peerId,
@@ -868,12 +888,14 @@ function snapshot(): { tiles: VoiceTile[]; shares: VoiceShare[] } {
 }
 
 function currentMediaState(): MediaState {
-  const { micEnabled, cameraEnabled, screenEnabled } = useVoiceStore.getState();
+  const { micEnabled, cameraEnabled, screenEnabled, watching } = useVoiceStore.getState();
   return {
     mic: micEnabled,
     camera: cameraEnabled,
     screen: screenEnabled,
     screenAudio: screenEnabled && Boolean(localTracks.screenAudio),
+    // Your own preview is not a peer anybody encodes for.
+    watching: watching === LOCAL ? null : watching,
   };
 }
 
@@ -898,9 +920,26 @@ function receiveMediaState(peer: CallPeer, payload: unknown): boolean {
     screen: media.screen === true,
     screenAudio: media.screenAudio === true,
     hold: (media as { hold?: unknown }).hold === true,
+    watching: declaredWatching((media as { watching?: unknown }).watching),
   });
+  syncShareAudience(peer.peerId);
   refresh();
   return true;
+}
+
+/** `watching` off the wire: a peer id, null for none, undefined for not said. */
+function declaredWatching(value: unknown): string | null | undefined {
+  if (value === null) return null;
+  return typeof value === 'string' ? value : undefined;
+}
+
+/** Tells the mesh whether one peer has joined this client's share. */
+function syncShareAudience(peerId: string): void {
+  if (!mesh) return;
+  void mesh.setShareWatched(
+    peerId,
+    joinedShare(remoteMediaStates.get(peerId)?.watching, mesh.selfId),
+  );
 }
 
 /**

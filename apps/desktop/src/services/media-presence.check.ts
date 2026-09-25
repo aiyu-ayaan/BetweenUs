@@ -8,7 +8,7 @@
  * Run with `pnpm --filter @betweenus/desktop check`.
  */
 import assert from 'node:assert/strict';
-import { visibleVideo } from './media-presence';
+import { joinedShare, visibleVideo } from './media-presence';
 
 const track = { id: 'a screen' };
 
@@ -28,5 +28,16 @@ assert.equal(visibleVideo(undefined, track), track);
 // anybody says about it.
 assert.equal(visibleVideo(true, null), null);
 assert.equal(visibleVideo(undefined, null), null);
+
+// Whether to encode a share for somebody. Only the peer who has it on stage
+// gets a picture; one who has joined nothing, or somebody else's, does not.
+assert.equal(joinedShare('me', 'me'), true);
+assert.equal(joinedShare(null, 'me'), false);
+assert.equal(joinedShare('someone-else', 'me'), false);
+// A client that has never said is an older one that shows every share it
+// receives, and turning its picture off would leave it staring at black.
+assert.equal(joinedShare(undefined, 'me'), true);
+// Before this client knows its own id, nobody declared can mean it.
+assert.equal(joinedShare('me', null), false);
 
 console.log('media-presence check ok');

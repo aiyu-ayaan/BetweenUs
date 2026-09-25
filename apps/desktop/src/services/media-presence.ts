@@ -33,3 +33,17 @@ export function visibleVideo<T>(declared: boolean | undefined, arrived: T | null
   if (!arrived) return null;
   return declared === false ? null : arrived;
 }
+
+/**
+ * Whether a peer has joined this client's share, from what they last declared.
+ *
+ * `watching` is the peer id of the share they have on stage, `null` for none,
+ * and `undefined` for a client that has never said - an older one, or one whose
+ * first media state has not landed. That last case is treated as watching,
+ * because such a client shows every share it receives and switching its
+ * encoder off would leave it a black stage with no way to ask for the picture.
+ */
+export function joinedShare(watching: string | null | undefined, self: string | null): boolean {
+  if (watching === undefined) return true;
+  return self !== null && watching === self;
+}
