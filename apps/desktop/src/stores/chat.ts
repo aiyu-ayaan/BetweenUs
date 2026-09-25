@@ -402,12 +402,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // the read markers and the servers list themselves already do.
     void Promise.allSettled(servers.map((server) => api.channels(server.id))).then((results) => {
       const map: Record<string, string> = {};
+      const held = new Set(servers.map((server) => server.id));
+      for (const serverId of channelsElsewhere.keys()) {
+        if (!held.has(serverId)) channelsElsewhere.delete(serverId);
+      }
       results.forEach((result, index) => {
         if (result.status !== 'fulfilled') return;
         const serverId = servers[index]!.id;
+        channelsElsewhere.set(serverId, result.value);
         for (const channel of result.value) map[channel.id] = serverId;
       });
       set({ channelServerId: { ...get().channelServerId, ...map } });
+      // The same lists are what the socket subscribes to, so a message in a
+      // server that is not on screen still arrives - and can be notified about.
+      chatSocket.syncSubscriptions(
+        subscribable(get().channels, get().directs, get().activeServerId),
+      );
     });
   },
 
@@ -484,7 +494,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     void cache.putDirects(rows).catch(() => undefined);
     const directs = rows.map(toDirectChannel);
     set({ directs });
-    chatSocket.syncSubscriptions(subscribable(get().channels, directs));
+    chatSocket.syncSubscriptions(subscribable(get().channels, directs, get().activeServerId));
   },
 
   openDirectChannel: async (direct) => {
@@ -559,7 +569,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     // Subscribed to every readable channel, not only the open one: a message in
     // another channel has to arrive for it to be counted or notified about.
-    chatSocket.syncSubscriptions(subscribable(channels, get().directs));
+    chatSocket.syncSubscriptions(subscribable(channels, get().directs, serverId));
 
     const first = sidebarOrder(categories, channels).find((channel) => channel.type === 'TEXT');
     if (first) await get().selectChannel(first.id);
@@ -1121,6 +1131,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   forgetServer: (serverId) => {
+    channelsElsewhere.delete(serverId);
     const servers = get().servers.filter((server) => server.id !== serverId);
     chatSocket.syncServers(servers.map((server) => server.id));
     set({
@@ -1134,7 +1145,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       roles: [],
       messages: [],
     });
-    chatSocket.syncSubscriptions(subscribable([], get().directs));
+    chatSocket.syncSubscriptions(subscribable([], get().directs, null));
   },
 
   addMember: async (username, shareHistory = false) => {
@@ -1166,7 +1177,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     await api.deleteChannel(channelId);
     const channels = get().channels.filter((channel) => channel.id !== channelId);
     set({ channels });
-    chatSocket.syncSubscriptions(subscribable(channels, get().directs));
+    chatSocket.syncSubscriptions(subscribable(channels, get().directs, get().activeServerId));
     if (get().activeChannelId === channelId) {
       const next = channels.find((channel) => channel.type === 'TEXT');
       if (next) await get().selectChannel(next.id);
@@ -1233,7 +1244,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const channelServerId = { ...get().channelServerId };
     for (const channel of channels) channelServerId[channel.id] = serverId;
     set({ channelServerId });
-    chatSocket.syncSubscriptions(subscribable(channels, get().directs));
+    chatSocket.syncSubscriptions(subscribable(channels, get().directs, serverId));
   },
 
   reset: () => {
@@ -1413,10 +1424,46 @@ export function sidebarOrder(categories: ChannelCategory[], channels: Channel[])
 }
 
 /** Channels a message can arrive in - everything except voice. */
-function subscribable(channels: Channel[], directs: Channel[]): string[] {
-  return [...channels, ...directs]
-    .filter((channel) => channel.type !== 'VOICE')
-    .map((channel) => channel.id);
+/**
+ * Every server's channel list, by server, as last fetched for the rail badges.
+ *
+ * `channels` only ever holds the server on screen, and subscribing to that
+ * alone meant a message anywhere else never reached this client: no unread
+ * badge on the rail, and no notification for a window sitting minimised or in
+ * the tray while somebody wrote in another server. Held outside the store
+ * because nothing draws it; it only decides what the socket listens to and
+ * what a notification calls the channel.
+ */
+const channelsElsewhere = new Map<string, Channel[]>();
+
+/**
+ * What the chat socket should be subscribed to: every readable text channel in
+ * every server - the open one from `channels`, which is always the fresher
+ * list, the rest from `channelsElsewhere` - and every direct message.
+ */
+function subscribable(
+  channels: Channel[],
+  directs: Channel[],
+  activeServerId: string | null,
+): string[] {
+  const others = [...channelsElsewhere]
+    .filter(([serverId]) => serverId !== activeServerId)
+    .flatMap(([, list]) => list);
+  return [
+    ...new Set(
+      [...channels, ...others, ...directs]
+        .filter((channel) => channel.type !== 'VOICE')
+        .map((channel) => channel.id),
+    ),
+  ];
+}
+
+/** The channel's name wherever it is, for a notification about it. */
+function channelName(state: ChatState, channelId: string): string | undefined {
+  return (
+    [...state.channels, ...state.directs].find((channel) => channel.id === channelId)?.name ??
+    [...channelsElsewhere.values()].flat().find((channel) => channel.id === channelId)?.name
+  );
 }
 
 /**
@@ -1789,9 +1836,26 @@ chatSocket.on((event) => {
   // A channel or category was created, renamed, moved or deleted by somebody.
   // Re-read, because which channels appear is per member (private ones).
   if (event.type === 'server.channels.changed') {
-    if (event.serverId === useChatStore.getState().activeServerId) {
+    const serverId = event.serverId;
+    if (serverId === useChatStore.getState().activeServerId) {
       void useChatStore.getState().refreshChannelList().catch(() => undefined);
+      return;
     }
+    // A server that is not on screen still has to be listened to: a channel
+    // made there is one this client should hear, and notify, from now on.
+    void api
+      .channels(serverId)
+      .then((channels) => {
+        channelsElsewhere.set(serverId, channels);
+        const state = useChatStore.getState();
+        const channelServerId = { ...state.channelServerId };
+        for (const channel of channels) channelServerId[channel.id] = serverId;
+        useChatStore.setState({ channelServerId });
+        chatSocket.syncSubscriptions(
+          subscribable(state.channels, state.directs, state.activeServerId),
+        );
+      })
+      .catch(() => undefined);
     return;
   }
 
@@ -1845,9 +1909,7 @@ chatSocket.on((event) => {
 
       notifyMessage({
         channelId: incoming.channelId,
-        channelName:
-          [...state.channels, ...state.directs].find((channel) => channel.id === incoming.channelId)
-            ?.name ?? 'a channel',
+        channelName: channelName(state, incoming.channelId) ?? 'a channel',
         author: `${incoming.author.displayName || incoming.author.username} (thread)`,
         authorId: incoming.author.id,
         text,
@@ -1891,10 +1953,7 @@ chatSocket.on((event) => {
 
     notifyMessage({
       channelId: incoming.channelId,
-      channelName:
-        [...state.channels, ...state.directs].find(
-          (channel) => channel.id === incoming.channelId,
-        )?.name ?? 'a channel',
+      channelName: channelName(state, incoming.channelId) ?? 'a channel',
       author: incoming.author.displayName || incoming.author.username,
       authorId: incoming.author.id,
       // A message this device cannot read still deserves a notification, just
