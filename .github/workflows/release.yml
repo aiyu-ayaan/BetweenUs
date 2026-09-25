@@ -571,7 +571,7 @@ jobs:
       # once and each asks public.ecr.aws for the same two base images, and that
       # registry throttles unauthenticated reads per second per source IP:
       #
-      #   ERROR: failed to solve: public.ecr.aws/docker/library/nginx:1.27-alpine:
+      #   ERROR: failed to solve: mirror.gcr.io/library/nginx:1.27-alpine:
       #   429 Too Many Requests / toomanyrequests: Rate exceeded
       #
       # Three seconds in, before a layer is built. One image out of eighteen
@@ -591,14 +591,15 @@ jobs:
           file: infrastructure/docker/Dockerfile
           target: ${{ matrix.target }}
           platforms: linux/${{ matrix.arch }}
-          # The ECR Public mirror of the same two official images. Eighteen jobs
-          # pulling node and nginx from Docker Hub - twice over, once per arch -
-          # exhausts the account's authenticated pull limit within an hour of
-          # releases, and every job then fails on `429 Too Many Requests` before
-          # it builds anything. The mirror is unmetered and needs no login.
+          # Google's pull-through mirror of the same two official Docker Hub
+          # images. Eighteen jobs pulling from Docker Hub exhaust its pull limit,
+          # and ECR Public caps anonymous transfer per month (`toomanyrequests:
+          # Data limit exceeded`), which fails every job before it builds
+          # anything. mirror.gcr.io needs no login and falls through to Docker
+          # Hub for anything it has not cached.
           build-args: |
-            NODE_IMAGE=public.ecr.aws/docker/library/node:20-alpine
-            NGINX_IMAGE=public.ecr.aws/docker/library/nginx:1.27-alpine
+            NODE_IMAGE=mirror.gcr.io/library/node:20-alpine
+            NGINX_IMAGE=mirror.gcr.io/library/nginx:1.27-alpine
           # Pushed with no tag at all: the blobs and a manifest land in the
           # repository addressable only by digest, and stay off the tag page
           # until `manifest` names them.
@@ -628,8 +629,8 @@ jobs:
           target: ${{ matrix.target }}
           platforms: linux/${{ matrix.arch }}
           build-args: |
-            NODE_IMAGE=public.ecr.aws/docker/library/node:20-alpine
-            NGINX_IMAGE=public.ecr.aws/docker/library/nginx:1.27-alpine
+            NODE_IMAGE=mirror.gcr.io/library/node:20-alpine
+            NGINX_IMAGE=mirror.gcr.io/library/nginx:1.27-alpine
           outputs: type=image,name=${{ env.IMAGE_REPO }},push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha,scope=betweenus-${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=betweenus-${{ matrix.arch }}
