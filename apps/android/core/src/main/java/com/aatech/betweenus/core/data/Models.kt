@@ -597,14 +597,13 @@ data class ChannelSection(val category: ChannelCategory?, val channels: List<Cha
  * work; the caller decides whether that is worth showing.
  */
 fun channelSections(categories: List<ChannelCategory>, channels: List<Channel>): List<ChannelSection> {
-    val ordered = categories.sortedWith(compareBy({ it.position }, { it.createdAt }, { it.id }))
+    val ordered = categories.sortedWith(categoryOrder)
     val known = ordered.map { it.id }.toSet()
-    val byPosition = compareBy<Channel>({ it.position }, { it.createdAt }, { it.id })
-    fun filed(id: String?) = channels
-        .filter { (it.categoryId?.takeIf { own -> own in known }) == id }
-        .sortedWith(byPosition)
-        // Stable, so each group keeps its position order.
-        .sortedBy { it.type == ChannelType.VOICE }
+    fun filed(id: String?) = groupByKind(
+        channels
+            .filter { (it.categoryId?.takeIf { own -> own in known }) == id }
+            .sortedWith(channelOrder),
+    )
     return listOf(ChannelSection(null, filed(null))) +
         ordered.map { ChannelSection(it, filed(it.id)) }
 }
