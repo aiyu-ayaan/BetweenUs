@@ -480,6 +480,21 @@ PipeWire capturer on Linux. On a GPU or driver without VA-API support Chromium
 falls back to software in silence — the `Encoder` row is how to tell.
 `BETWEENUS_DISABLE_VAAPI=1` skips the flags if a driver misbehaves.
 
+On Wayland Chromium gives VA-API the compositor's GPU. On a hybrid laptop whose
+compositor runs on the NVIDIA card that device has no VA-API, so the encoder is
+OpenH264 or libvpx even when the Intel iGPU could encode. Pointing
+`--render-node-override` at the iGPU for the whole app is not a fix: the
+compositor then cannot import the window's buffers.
+
+**Screen share under Wayland.** Every `desktopCapturer.getSources` call goes
+through the xdg ScreenCast portal and puts its dialog on screen, and the
+portal needs a backend that implements ScreenCast (`xdg-desktop-portal-gnome`,
+`-kde` or `-wlr`; `-gtk` does not). With `systemScreenPicker` set in
+`electron/main.ts`, the app's picker lists no sources and asks only the intent,
+`screen:displays` reads sizes from Electron's `screen` without a source, and
+the display-media handler makes the one `getSources` call and shares whatever
+the portal's dialog was given.
+
 **Both clients show the same eight readings, since phase 50.** Android's
 connection sheet ported only four of the desktop's eight when it was written —
 `Down`, `Up`, `Loss`, `Round trip` — leaving `Link est.`, `Path`, `Held by` and
@@ -902,6 +917,11 @@ on the other end. This is the same mechanism as the one-time message viewer
 (`screen:protect`): Windows marks the window `WDA_EXCLUDEFROMCAPTURE`, macOS
 sets its sharing type to none, and on Linux it does nothing, so the overlay is
 still captured there.
+
+The overlay's picture is a JPEG the main window draws every 60 ms and sends
+over IPC. It is drawn only while the overlay exists: main sends
+`pip:open-changed` on open and close, and without it the loop spent a core of
+CPU for the whole call on frames nobody received.
 
 **The call's own audio is left out of a share's system audio.** Electron's
 display-media handler offers only `loopback` and `loopbackWithMute`, and both
