@@ -134,6 +134,37 @@ if (process.platform === 'win32') {
   );
 }
 
+// On Linux, WebRTC encodes H.264 with OpenH264 unless it is told the GPU may do
+// it, and OpenH264 on a laptop does not hold 1080p60 - the share is limited by
+// `cpu` and the frame rate halves. These ask for VA-API encode and decode and
+// for PipeWire capture, which is the only capture that works under Wayland.
+//
+// Asking is all this does. On a GPU or driver VA-API does not support, Chromium
+// falls back to the software encoder without saying anything; the encoder line
+// in the connection panel is how to tell which one a share actually got. As on
+// Windows, both generations of the feature names are passed, because an unknown
+// name is ignored in silence. This is the only `enable-features` on Linux - the
+// switch keeps the last value it was given, so a second one would erase this.
+//
+// A driver that misbehaves with VA-API can be taken out of the path with
+// `BETWEENUS_DISABLE_VAAPI=1`, without a rebuild.
+if (process.platform === 'linux' && process.env.BETWEENUS_DISABLE_VAAPI !== '1') {
+  app.commandLine.appendSwitch(
+    'enable-features',
+    [
+      // Older Chromium names.
+      'VaapiVideoEncoder',
+      'VaapiVideoDecoder',
+      'VaapiVideoDecodeLinuxGL',
+      // Current Chromium names.
+      'AcceleratedVideoEncoder',
+      'AcceleratedVideoDecodeLinuxGL',
+      'AcceleratedVideoDecodeLinuxZeroCopyGL',
+      'WebRTCPipeWireCapturer',
+    ].join(','),
+  );
+}
+
 // The capture and the encoder both live in the renderer, and the renderer is
 // exactly what Chromium puts to sleep when its window is minimised or covered -
 // which is the normal state of this app for the whole duration of a share.
