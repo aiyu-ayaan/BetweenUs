@@ -839,7 +839,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   forwardMessage: async (messageId, toChannelId) => {
     const original = get().messages.find((message) => message.id === messageId);
-    if (!original) return;
+    // A poll's ballot is the original row's, held by the server - a forward is
+    // a new message and would arrive as a card with no poll behind it. The menu
+    // already hides Forward on one; this is the same rule for any other caller.
+    if (!original || original.poll) return;
 
     const from = original.channelId;
     const carried: MessageAttachment[] = [];

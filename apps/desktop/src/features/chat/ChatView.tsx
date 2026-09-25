@@ -1347,8 +1347,10 @@ function MessageList({
               const target = messages.find((item) => item.id === menu.id);
               // A tombstone has nothing to carry, and a one-time message must
               // not be carried anywhere: being seen once by the people it was
-              // sent to is the whole of what it promised.
-              if (!target || target.deletedAt || target.viewOnce) return undefined;
+              // sent to is the whole of what it promised. A poll cannot be
+              // carried either: its ballot lives on the original row, so what
+              // landed would be a question with nothing to vote on.
+              if (!target || target.deletedAt || target.viewOnce || target.poll) return undefined;
               return () => setForwarding(menu.id);
             })(),
             onMoreEmoji: (at) => setPicker({ id: menu.id, at }),
