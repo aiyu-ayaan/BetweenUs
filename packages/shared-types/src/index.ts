@@ -1864,6 +1864,44 @@ export interface MessageThreadSummary {
   lastReplyAt: string | null;
 }
 
+/**
+ * One account's place in one thread: whether it follows it, and how many
+ * replies it has not seen.
+ *
+ * You follow a thread you started (wrote the root of) or replied to, and can
+ * follow or stop following any thread explicitly. The state lives on the
+ * server so every device agrees, and it tells the server nothing beyond what
+ * `threadRootId` already did: the unread count is a count of reply rows after
+ * `lastReadAt`, never of anything inside them.
+ */
+export interface ThreadFollowState {
+  rootId: string;
+  /** The channel the thread lives in. */
+  channelId: string;
+  /** The server that channel belongs to; null for a direct message. */
+  serverId: string | null;
+  following: boolean;
+  /** `createdAt` of the newest reply this account has seen, or null. */
+  lastReadAt: string | null;
+  /** Live replies from other people after `lastReadAt`. Zero when not following. */
+  unreadCount: number;
+}
+
+/** A followed thread with its root, as the followed-threads view lists it. */
+export interface FollowedThread extends ThreadFollowState {
+  /** The root, tombstone included - the thread outlives it. Sealed as ever. */
+  root: Message;
+}
+
+/**
+ * Moves this account's read marker in one thread up to the reply named.
+ * Never backwards: naming an older reply than the marker is a no-op.
+ */
+export interface MarkThreadReadRequest {
+  /** The newest reply the client has on screen. */
+  messageId: string;
+}
+
 // --- Polls ---
 //
 // A poll is refereed, not decrypted. It is Play Together's shape applied to a
@@ -3849,6 +3887,13 @@ export type ServerChatEvent =
    * `channelId` is the conversation it applies to, or null for all of them.
    */
   | { type: 'chats.cleared'; clearedAt: string; channelId: string | null }
+  /**
+   * This account's follow or read state in one thread changed: it followed or
+   * stopped following, read it on another device, or somebody replied. Sent
+   * only to this account's own sockets, and carried rather than announced
+   * because the unread count is per reader.
+   */
+  | { type: 'thread.follow'; thread: ThreadFollowState }
   | { type: 'pong' }
   | { type: 'error'; code: string; message: string };
 

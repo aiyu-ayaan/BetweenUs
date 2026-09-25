@@ -6,7 +6,13 @@
  * later touches this file only.
  */
 import Redis from 'ioredis';
-import type { Message, PresenceState, UserSummary, VoiceState } from '@betweenus/shared-types';
+import type {
+  Message,
+  PresenceState,
+  ThreadFollowState,
+  UserSummary,
+  VoiceState,
+} from '@betweenus/shared-types';
 
 export const EVENTS = {
   USER_CREATED: 'user.created',
@@ -102,6 +108,12 @@ export const EVENTS = {
    * view of the conversation is exactly what it was.
    */
   CHATS_CLEARED: 'chats.cleared',
+  /**
+   * One account's follow or read state in one thread moved: it followed or
+   * unfollowed, read it on some device, or a reply changed its unread count.
+   * Reaches that account's own sockets and nobody else's.
+   */
+  THREAD_FOLLOW_CHANGED: 'thread.follow.changed',
   /**
    * Somebody started or ended a remote session on a machine.
    *
@@ -207,6 +219,7 @@ export interface EventPayloads {
    * checks - a subscriber with neither simply sends nothing.
    */
   [EVENTS.CHANNEL_READ]: { userId: string; channelId: string; at: string };
+  [EVENTS.THREAD_FOLLOW_CHANGED]: { userId: string; thread: ThreadFollowState };
   [EVENTS.CHATS_CLEARED]: {
     userId: string;
     clearedAt: string;
