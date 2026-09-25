@@ -1367,6 +1367,9 @@ class PeerLink {
       sendWidth: null,
       sendHeight: null,
       sendLimitedBy: null,
+      sendFramesPerSecond: null,
+      encoderImplementation: null,
+      powerEfficientEncoder: null,
       // Read straight from the ladder rather than from a fresh `getStats`
       // reason: the ladder only moves after `isStarved`/`isCpuStarved` see two
       // sustained readings, so this is already the debounced answer to
@@ -1434,6 +1437,14 @@ class PeerLink {
           if (width * height > (now.sendWidth ?? 0) * (now.sendHeight ?? 0)) {
             now.sendWidth = width || null;
             now.sendHeight = height || null;
+            // Kept with the picture they describe: with a camera and a share
+            // both going, the encoder worth naming is the share's.
+            now.sendFramesPerSecond = Number(entry.framesPerSecond ?? 0) || null;
+            const implementation = entry.encoderImplementation;
+            now.encoderImplementation =
+              typeof implementation === 'string' && implementation ? implementation : null;
+            const efficient = (report as { powerEfficientEncoder?: unknown }).powerEfficientEncoder;
+            now.powerEfficientEncoder = typeof efficient === 'boolean' ? efficient : null;
           }
           const reason = entry.qualityLimitationReason;
           if (reason === 'bandwidth' || reason === 'cpu' || reason === 'other') {

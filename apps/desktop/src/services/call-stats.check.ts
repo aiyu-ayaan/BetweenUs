@@ -13,6 +13,7 @@ import {
   echoCancellerFailing,
 } from './call-stats';
 import {
+  encoderKind,
   formatCallDuration,
   healthWarning,
   kbpsBetween,
@@ -57,6 +58,9 @@ const sample = (patch: Partial<LinkSample>): LinkSample => ({
   sendWidth: null,
   sendHeight: null,
   sendLimitedBy: null,
+  sendFramesPerSecond: null,
+  encoderImplementation: null,
+  powerEfficientEncoder: null,
   shareReduced: false,
   connected: true,
   transport: null,
@@ -288,3 +292,28 @@ assert.equal(selectedCandidatePair([], 'pair-new'), null);
 // The one pair in an ordinary report is simply it.
 assert.equal(selectedCandidatePair([live], null)?.id, 'pair-new');
 
+
+// The encoder. `powerEfficientEncoder` is the spec's answer and beats the name.
+assert.equal(encoderKind('libvpx', true), 'hardware');
+assert.equal(encoderKind('ExternalEncoder', false), 'software');
+// Without it, the name: Chromium's software encoders are the libraries...
+assert.equal(encoderKind('OpenH264', null), 'software');
+assert.equal(encoderKind('SimulcastEncoderAdapter (libvpx, libvpx)', null), 'software');
+// ...and every hardware path is an accelerator or the external catch-all.
+assert.equal(encoderKind('ExternalEncoder', null), 'hardware');
+assert.equal(encoderKind('MediaFoundationVideoEncodeAccelerator', null), 'hardware');
+assert.equal(encoderKind('VaapiVideoEncodeAccelerator', null), 'hardware');
+// Nothing reported, or a name nobody recognises, is unknown rather than a guess.
+assert.equal(encoderKind(null, null), null);
+assert.equal(encoderKind('SomethingNew', null), null);
+
+// And it reaches the panel, with the frame rate that is actually leaving.
+const encoding = toStats(
+  'p1',
+  'Ann',
+  sample({ at: 2_000, sendFramesPerSecond: 59.6, encoderImplementation: 'OpenH264' }),
+  sample({ at: 1_000 }),
+);
+assert.equal(encoding.sendFramesPerSecond, 60);
+assert.equal(encoding.encoder, 'software');
+assert.equal(encoding.encoderName, 'OpenH264');

@@ -130,7 +130,25 @@ function PeerRow({ link }: { link: LinkStats }): JSX.Element {
           />
         )}
         {link.sendWidth && link.sendHeight && (
-          <Stat label="Out" value={`${link.sendWidth}×${link.sendHeight}`} />
+          <Stat
+            label="Out"
+            value={`${link.sendWidth}×${link.sendHeight}${
+              link.sendFramesPerSecond ? ` @ ${link.sendFramesPerSecond}` : ''
+            }`}
+          />
+        )}
+        {/*
+          GPU or CPU, which is the half of "why is my share not 60" that the
+          link numbers above cannot answer. A software encoder is the usual
+          ceiling on Linux, and it is worth knowing before blaming the network.
+        */}
+        {link.encoder && (
+          <Stat
+            label="Encoder"
+            value={link.encoder === 'hardware' ? 'GPU' : 'CPU'}
+            title={link.encoderName ?? undefined}
+            tone={link.encoder === 'software' ? 'warn' : 'plain'}
+          />
         )}
         {/*
           Only when something is actually holding the picture down, and it is
@@ -148,16 +166,19 @@ function PeerRow({ link }: { link: LinkStats }): JSX.Element {
 function Stat({
   label,
   value,
+  title,
   tone = 'plain',
 }: {
   label: string;
   value: string;
+  /** Hover text, for the detail a row is too narrow to hold. */
+  title?: string;
   tone?: 'plain' | 'warn' | 'bad';
 }): JSX.Element {
   const colour =
     tone === 'bad' ? 'text-danger' : tone === 'warn' ? 'text-amber-300' : 'text-slate-200';
   return (
-    <div className="flex items-baseline justify-between gap-2">
+    <div className="flex items-baseline justify-between gap-2" title={title}>
       <dt className="text-slate-500">{label}</dt>
       <dd className={`tabular-nums ${colour}`}>{value}</dd>
     </div>

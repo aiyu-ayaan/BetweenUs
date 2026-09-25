@@ -25,6 +25,41 @@ import type { CallTransport } from '@betweenus/shared-types';
  */
 export type QualityLimit = 'bandwidth' | 'cpu' | 'other';
 
+/**
+ * Whether the picture leaving this machine is encoded on the GPU or the CPU.
+ *
+ * The question under every "why is my share not 60" once the link is ruled
+ * out. A hardware encoder holds 1080p60 without noticing; a software one - the
+ * usual answer on Linux, where Chromium falls back to OpenH264 or libvpx - is
+ * where the frame rate goes, and `sendLimitedBy: cpu` only says so after the
+ * fact and only some of the time.
+ */
+export type EncoderKind = 'hardware' | 'software';
+
+/**
+ * The encoder, from what `outbound-rtp` says about it.
+ *
+ * `powerEfficientEncoder` is the spec's own answer and wins whenever it is
+ * reported. Without it the implementation name is all there is: Chromium's
+ * software encoders are the codec libraries by name, and every hardware path
+ * is either an `...EncodeAccelerator` or the catch-all `ExternalEncoder`.
+ * A name that matches neither is null rather than a guess - a wrong "software"
+ * sends somebody chasing a driver that was never the problem.
+ */
+export function encoderKind(
+  implementation: string | null,
+  powerEfficient: boolean | null,
+): EncoderKind | null {
+  if (powerEfficient !== null) return powerEfficient ? 'hardware' : 'software';
+  if (!implementation) return null;
+  const name = implementation.toLowerCase();
+  if (/libvpx|openh264|libaom|dav1d|svt|ffmpeg/.test(name)) return 'software';
+  if (/accelerator|external|nvenc|vaapi|mediafoundation|videotoolbox|d3d|qsv|amf/.test(name)) {
+    return 'hardware';
+  }
+  return null;
+}
+
 /** One `getStats` sample of one peer connection, already reduced to numbers. */
 export interface LinkSample {
   at: number;
@@ -59,6 +94,11 @@ export interface LinkSample {
   sendWidth: number | null;
   sendHeight: number | null;
   sendLimitedBy: QualityLimit | null;
+  /** The frame rate actually leaving, which is what 60 is measured against. */
+  sendFramesPerSecond: number | null;
+  /** `encoderImplementation` and `powerEfficientEncoder` for that picture. */
+  encoderImplementation: string | null;
+  powerEfficientEncoder: boolean | null;
   /**
    * Whether `ShareLadder` has actually moved off the top on this link -
    * resolution, frame rate, or both.
@@ -128,6 +168,11 @@ export interface LinkStats {
   sendWidth: number | null;
   sendHeight: number | null;
   sendLimitedBy: QualityLimit | null;
+  sendFramesPerSecond: number | null;
+  /** See `encoderKind`. Null until something is being sent, or when unsure. */
+  encoder: EncoderKind | null;
+  /** The raw implementation name, for anybody who wants to know which one. */
+  encoderName: string | null;
   /** See `LinkSample.shareReduced`. */
   shareReduced: boolean;
   /** False when we are sending them no audio at all - see `notBeingHeard`. */
@@ -379,6 +424,10 @@ export function toStats(
     sendWidth: now.sendWidth,
     sendHeight: now.sendHeight,
     sendLimitedBy: now.sendLimitedBy,
+    sendFramesPerSecond:
+      now.sendFramesPerSecond === null ? null : Math.round(now.sendFramesPerSecond),
+    encoder: encoderKind(now.encoderImplementation, now.powerEfficientEncoder),
+    encoderName: now.encoderImplementation,
     shareReduced: now.shareReduced,
     // Any movement at all counts. Opus sends a few hundred bytes a second even
     // through silence, so a sender that is attached and working is never still.
