@@ -96,6 +96,7 @@ interface Window {
     secureGet: (key: string) => Promise<string | null>;
     secureSet: (key: string, value: string) => Promise<void>;
     screenSources: () => Promise<ScreenSource[]>;
+    systemScreenPicker: () => Promise<boolean>;
     screenDisplays: () => Promise<DisplayInfo[]>;
     remoteTarget: (displayId: string | null, source?: 'session' | 'call') => void;
     /** A monitor added, removed or resized. Returns an unsubscribe function. */

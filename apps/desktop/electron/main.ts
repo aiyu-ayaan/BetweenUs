@@ -878,7 +878,25 @@ interface PendingShare {
 
 let pendingShare: PendingShare | null = null;
 
+/**
+ * Whether the compositor's own chooser is the only way to a capture.
+ *
+ * Under Wayland nothing may look at the screen without asking the compositor,
+ * so every `getSources` goes through the xdg ScreenCast portal - and every call
+ * puts its dialog on screen. Listing sources for our picker, sizing the capture
+ * and answering the capture were three calls, which was three dialogs racing
+ * each other and a capture that failed to start. There the portal's dialog is
+ * the picker: ours asks only what is being shared, and the capture handler
+ * makes the one call that asks where.
+ */
+const systemScreenPicker =
+  process.platform === 'linux' &&
+  (process.env.XDG_SESSION_TYPE === 'wayland' || Boolean(process.env.WAYLAND_DISPLAY));
+
+ipcMain.handle('screen:system-picker', (): boolean => systemScreenPicker);
+
 ipcMain.handle('screen:sources', async () => {
+  if (systemScreenPicker) return [];
   const sources = await desktopCapturer.getSources({
     types: ['screen', 'window'],
     thumbnailSize: { width: 320, height: 180 },
@@ -912,6 +930,21 @@ ipcMain.handle('screen:sources', async () => {
  * fewer.
  */
 ipcMain.handle('screen:displays', async () => {
+  // No source to pair with here - listing one is a portal dialog of its own -
+  // and none is needed: the capture handler takes whatever the dialog it puts
+  // up was given. The sizes are still the displays' own.
+  if (systemScreenPicker) {
+    const primaryId = String(screen.getPrimaryDisplay().id);
+    return screen.getAllDisplays().map((display) => ({
+      id: String(display.id),
+      sourceId: '',
+      label: display.label || `Display ${display.id}`,
+      width: Math.round(display.size.width * display.scaleFactor),
+      height: Math.round(display.size.height * display.scaleFactor),
+      primary: String(display.id) === primaryId,
+    }));
+  }
+
   const sources = await desktopCapturer.getSources({
     types: ['screen'],
     thumbnailSize: { width: 0, height: 0 },
@@ -1642,10 +1675,17 @@ void app.whenReady().then(() => {
     const chosen = pendingShare;
     pendingShare = null;
 
-    void desktopCapturer.getSources({ types: ['screen', 'window'] }).then((sources) => {
-      const source =
-        sources.find((candidate) => candidate.id === chosen?.id) ??
-        sources.find((candidate) => candidate.id.startsWith('screen:'));
+    const listed = desktopCapturer.getSources({
+      types: ['screen', 'window'],
+      // The portal answers with the one surface its dialog was given, and a
+      // thumbnail of it is a frame nobody will look at.
+      thumbnailSize: systemScreenPicker ? { width: 0, height: 0 } : undefined,
+    });
+    void listed.then((sources) => {
+      const source = systemScreenPicker
+        ? sources[0]
+        : (sources.find((candidate) => candidate.id === chosen?.id) ??
+          sources.find((candidate) => candidate.id.startsWith('screen:')));
       if (!source) return callback({});
 
       // Held until the renderer says the capture is over, which is what stops
@@ -1661,7 +1701,7 @@ void app.whenReady().then(() => {
       const withAudio =
         request.audioRequested && (chosen?.audio ?? true) && process.platform === 'win32';
       callback(withAudio ? { video: source, audio: 'loopback' } : { video: source });
-    });
+    }, () => callback({}));
   });
 
   watchDisplays();

@@ -27,6 +27,9 @@ export function ScreenSharePicker({ onClose }: { onClose: () => void }): JSX.Ele
   const [sources, setSources] = useState<ScreenSource[] | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [tab, setTab] = useState<'screen' | 'window'>('screen');
+  // Linux under Wayland: the compositor puts its own chooser up when capture
+  // starts, and listing sources here would put it up once more for nothing.
+  const [systemPicker, setSystemPicker] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   // Two different questions wearing one name. On the desktop this app captures
   // the machine's output itself, which only Windows can do, so the offer is
@@ -54,7 +57,11 @@ export function ScreenSharePicker({ onClose }: { onClose: () => void }): JSX.Ele
       return;
     }
     bridge
-      .screenSources()
+      .systemScreenPicker()
+      .then((system) => {
+        setSystemPicker(system);
+        return system ? [] : bridge.screenSources();
+      })
       .then(setSources)
       .catch((error: unknown) => {
         setFailure(error instanceof Error ? error.message : 'Could not list screens');
@@ -104,7 +111,7 @@ export function ScreenSharePicker({ onClose }: { onClose: () => void }): JSX.Ele
         <header className="flex items-center gap-3 border-b border-edge px-5 py-4">
           <ScreenShareIcon className="h-5 w-5 text-slate-400" />
           <h2 className="font-semibold text-slate-100">Screen share</h2>
-          {native && (
+          {native && !systemPicker && (
             <div className="ms-auto flex gap-1 rounded-md bg-surface-900 p-1">
               <TabButton active={tab === 'screen'} onClick={() => setTab('screen')}>
                 Screens
@@ -129,7 +136,9 @@ export function ScreenSharePicker({ onClose }: { onClose: () => void }): JSX.Ele
             <p className="py-10 text-center text-slate-500">
               {!native
                 ? 'Your browser will ask which tab, window or screen to share, and offers to bring its audio along in the same dialog.'
-                : tab === 'screen'
+                : systemPicker
+                  ? 'Your desktop will ask which screen or window to share when you go live.'
+                  : tab === 'screen'
                   ? 'No screens found.'
                   : 'No open windows to share.'}
             </p>

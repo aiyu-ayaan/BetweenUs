@@ -76,6 +76,11 @@ const api = {
       displayId: string | null;
     }>
   > => ipcRenderer.invoke('screen:sources'),
+  /**
+   * True where the compositor's chooser picks the surface (Linux under
+   * Wayland), so the app's own picker lists nothing and asks for no source.
+   */
+  systemScreenPicker: (): Promise<boolean> => ipcRenderer.invoke('screen:system-picker'),
   /** Every display in real pixels, with the capture source that shows it. */
   /**
    * Hides this window from screen capture while a one-time message is open.
