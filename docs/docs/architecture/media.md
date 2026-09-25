@@ -115,6 +115,14 @@ SFU (phase 24 in `development/PLANNING.md`) after four commits of fighting
 the tunnel to make an SFU's address reachable — removing the SFU turned out
 to be the fix, not another workaround.
 
+A mesh encodes a share **once per link**, so the sender pays for every
+viewer. It pays only for the viewers who joined: each client declares the
+share it has on stage (`watching` in the voice-state envelope, below), and
+the sharer sets the screen encoding `active: false` on every other link. The
+track stays on the sender, so joining costs one `setParameters` and a keyframe
+(about 100 ms on loopback), not a renegotiation. A call of five with one
+person watching runs one share encoder, not four.
+
 ## NAT traversal
 
 - **STUN is required.** A peer learns its own public address before it can
@@ -464,7 +472,8 @@ on purpose and paying for every byte twice.
 
 | Panel says | Bottleneck | Fix |
 |---|---|---|
-| `Encoder: CPU`, `Held by: cpu` | Software encoder (libvpx, OpenH264) | Hardware H.264 — on Linux, the VA-API flags below |
+| `Encoder: CPU`, `Out … @ 30` | Software encoder, inside its budget (below) | Hardware H.264, or pick a frame rate by hand |
+| `Encoder: CPU`, `Held by: cpu` | Software encoder (libvpx, OpenH264) that cannot keep up even at its budget | Hardware H.264 — on Linux, the VA-API flags below |
 | `Path: relay` | TURN, held to `RELAY_MAX_BITRATE` | A direct pair (NAT/firewall), or a bigger relay |
 | `Out` below the requested rate, nothing holding it | Capture | Windows WGC, or X11 / PipeWire on Linux |
 
@@ -484,7 +493,36 @@ On Wayland Chromium gives VA-API the compositor's GPU. On a hybrid laptop whose
 compositor runs on the NVIDIA card that device has no VA-API, so the encoder is
 OpenH264 or libvpx even when the Intel iGPU could encode. Pointing
 `--render-node-override` at the iGPU for the whole app is not a fix: the
-compositor then cannot import the window's buffers.
+compositor then cannot import the window's buffers. The same holds on X11
+with PRIME set to `nvidia`: `chrome://gpu` lists no encode profiles under any
+combination of the VA-API features, `VaapiIgnoreDriverChecks`,
+`VaapiLowPowerEncoderGen9x` and `--render-node-override`, and Chromium on Linux
+has no NVENC path at all.
+
+**The software-encoder budget.** The ladder moves only when an encoder is
+*failing*. A software encoder on a fast machine does not fail; it keeps a core
+busy all call. Measured with a loopback H.264 share of scrolling text, 1080p60
+costs about 2.5× 1080p30, 720p30 about 0.6× that again, and every extra viewer
+adds another encoder. So a share that knows its encoder is software starts
+inside a budget (`shareBudget` in `share-quality.ts`):
+
+| Encoder | Frame rate | Resolution |
+| --- | --- | --- |
+| Hardware, or not known | The profile's (60) | As captured |
+| Software, one viewer | `SOFTWARE_FRAME_RATE` (30) | As captured |
+| Software, two or more viewers | 30 | Scaled to `SOFTWARE_SHARED_HEIGHT` (720p) |
+
+The encoder is found out twice. Before the capture, `probeShareEncoder` asks
+`navigator.mediaCapabilities.encodingInfo({ type: 'webrtc' })` whether the
+share's codec is `powerEfficient`, and a software share is captured at 30 fps,
+not captured at 60 with half the frames thrown away. Once the share is live,
+each link's sender reports `encoderImplementation` / `powerEfficientEncoder`.
+Any link reporting software wins, since a hardware encoder has a session limit
+and the links past it fall back. Those readings replace the probe, the budget
+is recomputed, and the capture's frame rate follows through `applyConstraints`.
+The budget and the ladder both feed the sender: the lower frame rate and the
+larger `scaleResolutionDownBy` win, and they never multiply. A frame rate picked
+by hand in settings is never budgeted.
 
 **Screen share under Wayland.** Every `desktopCapturer.getSources` call goes
 through the xdg ScreenCast portal and puts its dialog on screen, and the
@@ -844,6 +882,17 @@ is `ShareBanners` on the web and desktop and `ShareInvite` on Android, and it is
 the same bargain on all three — a line at the bottom of the call saying who is
 presenting, with a button, and nothing moves until it is pressed. Leaving the
 share puts the banner back rather than suppressing the share.
+
+**Joining is also what starts the encoder.** The web and desktop client
+publishes `watching` in its voice-state envelope (`betweenus.voice-state`,
+over the peer data channel): the peer id of the share on its stage, or `null`.
+The sharer encodes only for peers whose `watching` names it (see *What a mesh
+costs*). A peer that never sends the field is treated as watching. That covers
+Android, whose dock and picture-in-picture show a share nobody joined, and
+older desktop builds. A share that has not been joined has no frames at all,
+so the banner is driven by the sharer's declared `screen`, and the stage opens
+on the receiver's track before the first frame arrives. For the same reason,
+the desktop's picture-in-picture shows only the share its viewer has joined.
 
 **"Nothing moves" includes the tiles, and that is the part that broke.** A tile
 shows a person's *camera* and never their share. Android's `Participant.video`
