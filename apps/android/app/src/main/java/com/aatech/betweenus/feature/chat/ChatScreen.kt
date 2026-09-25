@@ -199,6 +199,7 @@ fun ChatScreen(
     var failure by remember { mutableStateOf<String?>(null) }
 
     var showAttachmentSheet by remember { mutableStateOf(false) }
+    var creatingPoll by remember { mutableStateOf(false) }
     /**
      * Media that has been picked but not yet looked at. Nothing is read off
      * disk, encrypted or uploaded until the preview is sent from - which is the
@@ -935,6 +936,13 @@ fun ChatScreen(
         AttachmentSheet(
             onDismiss = { showAttachmentSheet = false },
             room = MAX_ATTACHMENTS - previewing.size,
+            // Only from the composer: a poll is its own message, and files
+            // already waiting in the preview could not ride with it.
+            onPoll = if (previewing.isEmpty() && editing == null) {
+                { creatingPoll = true }
+            } else {
+                null
+            },
             onPicked = { uris ->
                 scope.launch {
                     // Everything picked goes to the preview and then to
@@ -946,6 +954,10 @@ fun ChatScreen(
                 }
             },
         )
+    }
+
+    if (creatingPoll) {
+        PollComposerSheet(channelId = channelId, onDismiss = { creatingPoll = false })
     }
 
     // --- What is about to be sent ---

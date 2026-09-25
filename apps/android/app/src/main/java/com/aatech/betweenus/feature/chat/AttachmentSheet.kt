@@ -92,6 +92,12 @@ fun AttachmentSheet(
      * the composer, so it cannot assume it is starting from nothing.
      */
     room: Int = MAX_ATTACHMENTS,
+    /**
+     * Opens the create-a-poll sheet instead. Null where a poll makes no sense
+     * - adding to files already waiting in the preview - and the tile is left
+     * out.
+     */
+    onPoll: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -217,6 +223,18 @@ fun AttachmentSheet(
                     onClick = { audio.launch(arrayOf("audio/*")) },
                     modifier = Modifier.weight(1f),
                 )
+                if (onPoll != null) {
+                    AttachmentActionItem(
+                        icon = BetweenUsIcons.Poll,
+                        label = "Poll",
+                        backgroundColor = Color(0xFF30B0C7),
+                        onClick = {
+                            onDismiss()
+                            onPoll()
+                        },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             }
 
             HorizontalDivider(color = Edge, modifier = Modifier.padding(vertical = 10.dp))
