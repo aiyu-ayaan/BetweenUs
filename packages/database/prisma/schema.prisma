@@ -199,6 +199,8 @@ model User {
   /// Votes this account has cast, and the polls it closed. See MessagePoll.
   pollVotes       PollVote[]           @relation("PollVoter")
   pollsClosed     MessagePoll[]        @relation("PollClosedBy")
+  /// Threads this account follows, or explicitly stopped following. See ThreadFollow.
+  threadFollows   ThreadFollow[]       @relation("ThreadFollower")
 
   @@map("users")
 }
@@ -1087,31 +1089,31 @@ enum MessageKind {
 }
 
 model Message {
-  id          String      @id @default(uuid())
-  channelId   String
-  authorId    String
+  id                String      @id @default(uuid())
+  channelId         String
+  authorId          String
   /// Which sort of row this is; see [MessageKind]. `USER` unless the server
   /// wrote it, which keeps every row that existed before this column correct.
-  kind        MessageKind @default(USER)
+  kind              MessageKind @default(USER)
   // Opaque to the server: clients store a serialised `EncryptedEnvelope` here.
   /// Empty for every kind but `USER`: there is nothing to say that the kind and
   /// the author do not already say, and an empty string is honest about that in
   /// a way a server-written sentence in one language would not be.
-  content     String
-  createdAt   DateTime    @default(now())
-  editedAt    DateTime?
-  deletedAt   DateTime?
+  content           String
+  createdAt         DateTime    @default(now())
+  editedAt          DateTime?
+  deletedAt         DateTime?
   /// Who deleted it, when that was not the author - a client shows "deleted by
   /// NAME" rather than pretending the author took it back.
-  deletedById String?
-  pinnedAt    DateTime?
-  pinnedById  String?
+  deletedById       String?
+  pinnedAt          DateTime?
+  pinnedById        String?
   /// When this message stops existing, stamped from the server's disappearing
   /// window at send time. Null means it stays until somebody deletes it. The
   /// disappearing sweeper destroys the row outright rather than tombstoning
   /// it: a tombstone that says "a message was here" for ever is not what a
   /// disappearing message was asked to be.
-  expiresAt   DateTime?
+  expiresAt         DateTime?
   /// A one-time message: each recipient may open its media once, and it is
   /// destroyed once every one of them has.
   ///
@@ -1119,15 +1121,15 @@ model Message {
   /// it - burning is a row update and a blob delete, and a server that cannot
   /// read the body cannot be told by the body. What leaks is that some message
   /// was one-time, which is a fact both clients already draw on screen.
-  viewOnce    Boolean     @default(false)
+  viewOnce          Boolean     @default(false)
   /// When the *first* recipient opened it. Not the gate - `views` is - but the
   /// stamp a backstop expiry is measured from, so a one-time message nobody
   /// finishes opening still leaves eventually.
-  viewedAt    DateTime?
+  viewedAt          DateTime?
   /// Which webhook posted this, when one did. Set exactly when `kind` is
   /// `WEBHOOK`, and what a client reads the name and picture off - `author` is
   /// the account that created the webhook, which is not who the row is from.
-  webhookId   String?
+  webhookId         String?
   /// The root this message answers, when it is a thread reply.
   ///
   /// Metadata the server has to see - it keeps the reply out of the channel's
@@ -1140,29 +1142,31 @@ model Message {
   /// On a root: how many live replies its thread holds. Recomputed from the
   /// rows on every change rather than incremented, so a deleted or expired
   /// reply can never leave it drifting.
-  threadReplyCount  Int       @default(0)
+  threadReplyCount  Int         @default(0)
   /// On a root: when its newest live reply was sent. Null with no replies.
   threadLastReplyAt DateTime?
 
-  channel     Channel           @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  channel       Channel           @relation(fields: [channelId], references: [id], onDelete: Cascade)
   /// `Cascade`: a root is only destroyed outright by a disappearing window,
   /// and a thread left hanging off a message that disappeared is exactly the
   /// marker that feature promises not to leave. An ordinary delete is a
   /// tombstone, so the thread stays reachable under "original message deleted".
-  threadRoot    Message?  @relation("MessageThread", fields: [threadRootId], references: [id], onDelete: Cascade)
-  threadReplies Message[] @relation("MessageThread")
-  author      User              @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  deletedBy   User?             @relation("MessageDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
-  pinnedBy    User?             @relation("MessagePinnedBy", fields: [pinnedById], references: [id], onDelete: SetNull)
+  threadRoot    Message?          @relation("MessageThread", fields: [threadRootId], references: [id], onDelete: Cascade)
+  threadReplies Message[]         @relation("MessageThread")
+  author        User              @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  deletedBy     User?             @relation("MessageDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+  pinnedBy      User?             @relation("MessagePinnedBy", fields: [pinnedById], references: [id], onDelete: SetNull)
   /// `SetNull` rather than `Cascade`: deleting a webhook must not delete what
   /// it has already said. The rows stay and fall back to the name frozen into
   /// their own body.
-  webhook     Webhook?          @relation(fields: [webhookId], references: [id], onDelete: SetNull)
-  reactions   MessageReaction[]
-  attachments Attachment[]
-  views       MessageView[]
+  webhook       Webhook?          @relation(fields: [webhookId], references: [id], onDelete: SetNull)
+  reactions     MessageReaction[]
+  attachments   Attachment[]
+  views         MessageView[]
   /// Set when this message is a poll. See MessagePoll.
-  poll        MessagePoll?
+  poll          MessagePoll?
+  /// On a root: who follows its thread, and how far each of them has read.
+  threadFollows ThreadFollow[]    @relation("ThreadFollows")
 
   // History paging reads newest-first within a channel.
   @@index([channelId, createdAt])
@@ -1279,6 +1283,40 @@ model PollVote {
   @@unique([messageId, userId, option])
   @@index([messageId])
   @@map("poll_votes")
+}
+
+/// One account's place in one thread: whether it follows it, and how far into
+/// it it has read.
+///
+/// The server learns nothing here that `threadRootId` did not already tell it:
+/// that this account started or answered a thread (it sent the rows), or asked
+/// to be told about one. The unread count is counted from reply *rows* after
+/// `lastReadAt`, never from anything inside them.
+///
+/// A row with `following = false` is kept rather than deleted, because it is
+/// the memory of an explicit unfollow: the root's author is followed again on
+/// the next reply only when they never said otherwise. Replying yourself
+/// follows again, the way every chat app does it.
+model ThreadFollow {
+  userId     String
+  /// The thread's root message.
+  rootId     String
+  following  Boolean   @default(true)
+  /// The `createdAt` of the newest reply this account has seen. Null reads as
+  /// "nothing read yet", so every reply counts.
+  lastReadAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  user User    @relation("ThreadFollower", fields: [userId], references: [id], onDelete: Cascade)
+  /// `Cascade`: a root destroyed by a disappearing window takes its thread,
+  /// and a follow of nothing is a row nobody can open.
+  root Message @relation("ThreadFollows", fields: [rootId], references: [id], onDelete: Cascade)
+
+  @@id([userId, rootId])
+  // A reply tells everyone following its root.
+  @@index([rootId])
+  @@map("thread_follows")
 }
 
 /// One uploaded blob, and which message claims it.
