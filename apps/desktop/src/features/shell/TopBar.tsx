@@ -52,7 +52,11 @@ export function TopBar({
   const unwatched = useStatusStore((state) => runsOf(state).filter((run) => run.unseen).length);
 
   return (
-    <header className="drag-region hidden md:flex h-11 shrink-0 items-center justify-between border-b border-edge/60 bg-surface-950 px-3 backdrop-blur-md">
+    <header
+      // select-none: a press-and-drag on the bar moves the window; it must
+      // never turn into a text selection across the tab labels instead.
+      className="drag-region hidden md:flex h-11 shrink-0 select-none items-center justify-between border-b border-edge/60 bg-surface-950 px-3 backdrop-blur-md"
+    >
       {/* Left: Brand mark and sidebar toggle */}
       <div className={`flex items-center gap-2.5 shrink-0 ${isMac ? 'ps-[72px]' : 'ps-0.5'}`}>
         <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent text-white shadow-md shadow-accent/20">
@@ -73,9 +77,12 @@ export function TopBar({
       {/* Middle: where the workspace is pointed - the everyday chat/voice
           workbench, this account's call & remote-session activity, or the
           Moments tray. All three are real screens (`App.tsx` switches the
-          main panel on this), not a breadcrumb of where you already are. */}
-      <nav aria-label="Workspace" className="no-drag flex min-w-0 flex-1 justify-center px-4">
-        <div className="flex items-center gap-0.5 rounded-lg border border-edge bg-white/[0.03] p-0.5">
+          main panel on this), not a breadcrumb of where you already are.
+          Only the pill itself is no-drag: the nav stretches across the whole
+          middle of the bar, and marking all of it no-drag left the logo as
+          the only place the window could be picked up by. */}
+      <nav aria-label="Workspace" className="flex min-w-0 flex-1 justify-center px-4">
+        <div className="no-drag flex items-center gap-0.5 rounded-lg border border-edge bg-white/[0.03] p-0.5">
           {TOP_TABS.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
