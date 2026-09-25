@@ -34,4 +34,15 @@ assert.equal(threadMentionsOnly(grace, true, people), true);
 // Anybody else in the channel only hears about it when they are mentioned.
 assert.equal(threadMentionsOnly(lurker, false, people), true);
 
+// An explicit follower is in the thread without having written there...
+assert.ok(threadParticipants(root, [], ada, [{ userId: lurker, following: true }]).has(lurker));
+// ...and an explicit unfollow takes out even the root's author or a replier.
+const unfollowed = threadParticipants(root, [grace], ada, [
+  { userId: root, following: false },
+  { userId: grace, following: false },
+]);
+assert.ok(!unfollowed.has(root) && !unfollowed.has(grace));
+// The sender is never told, even when following.
+assert.ok(!threadParticipants(root, [], ada, [{ userId: ada, following: true }]).has(ada));
+
 console.log('thread push: ok');

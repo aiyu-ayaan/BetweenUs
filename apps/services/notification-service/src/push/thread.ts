@@ -13,7 +13,8 @@
 
 /**
  * The people who are *in* a thread, as far as a reply by `senderId` is
- * concerned: the root's author and every earlier replier, minus the sender -
+ * concerned: the root's author, every earlier replier and every follower,
+ * less anybody who unfollowed, minus the sender -
  * who wrote the reply and does not need telling about it.
  *
  * `rootAuthorId` is null when the root is gone or unknown; its thread still
@@ -23,9 +24,19 @@ export function threadParticipants(
   rootAuthorId: string | null,
   replyAuthorIds: string[],
   senderId: string,
+  /**
+   * Explicit follow rows for this thread. Following puts somebody in it who
+   * never wrote there; unfollowing takes out somebody who did - the choice
+   * they made outranks what their history implies.
+   */
+  follows: { userId: string; following: boolean }[] = [],
 ): Set<string> {
   const people = new Set(replyAuthorIds);
   if (rootAuthorId) people.add(rootAuthorId);
+  for (const follow of follows) {
+    if (follow.following) people.add(follow.userId);
+    else people.delete(follow.userId);
+  }
   people.delete(senderId);
   return people;
 }

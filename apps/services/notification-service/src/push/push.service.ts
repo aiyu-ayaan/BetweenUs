@@ -215,18 +215,23 @@ export class PushService implements OnModuleInit {
     threadRootId: string,
     recipients: { userId: string; mentionsOnly: boolean }[],
   ): Promise<{ userId: string; mentionsOnly: boolean }[]> {
-    const [root, replies] = await Promise.all([
+    const [root, replies, follows] = await Promise.all([
       prisma.message.findUnique({ where: { id: threadRootId }, select: { authorId: true } }),
       prisma.message.findMany({
         where: { threadRootId, id: { not: message.id } },
         select: { authorId: true },
         distinct: ['authorId'],
       }),
+      prisma.threadFollow.findMany({
+        where: { rootId: threadRootId },
+        select: { userId: true, following: true },
+      }),
     ]);
     const people = threadParticipants(
       root?.authorId ?? null,
       replies.map((reply) => reply.authorId),
       message.author.id,
+      follows,
     );
     return recipients.map((one) => ({
       userId: one.userId,
