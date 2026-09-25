@@ -278,8 +278,12 @@ function Session(): JSX.Element {
       const remoteTiles = voice.tiles.filter((t) => !t.isLocal);
       const remoteShares = voice.shares.filter((s) => !s.isLocal);
 
-      // Prioritize remote screen share, then actively speaking peer, then last spoke / first peer
-      const activeShare = remoteShares.find((s) => s.track && s.track.readyState === 'live');
+      // Prioritize remote screen share, then actively speaking peer, then last spoke / first peer.
+      // Only the share this viewer has joined: its owner encodes for nobody else,
+      // so any other share is a track with no frames on it.
+      const activeShare = remoteShares.find(
+        (s) => s.identity === voice.watching && s.track && s.track.readyState === 'live',
+      );
       const activeSpeakingTile = remoteTiles.find((t) => t.speaking);
       const latestTile = [...remoteTiles].sort((a, b) => b.lastSpokeAt - a.lastSpokeAt)[0];
       const activeTile = activeSpeakingTile ?? latestTile ?? remoteTiles[0];
