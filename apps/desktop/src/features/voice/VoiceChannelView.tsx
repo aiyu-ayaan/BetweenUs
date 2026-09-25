@@ -42,6 +42,15 @@ import { NotHeardNotice } from './NotHeardNotice';
 import { VideoSink } from './MediaSink';
 import { ShareStage } from './ShareStage';
 import { PAGE_SIZE, orderStage, splitStage } from './stage-order';
+import {
+  pinFor,
+  readStagePin,
+  resolveStagePin,
+  sessionPinStorage,
+  watchStagePin,
+  writeStagePin,
+  type PinWatch,
+} from './stage-pin';
 import { ListenBar, ListenPanel } from './ListenPanel';
 import { GameBar, GamePanel } from './GamePanel';
 import { AppsPanel } from './AppsPanel';
@@ -68,6 +77,8 @@ import {
 
 interface Stage {
   key: string;
+  /** Who, so a pin can follow them to a new peer id - see stage-pin.ts. */
+  userId: string | null;
   name: string;
   isLocal: boolean;
   speaking: boolean;
@@ -109,6 +120,7 @@ export function VoiceChannelView({
     ? tiles.map(toStage)
     : occupants.map((userId) => ({
         key: userId,
+        userId,
         name: members.find((member) => member.userId === userId)?.displayName ?? 'Someone',
         isLocal: false,
         speaking: false,
@@ -121,12 +133,33 @@ export function VoiceChannelView({
   const ordered = useOrderedStage(stage);
 
   // Pinned by hand, and only for as long as they are in the call - a pin left
-  // on somebody who hung up would hold an empty stage.
-  const [pinned, setPinned] = useState<string | null>(null);
-  const present = stage.map((tile) => tile.key).join(',');
+  // on somebody who hung up would hold an empty stage. Kept in this window's
+  // session storage for the channel, so a reload or a rejoin of the same call
+  // puts the same face back on the stage; see stage-pin.ts for what ends it.
+  const [pinWatch, setPinWatch] = useState<PinWatch>(() => ({
+    pin: readStagePin(sessionPinStorage(), channel.id),
+    seen: false,
+  }));
+  // Another channel, or back from a call: whatever storage holds now wins.
+  // The call ending (its roster emptying) cleared it there; leaving did not.
   useEffect(() => {
-    if (pinned !== null && !present.split(',').includes(pinned)) setPinned(null);
-  }, [pinned, present]);
+    setPinWatch({ pin: readStagePin(sessionPinStorage(), channel.id), seen: false });
+  }, [channel.id, connected]);
+  const pinned = resolveStagePin(pinWatch.pin, stage);
+  useEffect(() => {
+    setPinWatch((current) => {
+      const next = watchStagePin(current, pinned !== null, connected);
+      if (next.pin === current.pin && next.seen === current.seen) return current;
+      if (next.pin !== current.pin) writeStagePin(sessionPinStorage(), next.pin);
+      return next;
+    });
+  }, [pinned, connected]);
+  const togglePin = (key: string): void => {
+    const tile = stage.find((item) => item.key === key);
+    const next = !tile || pinned === key ? null : pinFor(channel.id, tile);
+    writeStagePin(sessionPinStorage(), next);
+    setPinWatch({ pin: next, seen: next !== null });
+  };
 
   const listenOpen = useListenStore((state) => state.open);
   const gameOpen = useGameStore((state) => state.open);
@@ -259,7 +292,7 @@ export function VoiceChannelView({
           <PagedGrid
             tiles={ordered}
             pinned={pinned}
-            onTogglePin={(key) => setPinned((current) => (current === key ? null : key))}
+            onTogglePin={togglePin}
           />
         )}
 
@@ -297,6 +330,7 @@ export function VoiceChannelView({
 function toStage(tile: VoiceTile): Stage {
   return {
     key: tile.identity,
+    userId: tile.userId,
     name: tile.name,
     isLocal: tile.isLocal,
     speaking: tile.speaking,

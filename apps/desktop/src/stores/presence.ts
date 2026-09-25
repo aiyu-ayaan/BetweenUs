@@ -11,6 +11,7 @@ import { useAuthStore } from './auth';
 import { useChatStore } from './chat';
 import { useRingStore } from './ring';
 import { useVoiceStore } from './voice';
+import { endStagePin, sessionPinStorage } from '../features/voice/stage-pin';
 
 /** How long a typing indicator stays up after the last keystroke event. */
 const TYPING_TTL_MS = 5_000;
@@ -266,6 +267,9 @@ presenceSocket.on((event) => {
       voice.set(event.voice.channelId, event.voice.userIds);
       usePresenceStore.setState({ voice });
       announceVoiceJoins(event.voice.channelId, before, event.voice.userIds);
+      // The call is over when its roster empties, and a pin kept for a rejoin
+      // of it has nothing left to rejoin. See stage-pin.ts.
+      endStagePin(sessionPinStorage(), event.voice.channelId, before, event.voice.userIds);
 
       // This account is in that call now, and this window is not the one that
       // put it there - so it is still ringing at somebody who is already
