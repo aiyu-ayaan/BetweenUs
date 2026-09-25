@@ -9,6 +9,11 @@
  *
  * Section 0 is always the uncategorized channels, drawn above every category
  * and never draggable as a heading: it has no name to drag.
+ *
+ * Inside every section the text channels come first and the voice channels
+ * after them, each group in its own position order. A voice channel is never
+ * drawn between two text ones, however it was dropped: every move re-groups
+ * before it is saved, so the saved positions agree with what is drawn.
  */
 import {
   sortByPosition,
@@ -23,7 +28,23 @@ export interface Section {
   channels: Channel[];
 }
 
-/** Uncategorized first, then each category in order, every channel in position order. */
+/** True for a channel drawn in the voice group at the bottom of its section. */
+function isVoice(channel: Channel): boolean {
+  return channel.type === 'VOICE';
+}
+
+/** Text channels, then voice channels, each group keeping its relative order. */
+export function groupByKind(channels: readonly Channel[]): Channel[] {
+  return [
+    ...channels.filter((channel) => !isVoice(channel)),
+    ...channels.filter(isVoice),
+  ];
+}
+
+/**
+ * Uncategorized first, then each category in order; inside each, text before
+ * voice, and every channel in position order within its group.
+ */
 export function buildSections(
   categories: readonly ChannelCategory[],
   channels: readonly Channel[],
@@ -31,13 +52,16 @@ export function buildSections(
   const ordered = sortByPosition(categories);
   const known = new Set(ordered.map((category) => category.id));
   const filed = (id: string | null): Channel[] =>
-    sortByPosition(
-      channels.filter((channel) => {
-        // A channel pointing at a category we do not hold is drawn loose
-        // rather than vanishing.
-        const own = channel.categoryId && known.has(channel.categoryId) ? channel.categoryId : null;
-        return own === id;
-      }),
+    groupByKind(
+      sortByPosition(
+        channels.filter((channel) => {
+          // A channel pointing at a category we do not hold is drawn loose
+          // rather than vanishing.
+          const own =
+            channel.categoryId && known.has(channel.categoryId) ? channel.categoryId : null;
+          return own === id;
+        }),
+      ),
     );
   return [
     { category: null, channels: filed(null) },
@@ -74,6 +98,8 @@ function locate(
  * Moves a channel to `index` of the section holding `categoryId` (null for
  * the loose ones). `index` counts in the destination *after* the channel has
  * been taken out of wherever it was, which is what a drop position means.
+ * The destination is then re-grouped text-before-voice, so a voice channel
+ * dropped among text channels lands at the top of the voice group instead.
  * Returns the sections unchanged when there is nothing to do.
  */
 export function moveChannel(
@@ -97,7 +123,7 @@ export function moveChannel(
     const clamped = Math.max(0, Math.min(index, section.channels.length));
     const channels = [...section.channels];
     channels.splice(clamped, 0, channel);
-    return { ...section, channels };
+    return { ...section, channels: groupByKind(channels) };
   });
 }
 
@@ -145,9 +171,12 @@ export function moveCategoryBefore(
 
 /**
  * One step up (-1) or down (+1) with the keyboard. Inside a section it swaps
- * with the neighbour; at the edge it crosses into the next section - the
- * bottom of the one above, the top of the one below - so a channel can be
- * carried from the loose list into a category without a pointer.
+ * with the neighbour of the same kind; at the edge of its group it crosses
+ * into the next section - the bottom of its group in the one above, the top
+ * of its group in the one below - so a channel can be carried from the loose
+ * list into a category without a pointer. Swapping a voice channel with the
+ * text channel above it would only be undone by the grouping, so that edge
+ * crosses too.
  */
 export function stepChannel(
   sections: readonly Section[],
@@ -159,8 +188,10 @@ export function stepChannel(
   const here = sections[at.section];
   if (!here) return [...sections];
 
+  const channel = here.channels[at.index];
   const target = at.index + delta;
-  if (target >= 0 && target < here.channels.length) {
+  const neighbour = here.channels[target];
+  if (channel && neighbour && isVoice(neighbour) === isVoice(channel)) {
     return moveChannel(sections, channelId, here.category?.id ?? null, target);
   }
   const next = sections[at.section + delta];

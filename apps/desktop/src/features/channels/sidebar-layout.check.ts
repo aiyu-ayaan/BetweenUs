@@ -21,11 +21,17 @@ import {
 } from './sidebar-layout';
 
 const at = (n: number): string => `2026-09-22T10:0${n}:00.000Z`;
-const channel = (id: string, n: number, categoryId: string | null, position = 0): Channel => ({
+const channel = (
+  id: string,
+  n: number,
+  categoryId: string | null,
+  position = 0,
+  type: Channel['type'] = 'TEXT',
+): Channel => ({
   id,
   serverId: 's',
   name: id,
-  type: 'TEXT',
+  type,
   topic: null,
   isPrivate: false,
   categoryId,
@@ -92,6 +98,29 @@ assert.deepEqual(layoutFrom(moveChannel(sections, 'c1', 'B', 0)), {
     { id: 'c4', categoryId: 'B' },
   ],
 });
+
+// Text before voice in every section, whatever the saved positions say.
+const voice = (id: string, n: number, categoryId: string | null, position = 0): Channel =>
+  channel(id, n, categoryId, position, 'VOICE');
+const mixed = buildSections(cats, [
+  channel('t1', 1, null, 0),
+  voice('v1', 2, null, 1),
+  channel('t2', 3, null, 2),
+  voice('v2', 4, 'A', 0),
+  channel('t3', 5, 'A', 1),
+]);
+assert.deepEqual(names(mixed), ['-:t1,t2,v1', 'A:t3,v2', 'B:'], 'voice never sits between text');
+
+// A voice channel dropped among text channels lands at the top of the voice group.
+assert.deepEqual(names(moveChannelBefore(mixed, 'v1', 't1')), ['-:t1,t2,v1', 'A:t3,v2', 'B:']);
+assert.deepEqual(names(moveChannelBefore(mixed, 'v1', 't3')), ['-:t1,t2', 'A:t3,v1,v2', 'B:']);
+assert.deepEqual(names(moveChannelToEnd(mixed, 't1', 'A')), ['-:t2,v1', 'A:t3,t1,v2', 'B:'], 'text dropped last stays above voice');
+
+// Keyboard: a group's edge crosses sections rather than swapping kinds.
+assert.deepEqual(names(stepChannel(mixed, 'v2', -1)), ['-:t1,t2,v1,v2', 'A:t3', 'B:'], 'voice up out joins the voice group above');
+assert.deepEqual(names(stepChannel(mixed, 't2', 1)), ['-:t1,v1', 'A:t2,t3,v2', 'B:'], 'text down out joins the text group below');
+assert.deepEqual(names(stepChannel(mixed, 'v1', 1)), ['-:t1,t2', 'A:t3,v1,v2', 'B:']);
+assert.deepEqual(names(stepChannel(mixed, 't2', -1)), ['-:t2,t1,v1', 'A:t3,v2', 'B:'], 'same kind still swaps');
 
 // Folded categories keep their unread and "you are here".
 const a = sections[1];

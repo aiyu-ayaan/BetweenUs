@@ -11,11 +11,17 @@ import org.junit.Test
  */
 class ChannelSectionsTest {
 
-    private fun channel(id: String, n: Int, categoryId: String?, position: Int = 0) = Channel(
+    private fun channel(
+        id: String,
+        n: Int,
+        categoryId: String?,
+        position: Int = 0,
+        type: ChannelType = ChannelType.TEXT,
+    ) = Channel(
         id = id,
         serverId = "s",
         name = id,
-        type = ChannelType.TEXT,
+        type = type,
         topic = null,
         isPrivate = false,
         categoryId = categoryId,
@@ -45,6 +51,21 @@ class ChannelSectionsTest {
             listOf(channel("c3", 3, null), channel("c1", 1, null), channel("c2", 2, null)),
         )
         assertEquals(listOf("-:c1,c2,c3"), names(sections))
+    }
+
+    @Test
+    fun `text channels come before voice channels in every section`() {
+        val sections = channelSections(
+            listOf(category("A", 0)),
+            listOf(
+                channel("t1", 1, null, 0),
+                channel("v1", 2, null, 1, ChannelType.VOICE),
+                channel("t2", 3, null, 2),
+                channel("v2", 4, "A", 0, ChannelType.VOICE),
+                channel("t3", 5, "A", 1),
+            ),
+        )
+        assertEquals(listOf("-:t1,t2,v1", "A:t3,v2"), names(sections))
     }
 
     @Test

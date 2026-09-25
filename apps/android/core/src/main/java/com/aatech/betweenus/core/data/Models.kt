@@ -587,6 +587,9 @@ data class ChannelSection(val category: ChannelCategory?, val channels: List<Cha
  * The sections a channel list is drawn as: uncategorized first, then each
  * category in order, every channel by position and then age - the same rule
  * `sortByPosition` gives the other clients, so all of them draw one order.
+ * Inside each section the text channels come before the voice channels, as
+ * the desktop's `buildSections` draws them: a voice channel is never drawn
+ * between two text ones.
  *
  * A channel pointing at a category this device does not hold is drawn loose
  * rather than dropped: a stale category list must never hide a channel.
@@ -600,6 +603,8 @@ fun channelSections(categories: List<ChannelCategory>, channels: List<Channel>):
     fun filed(id: String?) = channels
         .filter { (it.categoryId?.takeIf { own -> own in known }) == id }
         .sortedWith(byPosition)
+        // Stable, so each group keeps its position order.
+        .sortedBy { it.type == ChannelType.VOICE }
     return listOf(ChannelSection(null, filed(null))) +
         ordered.map { ChannelSection(it, filed(it.id)) }
 }
