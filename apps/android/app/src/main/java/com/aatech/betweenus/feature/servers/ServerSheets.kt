@@ -326,12 +326,17 @@ private fun Dot(colour: androidx.compose.ui.graphics.Color) {
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CreateChannelSheet(server: ServerWithRole, onDismiss: () -> Unit) {
+fun CreateChannelSheet(
+    server: ServerWithRole,
+    onDismiss: () -> Unit,
+    /** Opened from the Voice channels heading: start on Voice. Still changeable. */
+    initialVoice: Boolean = false,
+) {
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
 
     var name by remember { mutableStateOf("") }
-    var voice by remember { mutableStateOf(false) }
+    var voice by remember { mutableStateOf(initialVoice) }
     var private by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var note by remember { mutableStateOf<String?>(null) }
