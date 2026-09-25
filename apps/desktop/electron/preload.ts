@@ -233,6 +233,12 @@ const api = {
   closePip: (): Promise<void> => ipcRenderer.invoke('pip:close'),
   sendPipState: (state: unknown): void => ipcRenderer.send('pip:state', state),
   sendPipFrame: (frameData: string): void => ipcRenderer.send('pip:frame', frameData),
+  /** Whether the overlay is up, so frames are only drawn while one is. */
+  onPipOpenChanged: (handler: (open: boolean) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, open: boolean): void => handler(open);
+    ipcRenderer.on('pip:open-changed', listener);
+    return () => ipcRenderer.removeListener('pip:open-changed', listener);
+  },
   onPipAction: (handler: (action: { type: string }) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, action: { type: string }): void => handler(action);
     ipcRenderer.on('pip:action', listener);

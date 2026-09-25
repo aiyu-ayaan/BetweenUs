@@ -263,8 +263,15 @@ function Session(): JSX.Element {
 
     let offscreenCanvas: HTMLCanvasElement | null = null;
     let offscreenCtx: CanvasRenderingContext2D | null = null;
+    // Only while the overlay exists: with no one to receive them, the state and
+    // the JPEG frames below were a core of CPU spent for the whole call.
+    let pipOpen = false;
+    const unsubOpen = window.betweenus.onPipOpenChanged?.((open) => {
+      pipOpen = open;
+    });
 
     const syncInterval = setInterval(() => {
+      if (!pipOpen) return;
       const voice = useVoiceStore.getState();
       if (voice.status !== 'connected') return;
 
@@ -354,6 +361,7 @@ function Session(): JSX.Element {
 
     return () => {
       clearInterval(syncInterval);
+      unsubOpen?.();
     };
   }, []);
 

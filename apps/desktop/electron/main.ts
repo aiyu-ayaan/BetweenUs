@@ -456,6 +456,7 @@ function createPipWindow(): void {
 
   pip.on('closed', () => {
     if (pipWindow === pip) pipWindow = null;
+    announcePip(false);
   });
 
   const html = `<!DOCTYPE html>
@@ -757,6 +758,19 @@ function createPipWindow(): void {
   void pip.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
 
   pipWindow = pip;
+  announcePip(true);
+}
+
+/**
+ * Tells the main window whether there is an overlay to feed.
+ *
+ * The renderer draws a frame and encodes it as a JPEG every 60 ms for the
+ * overlay, and nothing else is looking at them. Streamed while no overlay
+ * existed - which is every minute of a call spent with the window open - that
+ * was a core's worth of image encoding thrown away on arrival here.
+ */
+function announcePip(open: boolean): void {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('pip:open-changed', open);
 }
 
 function closePipWindow(restoreMain = false): void {

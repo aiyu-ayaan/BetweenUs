@@ -159,6 +159,7 @@ interface Window {
     closePip: () => Promise<void>;
     sendPipState?: (state: unknown) => void;
     sendPipFrame?: (frameData: string) => void;
+    onPipOpenChanged?: (handler: (open: boolean) => void) => () => void;
     onPipAction?: (handler: (action: { type: string }) => void) => () => void;
     onWindowMinimize?: (handler: () => void) => () => void;
     onWindowRestore?: (handler: () => void) => () => void;
