@@ -205,6 +205,37 @@ try {
 }
 ok('weak KDF refused', weakKdfRejected);
 
+// Channel keys are wrapped for an account, never for a machine, and nothing is
+// sealed for an account without a vault - so publish one before keying.
+const noVault = await json(`${CHAT}/api/v1/e2ee/vault`, { headers: authed });
+ok('no vault yet', noVault.vault === null, JSON.stringify(noVault));
+await json(`${CHAT}/api/v1/e2ee/vault`, {
+  method: 'POST',
+  headers: authed,
+  body: JSON.stringify({
+    publicKey: devicePublicKey,
+    keyring: { v: 1, iv: 'c21va2UtaXY=', ct: 'c21va2Utc2VhbGVkLWtleXJpbmc=' },
+    factors: [
+      {
+        v: 1,
+        kind: 'password',
+        deviceId: '',
+        kdf: 'PBKDF2-SHA256',
+        iterations: 600000,
+        salt: 'c21va2Utc2FsdC0xNmJ5dGVz',
+        iv: 'c21va2UtaXY=',
+        ct: 'c21va2Utc2VhbGVkLW1hc3Rlcg==',
+        senderPublicKey: '',
+      },
+    ],
+  }),
+});
+const myVault = await json(`${CHAT}/api/v1/e2ee/vault`, { headers: authed });
+ok('vault published', myVault.vault?.publicKey === devicePublicKey);
+
+// The account-scope sentinel from @betweenus/shared-types (`ACCOUNT_SCOPE`).
+const ACCOUNT_SCOPE = '@account';
+
 const empty = await json(`${CHAT}/api/v1/e2ee/keys/${channel.id}`, { headers: authed });
 ok('unkeyed channel', empty.epoch === 0 && empty.keys.length === 0);
 
@@ -218,7 +249,7 @@ await json(`${CHAT}/api/v1/e2ee/keys`, {
     entries: [
       {
         recipientUserId: me.id,
-        recipientDeviceId: deviceId,
+        recipientDeviceId: ACCOUNT_SCOPE,
         senderPublicKey: devicePublicKey,
         wrappedKey: 'c21va2Utd3JhcHBlZC1rZXk=',
         iv: 'c21va2UtaXY=',
@@ -243,7 +274,7 @@ try {
       entries: [
         {
           recipientUserId: me.id,
-          recipientDeviceId: deviceId,
+          recipientDeviceId: ACCOUNT_SCOPE,
           senderPublicKey: devicePublicKey,
           wrappedKey: 'c21va2Utd3JhcHBlZC1rZXk=',
           iv: 'c21va2UtaXY=',
