@@ -58,3 +58,20 @@ export async function blockedIdsOf(userId: string): Promise<string[]> {
   });
   return rows.map((row) => row.blockedId);
 }
+
+/**
+ * Of `candidates`, the ones who have blocked `authorId` - one direction only.
+ *
+ * For the places a block is a preference rather than a gate: a server channel
+ * both people are in stays readable by both, and what the blocker asked for is
+ * not to be told about the other person, so it is their notifications that
+ * drop. The person who was blocked is not affected by having been.
+ */
+export async function blockersAmong(authorId: string, candidates: string[]): Promise<Set<string>> {
+  if (candidates.length === 0) return new Set();
+  const rows = await prisma.userBlock.findMany({
+    where: { blockedId: authorId, blockerId: { in: candidates } },
+    select: { blockerId: true },
+  });
+  return new Set(rows.map((row) => row.blockerId));
+}

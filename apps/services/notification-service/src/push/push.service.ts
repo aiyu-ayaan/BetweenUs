@@ -62,7 +62,7 @@
  *   unexpected, and the only one that ignores every preference: see below.
  */
 import { Injectable, OnModuleInit } from '@nestjs/common';
-import { channelAudience, prisma } from '@betweenus/database';
+import { blockersAmong, channelAudience, prisma } from '@betweenus/database';
 import { EVENTS, EventBus } from '@betweenus/events';
 import type { EventName, EventPayloads } from '@betweenus/events';
 import { Logger } from '@betweenus/logger';
@@ -655,8 +655,14 @@ export class PushService implements OnModuleInit {
       },
     });
     const byUser = new Map(settings.map((row) => [row.userId, row]));
+    // Somebody who blocked the author still shares this server with them - a
+    // block closes the direct message, not the room - and their client folds
+    // the author's messages away. Waking their phone for one would undo that,
+    // so a block drops them here exactly as muting the person would.
+    const blockers = await blockersAmong(message.author.id, audience);
 
     return audience.flatMap((userId) => {
+      if (blockers.has(userId)) return [];
       const row = byUser.get(userId);
       if (!row) return [{ userId, mentionsOnly: false }];
       if (!row.enabled) return [];
