@@ -1040,8 +1040,12 @@ fun ChatScreen(
             },
             // A tombstone has nothing to carry, and a one-time message must
             // not be carried anywhere: being seen once by the people it was
-            // sent to is the whole of what it promised.
-            onForward = if (readable.message.deleted || readable.message.viewOnce) {
+            // sent to is the whole of what it promised. Nor can a poll: its
+            // ballot is the original row's, so a copy would be a question with
+            // nothing to vote on.
+            onForward = if (
+                readable.message.deleted || readable.message.viewOnce || readable.message.poll != null
+            ) {
                 null
             } else {
                 { forwarding = readable; acting = null }

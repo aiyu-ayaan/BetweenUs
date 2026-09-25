@@ -713,12 +713,16 @@ object Conversation {
      *
      * A one-time message is not forwardable and is not offered as one - the
      * whole point of it is that it is seen once, by the people it was sent to.
+     * Nor is a poll: its ballot is held on the original row, so a copy would
+     * arrive as a card with no poll behind it. Refused here as well as hidden
+     * in the menu, so no other caller can produce one.
      */
     suspend fun forward(
         readable: ReadableMessage,
         toChannelId: String,
         onProgress: ((Float) -> Unit)? = null,
     ) {
+        require(readable.message.poll == null) { "A poll cannot be forwarded" }
         val from = readable.message.channelId
         val files = readable.attachments
         val carried = files.mapIndexed { index, attachment ->
