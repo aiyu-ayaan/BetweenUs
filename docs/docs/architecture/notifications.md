@@ -280,6 +280,11 @@ week. See [Database Schema](/database/schema#notifications--devices).
   only it knows if the window is focused on that channel. Closing the
   window hides it rather than quitting — the tray keeps the socket alive,
   which is what makes a closed-but-not-quit app still reachable at all.
+  Two things keep that socket useful while nobody is looking at it: it is
+  subscribed to every readable text channel in *every* server plus the
+  DMs, not only the server on screen, and past the 30s offline deadline it
+  keeps retrying every 30s (`OFFLINE_RETRY_MS`) instead of waiting for the
+  window to come back, which a minimised or tray-only window never does.
 - **Web, tab open**: the Notifications API, permission requested at the
   first notification worth raising rather than at sign-in (a prompt on the
   way in is the one people refuse). Unread count goes in the tab title —

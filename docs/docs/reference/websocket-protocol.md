@@ -21,7 +21,8 @@ sockets that stop answering. Clients are expected to hold up their half:
 | Behaviour | Value |
 | :--- | :--- |
 | Reconnect backoff | 1s doubling to 30s |
-| Give up and show "Disconnected" | after 30s down |
+| Show "Disconnected" | after 30s down |
+| Keep retrying while disconnected | every 30s, until back or signed out |
 | Handshake timeout | 10s |
 | Idle probe | `ping` every 25s, `pong` expected within 10s |
 
