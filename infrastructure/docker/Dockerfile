@@ -61,6 +61,11 @@ COPY packages ./packages
 COPY apps/admin ./apps/admin
 COPY apps/web ./apps/web
 COPY apps/services ./apps/services
+# apps/web's vite.config.ts takes its dev-proxy targets from this module, and
+# `tsc -p tsconfig.json` type-checks that config, so the build needs it (and its
+# declarations) even though the proxy never runs in an image. With no `.env` in
+# the context it falls back to the stock ports, which nothing here reads anyway.
+COPY scripts/dev-services.mjs scripts/dev-services.d.mts ./scripts/
 # The web client is a browser entry point around the UI in apps/desktop/src, so
 # that source has to be here - but only that source. Without the manifest the
 # workspace does not treat apps/desktop as a package, which is the point: no

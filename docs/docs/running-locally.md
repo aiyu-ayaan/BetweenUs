@@ -47,7 +47,9 @@ which the sign-in form can only show as "Request failed". The dev gateway checks
 every service's `/health` 15 seconds after it starts and names the port that
 answers as something else. Set that service's `_PORT` in `.env` to a free port
 and restart `pnpm dev`. Production containers pin their ports in Compose and do
-not read these.
+not read these. The image build still copies `scripts/dev-services.mjs` in,
+though: `apps/web`'s `vite.config.ts` imports it and the web build type-checks
+that config, so an image without it fails with `TS2307`.
 
 ## Desktop client
 
