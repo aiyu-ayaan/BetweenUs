@@ -32,6 +32,7 @@ import {
   HashIcon,
   LockIcon,
   MoreIcon,
+  PlusIcon,
   SettingsIcon,
   SpeakerIcon,
   XIcon,
@@ -144,6 +145,46 @@ export function ChannelSidebar({
     };
   };
 
+  /** One channel row, draggable and keyboard-movable for a manager. */
+  const row = (channel: Channel): JSX.Element => (
+    <div
+      key={channel.id}
+      data-focus-key={`channel:${channel.id}`}
+      onKeyDown={(event) => {
+        const delta = keyboardDelta(event, canManageChannels);
+        if (delta === 0) return;
+        event.preventDefault();
+        commit(
+          stepChannel(sections, channel.id, delta),
+          `channel:${channel.id}`,
+          channel.name,
+        );
+      }}
+      className={drag?.kind === 'channel' && drag.id === channel.id ? 'opacity-40' : ''}
+      {...dragProps({ kind: 'channel', id: channel.id }, () => {
+        if (drag?.kind === 'channel') {
+          commit(moveChannelBefore(sections, drag.id, channel.id));
+        }
+      })}
+    >
+      {channel.type === 'VOICE' ? (
+        <VoiceChannelRow channel={channel} />
+      ) : (
+        <TextChannelRow
+          channel={channel}
+          isActive={activeChannelId === channel.id}
+          unreadCount={unread[channel.id] ?? 0}
+          onSelect={() => void selectChannel(channel.id)}
+        />
+      )}
+    </div>
+  );
+
+  /** Dropping on either uncategorized list files the channel there, last. */
+  const looseDropProps = dragProps(null, () => {
+    if (drag?.kind === 'channel') commit(moveChannelToEnd(sections, drag.id, null));
+  });
+
   const removeCategory = async (category: ChannelCategory): Promise<void> => {
     if (
       !confirm(
@@ -179,26 +220,6 @@ export function ChannelSidebar({
         onClickCapture={onNavigate}
         className="min-h-0 flex-1 overflow-y-auto px-2 pb-2"
       >
-        <div className="flex items-center justify-between px-1 pb-1 pt-3.5">
-          <span className="text-[11px] font-bold tracking-wider text-slate-400">CHANNELS</span>
-          {canManageChannels && (
-            <div className="flex items-center gap-0.5">
-              <HeadingButton label="Create text channel" onClick={() => setCreating({ type: 'TEXT', category: null })}>
-                <HashIcon className="h-3.5 w-3.5" />
-              </HeadingButton>
-              <HeadingButton label="Create voice channel" onClick={() => setCreating({ type: 'VOICE', category: null })}>
-                <SpeakerIcon className="h-3.5 w-3.5" />
-              </HeadingButton>
-              <HeadingButton
-                label="Create category"
-                onClick={() => setCategoryDialog({ mode: 'create' })}
-              >
-                <FolderIcon className="h-3.5 w-3.5" />
-              </HeadingButton>
-            </div>
-          )}
-        </div>
-
         {/* Read out by screen readers after a keyboard move, since the row
             they were on has just changed places. */}
         <p role="status" aria-live="polite" className="sr-only">
@@ -261,61 +282,69 @@ export function ChannelSidebar({
                 />
               )}
 
-              <div
-                className="space-y-0.5"
-                // The loose list is a drop target of its own, or an empty one
-                // could never receive anything.
-                {...(category === null
-                  ? dragProps(null, () => {
-                      if (drag?.kind === 'channel') {
-                        commit(moveChannelToEnd(sections, drag.id, null));
-                      }
-                    })
-                  : {})}
-              >
-                {visible.map((channel) => (
-                  <div
-                    key={channel.id}
-                    data-focus-key={`channel:${channel.id}`}
-                    onKeyDown={(event) => {
-                      const delta = keyboardDelta(event, canManageChannels);
-                      if (delta === 0) return;
-                      event.preventDefault();
-                      commit(
-                        stepChannel(sections, channel.id, delta),
-                        `channel:${channel.id}`,
-                        channel.name,
-                      );
-                    }}
-                    className={drag?.kind === 'channel' && drag.id === channel.id ? 'opacity-40' : ''}
-                    {...dragProps({ kind: 'channel', id: channel.id }, () => {
-                      if (drag?.kind === 'channel') {
-                        commit(moveChannelBefore(sections, drag.id, channel.id));
-                      }
-                    })}
-                  >
-                    {channel.type === 'VOICE' ? (
-                      <VoiceChannelRow channel={channel} />
-                    ) : (
-                      <TextChannelRow
-                        channel={channel}
-                        isActive={activeChannelId === channel.id}
-                        unreadCount={unread[channel.id] ?? 0}
-                        onSelect={() => void selectChannel(channel.id)}
-                      />
+              {category === null ? (
+                // The uncategorized channels, drawn the way the sidebar was
+                // before categories: a text list and a voice list, each under
+                // its own heading with its own create button, and the
+                // categories after both. Each list is a drop target of its own,
+                // or an empty one could never receive anything; a channel
+                // dropped on the wrong kind's list lands in its own.
+                <>
+                  <SectionHeading label="TEXT CHANNELS">
+                    {canManageChannels && (
+                      <>
+                        <HeadingButton
+                          label="Create text channel"
+                          onClick={() => setCreating({ type: 'TEXT', category: null })}
+                        >
+                          <PlusIcon className="h-3.5 w-3.5" />
+                        </HeadingButton>
+                        <HeadingButton
+                          label="Create category"
+                          onClick={() => setCategoryDialog({ mode: 'create' })}
+                        >
+                          <FolderIcon className="h-3.5 w-3.5" />
+                        </HeadingButton>
+                      </>
                     )}
+                  </SectionHeading>
+                  <div className="space-y-0.5" {...looseDropProps}>
+                    {visible.filter((channel) => channel.type !== 'VOICE').map(row)}
+                    {categories.length === 0 &&
+                      !section.channels.some((channel) => channel.type !== 'VOICE') && (
+                        <p className="px-2.5 py-2 text-xs text-slate-500">No text channels yet</p>
+                      )}
                   </div>
-                ))}
 
-                {category === null && section.channels.length === 0 && categories.length === 0 && (
-                  <p className="px-2.5 py-2 text-xs text-slate-500">No channels yet</p>
-                )}
-                {category !== null && !folded && section.channels.length === 0 && (
+                  <SectionHeading label="VOICE CHANNELS">
+                    {canManageChannels && (
+                      <HeadingButton
+                        label="Create voice channel"
+                        onClick={() => setCreating({ type: 'VOICE', category: null })}
+                      >
+                        <PlusIcon className="h-3.5 w-3.5" />
+                      </HeadingButton>
+                    )}
+                  </SectionHeading>
+                  <div className="space-y-0.5" {...looseDropProps}>
+                    {visible.filter((channel) => channel.type === 'VOICE').map(row)}
+                    {categories.length === 0 &&
+                      !section.channels.some((channel) => channel.type === 'VOICE') && (
+                        <p className="px-2.5 py-2 text-xs text-slate-500">No voice channels yet</p>
+                      )}
+                  </div>
+                </>
+              ) : (
+              <div className="space-y-0.5">
+                {visible.map(row)}
+
+                {!folded && section.channels.length === 0 && (
                   <p className="px-2.5 py-1 text-xs text-slate-500">
                     {canManageChannels ? 'Empty - drag a channel here' : 'No channels'}
                   </p>
                 )}
               </div>
+              )}
             </div>
           );
         })}
@@ -483,6 +512,22 @@ function readCollapsed(key: string): Set<string> {
   } catch {
     return new Set();
   }
+}
+
+/** A heading over one of the uncategorized lists, with its create buttons. */
+function SectionHeading({
+  label,
+  children,
+}: {
+  label: string;
+  children?: React.ReactNode;
+}): JSX.Element {
+  return (
+    <div className="flex items-center justify-between px-1 pb-1 pt-3.5">
+      <span className="text-[11px] font-bold tracking-wider text-slate-400">{label}</span>
+      {children && <div className="flex items-center gap-0.5">{children}</div>}
+    </div>
+  );
 }
 
 function HeadingButton({
