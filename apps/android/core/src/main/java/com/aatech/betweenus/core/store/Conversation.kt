@@ -12,6 +12,7 @@ import com.aatech.betweenus.core.data.MessageForward
 import com.aatech.betweenus.core.data.MessageMoment
 import com.aatech.betweenus.core.data.MessageReply
 import com.aatech.betweenus.core.data.BetweenUsApi
+import com.aatech.betweenus.core.data.PollSettings
 import com.aatech.betweenus.core.data.UploadedObject
 import com.aatech.betweenus.core.data.UploadedPart
 import com.aatech.betweenus.core.data.Session
@@ -792,6 +793,30 @@ object Conversation {
      * Replaces this account's ballot. The server referees it and answers with
      * the tally, which is what gets drawn - no optimistic bar.
      */
+    /**
+     * Sends a poll. The question is the text, so a client that has never heard
+     * of polls still shows what was asked; the labels ride beside it inside the
+     * envelope. The server is told only how many options there are, whether
+     * more than one may be chosen, and when it closes - the desktop's
+     * `sendPoll`, field for field.
+     */
+    suspend fun sendPoll(
+        channelId: String,
+        question: String,
+        options: List<String>,
+        multiChoice: Boolean,
+        durationSeconds: Int?,
+    ) {
+        val body = MessageBody(text = question, pollOptions = options).encode()
+        val sealed = E2ee.encryptForChannel(channelId, body)
+        val message = BetweenUsApi.sendMessage(
+            channelId,
+            sealed,
+            poll = PollSettings(options.size, multiChoice, durationSeconds),
+        )
+        insert(read(message))
+    }
+
     suspend fun votePoll(message: Message, options: List<Int>) {
         replace(read(BetweenUsApi.votePoll(message.id, options)))
     }

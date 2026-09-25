@@ -457,9 +457,19 @@ object BetweenUsApi {
         authedArray("GET", "/api/v1/channels?serverId=${enc(serverId)}").map { Channel.from(it) }
     }
 
-    /** A server's channel categories; reordering is not offered on this client. */
+    /** A server's channel categories. */
     suspend fun channelCategories(serverId: String): List<ChannelCategory> = io {
         authedArray("GET", "/api/v1/servers/${enc(serverId)}/categories").map { ChannelCategory.from(it) }
+    }
+
+    /**
+     * Rearranges the sidebar in one go: category order, and each channel's
+     * category and place. `MANAGE_CHANNEL`. The answer is not read - the
+     * caller has already drawn the same result through [applyChannelLayout],
+     * and `server.channels.changed` brings the server's copy.
+     */
+    suspend fun setChannelLayout(serverId: String, request: ChannelLayoutRequest): Unit = io {
+        authed("PUT", "/api/v1/servers/${enc(serverId)}/channel-layout", request.toJson())
     }
 
     suspend fun createChannel(
@@ -538,22 +548,20 @@ object BetweenUsApi {
         attachmentKeys: List<String> = emptyList(),
         viewOnce: Boolean = false,
         threadRootId: String? = null,
+        /** Numbers only - the question and labels are sealed inside `content`. */
+        poll: PollSettings? = null,
     ): Message = io {
-        Message.from(
-            authed(
-                "POST",
-                "/api/v1/messages",
-                obj(
-                    "channelId" to channelId,
-                    "content" to content,
-                    "attachmentKeys" to JSONArray(attachmentKeys),
-                    "viewOnce" to viewOnce,
-                    // JSON null when it is not a thread reply, which the server
-                    // reads as absent.
-                    "threadRootId" to threadRootId,
-                ),
-            ),
+        val body = obj(
+            "channelId" to channelId,
+            "content" to content,
+            "attachmentKeys" to JSONArray(attachmentKeys),
+            "viewOnce" to viewOnce,
+            // JSON null when it is not a thread reply, which the server
+            // reads as absent.
+            "threadRootId" to threadRootId,
         )
+        poll?.let { body.put("poll", it.toJson()) }
+        Message.from(authed("POST", "/api/v1/messages", body))
     }
 
     /**

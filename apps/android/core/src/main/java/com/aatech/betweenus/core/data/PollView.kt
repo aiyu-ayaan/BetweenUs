@@ -1,5 +1,6 @@
 package com.aatech.betweenus.core.data
 
+import org.json.JSONObject
 import java.time.Instant
 
 /**
@@ -65,4 +66,78 @@ fun MessagePoll.view(labels: List<String>, selfId: String, now: Long = System.cu
         multiChoice = multiChoice,
         mine = bars.filter { it.mine }.map { it.option },
     )
+}
+
+// --- creating one ---
+
+/**
+ * What the server is told about a new poll: numbers, never words. The desktop's
+ * `CreatePollSettings`. [durationSeconds] is one of [Polls.DURATIONS], or null
+ * for a poll that runs until somebody closes it.
+ */
+data class PollSettings(
+    val optionCount: Int,
+    val multiChoice: Boolean,
+    val durationSeconds: Int?,
+) {
+    fun toJson(): JSONObject = JSONObject()
+        .put("optionCount", optionCount)
+        .put("multiChoice", multiChoice)
+        .put("durationSeconds", durationSeconds ?: JSONObject.NULL)
+}
+
+/** A composer's draft checked: the words to seal, or why not. */
+sealed interface PollReady {
+    data class Ok(val question: String, val options: List<String>) : PollReady
+    data class Refused(val reason: String) : PollReady
+}
+
+/**
+ * The composer's rules, the same as the desktop's `readyPoll` in
+ * `apps/desktop/src/services/polls.ts`. The server cannot check any of the
+ * word limits - it never sees the words - so every client has to.
+ */
+object Polls {
+    /** `POLL_QUESTION_MAX_CHARS` and `POLL_OPTION_MAX_CHARS`. */
+    const val QUESTION_MAX_CHARS = 300
+    const val OPTION_MAX_CHARS = 80
+
+    /** A choice in the "closes" picker. Null seconds is "no limit". */
+    data class Duration(val seconds: Int?, val label: String)
+
+    /** An hour, a day, three days, a week: `POLL_DURATIONS`, the only lengths the server takes. */
+    val DURATIONS: List<Duration> = listOf(
+        Duration(null, "No limit"),
+        Duration(3600, "1 hour"),
+        Duration(86400, "1 day"),
+        Duration(259200, "3 days"),
+        Duration(604800, "1 week"),
+    )
+
+    /**
+     * Empty option rows are dropped rather than refused - the composer always
+     * has a spare one to type into - and duplicates are refused, because two
+     * identical labels are a poll whose result nobody can read.
+     */
+    fun ready(question: String, options: List<String>): PollReady {
+        val asked = question.trim()
+        if (asked.isEmpty()) return PollReady.Refused("Ask a question")
+        if (asked.length > QUESTION_MAX_CHARS) {
+            return PollReady.Refused("Keep the question under $QUESTION_MAX_CHARS characters")
+        }
+        val offered = options.map { it.trim() }.filter { it.isNotEmpty() }
+        if (offered.size < MessageBody.POLL_MIN_OPTIONS) {
+            return PollReady.Refused("Give at least ${MessageBody.POLL_MIN_OPTIONS} options")
+        }
+        if (offered.size > MessageBody.POLL_MAX_OPTIONS) {
+            return PollReady.Refused("A poll has at most ${MessageBody.POLL_MAX_OPTIONS} options")
+        }
+        if (offered.any { it.length > OPTION_MAX_CHARS }) {
+            return PollReady.Refused("Keep each option under $OPTION_MAX_CHARS characters")
+        }
+        if (offered.map { it.lowercase() }.toSet().size != offered.size) {
+            return PollReady.Refused("Two options say the same thing")
+        }
+        return PollReady.Ok(asked, offered)
+    }
 }
