@@ -267,18 +267,21 @@ open class JsonSocket(private val path: String) {
 
     private fun scheduleReconnect() {
         val since = downSince ?: System.currentTimeMillis().also { downSince = it }
-        // Given up on rather than retried more slowly: past the deadline the app
-        // says it is disconnected and waits to be told to try again. A backoff
-        // that never stops is a spinner that never stops.
+        // Past the deadline the app says it is disconnected - a backoff that
+        // never stops is a spinner that never stops - but keeps one quiet
+        // attempt every OFFLINE_RETRY_MS underneath. A full stop left a client
+        // nobody was looking at deaf until somebody opened it again, which is
+        // the desktop's minimised-window bug; the policy is shared.
+        val delay: Long
         if (System.currentTimeMillis() - since >= RECONNECT_DEADLINE_MS) {
-            log("gave up after ${RECONNECT_DEADLINE_MS}ms")
+            log("offline after ${RECONNECT_DEADLINE_MS}ms, retrying every ${OFFLINE_RETRY_MS}ms")
             Connectivity.report(path, Connectivity.State.OFFLINE)
-            return
+            delay = OFFLINE_RETRY_MS
+        } else {
+            Connectivity.report(path, Connectivity.State.RECONNECTING)
+            delay = min(1000.0 * 2.0.pow(attempt), 30_000.0).toLong()
+            attempt += 1
         }
-        Connectivity.report(path, Connectivity.State.RECONNECTING)
-
-        val delay = min(1000.0 * 2.0.pow(attempt), 30_000.0).toLong()
-        attempt += 1
         Thread {
             Thread.sleep(delay)
             if (!closedByUs) open()
@@ -359,6 +362,12 @@ open class JsonSocket(private val path: String) {
          * sitting on its thirty-second step is not.
          */
         const val RECONNECT_DEADLINE_MS = 30_000L
+
+        /**
+         * How often a socket past [RECONNECT_DEADLINE_MS] still tries again on
+         * its own. Matches `OFFLINE_RETRY_MS` on the desktop.
+         */
+        const val OFFLINE_RETRY_MS = 30_000L
 
         /**
          * How long a [probe] waits for an answer before the socket it was sent

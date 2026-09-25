@@ -88,6 +88,7 @@ assert.ok(
 // seconds and a phone that gives up after ten are two apps, not one.
 assert.equal(RECONNECT_DEADLINE_MS, 30_000, 'Sockets.kt says 30s; both clients wait the same');
 assert.equal(PONG_TIMEOUT_MS, 10_000, 'Sockets.kt says 10s for an unanswered probe');
+assert.equal(OFFLINE_RETRY_MS, 30_000, 'Sockets.kt retries an offline socket every 30s too');
 
 // --- a socket that opens is online, and one that dies is not ------------------
 
