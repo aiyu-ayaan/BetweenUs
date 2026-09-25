@@ -38,6 +38,8 @@
  * decides whether a 4K share is sent through a 1080p-sized pipe.
  */
 
+import type { EncoderKind } from './call-stats';
+
 /**
  * Constraints for `getDisplayMedia`.
  *
@@ -82,6 +84,17 @@ export interface SharePublish {
    */
   videoCodec: Exclude<CodecChoice, 'auto'>;
   audio: false | { maxBitrate: number; stereo: boolean; dtx: boolean; red: boolean };
+  /**
+   * What encoder this machine was expected to have when the share started -
+   * `probeShareEncoder`'s answer, or null when it had none. The sender's own
+   * statistics replace it once they say. See `shareBudget`.
+   */
+  encoder: EncoderKind | null;
+  /**
+   * Whether the frame rate is the app's to lower for a software encoder. False
+   * once somebody has picked a frame rate by hand: they asked for that number.
+   */
+  adaptsToEncoder: boolean;
 }
 
 /** Full-band stereo Opus, the ceiling a soundtrack is worth. */
@@ -247,10 +260,19 @@ function even(value: number): number {
  * anything, and `ideal` on a surface that cannot meet it is simply missed.
  */
 export function captureConstraints(capture: ShareCapture): MediaTrackConstraints {
+  return videoConstraints(capture.video, capture.video.frameRate);
+}
+
+/**
+ * The same constraints for a size and a rate, for `applyConstraints` on a
+ * capture that is already running. `applyConstraints` replaces the whole set,
+ * so the size has to go with the rate or the ceiling on it is lost.
+ */
+export function videoConstraints(size: ShareSize, frameRate: number): MediaTrackConstraints {
   return {
-    width: { ideal: capture.video.width, max: capture.video.width },
-    height: { ideal: capture.video.height, max: capture.video.height },
-    frameRate: { ideal: capture.video.frameRate, max: capture.video.frameRate },
+    width: { ideal: size.width, max: size.width },
+    height: { ideal: size.height, max: size.height },
+    frameRate: { ideal: frameRate, max: frameRate },
   };
 }
 
@@ -347,6 +369,7 @@ export function shareOptions(
   size: ShareSize,
   audio: false | { music: boolean },
   override: QualityOverride = NO_OVERRIDE,
+  encoder: EncoderKind | null = null,
 ): { capture: ShareCapture; publish: SharePublish } {
   const profile = PROFILES[intent];
   // Clamped rather than trusted: a number typed into a box is the one input
@@ -363,9 +386,18 @@ export function shareOptions(
       ? bitrateFor(intent, captured)
       : Math.min(BITRATE_RANGE.max, Math.max(BITRATE_RANGE.min, override.maxBitrate));
 
+  // Captured at the rate a software encoder will be held to, not at the rate
+  // it would then throw away: every frame grabbed off the screen is a copy and
+  // a colour conversion on the CPU before the encoder ever sees it. The
+  // publish keeps the full rate so a sender that turns out to be hardware can
+  // be given it back. See `shareBudget`.
+  const adaptsToEncoder = override.frameRate === null;
+  const captureRate =
+    adaptsToEncoder && encoder === 'software' ? Math.min(frameRate, SOFTWARE_FRAME_RATE) : frameRate;
+
   return {
     capture: {
-      video: { width: captured.width, height: captured.height, frameRate },
+      video: { width: captured.width, height: captured.height, frameRate: captureRate },
       contentHint: profile.contentHint,
       audio: audio
         ? {
@@ -407,8 +439,99 @@ export function shareOptions(
         audio && audio.music
           ? { maxBitrate: MUSIC_BITRATE, stereo: true, dtx: false, red: true }
           : false,
+      encoder,
+      adaptsToEncoder,
     },
   };
+}
+
+// --- The software-encoder budget -------------------------------------------
+//
+// Every number above assumes the GPU is doing the encoding. On Windows it
+// nearly always is. On Linux it very often is not: Chromium has no NVENC path
+// at all, and on a PRIME laptop running on its NVIDIA card VA-API never
+// reaches the Intel encoder either, so the share lands on OpenH264. Measured on
+// such a laptop, a software H.264 share of scrolling text costs about 2.5x as
+// much at 60 fps as at 30, and each extra viewer is another whole encoder.
+//
+// The ladder does not help with this. It moves when the encoder is *failing*
+// - `cpu` next to a collapsed frame rate - and a software encoder on a fast
+// machine does not fail, it just keeps a core busy for the whole call. So a
+// share that knows its encoder is software starts inside a budget instead of
+// waiting to fall over.
+
+/** The frame rate a software encoder is held to, unless one was picked by hand. */
+export const SOFTWARE_FRAME_RATE = 30;
+
+/**
+ * The height a software encoder is held to once more than one person is
+ * watching, which is more than one encoder running. 720p is where OpenH264
+ * costs about a third of 1080p and text is still readable.
+ */
+export const SOFTWARE_SHARED_HEIGHT = 720;
+
+/** What the encoder may be asked for, before the ladder spends anything. */
+export interface ShareBudget {
+  frameRate: number;
+  scaleResolutionDownBy: number;
+}
+
+/**
+ * The budget a share is sent within, for the encoder it has and the number of
+ * people it is being encoded for.
+ *
+ * Hardware, or not known, is no budget: the profile as asked for. Software is
+ * held to `SOFTWARE_FRAME_RATE` unless the frame rate was chosen by hand, and
+ * to `SOFTWARE_SHARED_HEIGHT` once two or more people have joined - resolution
+ * is what makes a share worth watching, so it is only spent when the cost of
+ * keeping it is multiplied.
+ */
+export function shareBudget(
+  publish: SharePublish,
+  encoder: EncoderKind | null,
+  watchers: number,
+): ShareBudget {
+  if (encoder !== 'software' || !publish.adaptsToEncoder) {
+    return { frameRate: publish.maxFramerate, scaleResolutionDownBy: 1 };
+  }
+  const height = publish.captured.height;
+  return {
+    frameRate: Math.min(publish.maxFramerate, SOFTWARE_FRAME_RATE),
+    scaleResolutionDownBy:
+      watchers >= 2 && height > SOFTWARE_SHARED_HEIGHT ? height / SOFTWARE_SHARED_HEIGHT : 1,
+  };
+}
+
+/**
+ * Whether this machine can encode a share on its GPU, asked before the capture
+ * starts so a software share is captured at the rate it will be sent at.
+ *
+ * `powerEfficient` is the Media Capabilities answer for WebRTC, and it is the
+ * same question `powerEfficientEncoder` answers on a live sender. Null when the
+ * API is missing or will not say; the sender's statistics decide then.
+ */
+export async function probeShareEncoder(
+  codec: SharePublish['videoCodec'],
+  size: ShareSize,
+  frameRate: number,
+  bitrate: number,
+): Promise<EncoderKind | null> {
+  try {
+    const info = await navigator.mediaCapabilities.encodingInfo({
+      type: 'webrtc',
+      video: {
+        contentType: `video/${codec}`,
+        width: size.width,
+        height: size.height,
+        framerate: frameRate,
+        bitrate,
+      },
+    });
+    if (!info.supported) return null;
+    return info.powerEfficient ? 'hardware' : 'software';
+  } catch {
+    return null;
+  }
 }
 
 /**

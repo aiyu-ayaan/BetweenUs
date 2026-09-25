@@ -1757,7 +1757,7 @@ function VoiceSection(): JSX.Element {
             }
             className="mt-2 w-full cursor-pointer rounded-lg border border-edge bg-surface-950 px-3 py-2 text-slate-100 outline-none transition-colors focus:border-accent/60"
           >
-            <option value="">Whatever the content wants (60)</option>
+            <option value="">Whatever the content wants (60, or 30 on a CPU encoder)</option>
             {FRAME_RATES.map((rate) => (
               <option key={rate} value={rate}>
                 {rate} fps

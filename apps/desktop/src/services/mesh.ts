@@ -89,15 +89,25 @@ import { deviceId } from './e2ee';
 import {
   PLAYOUT_DELAY,
   ShareLadder,
+  type ShareBudget,
   type ShareReading,
   ceilingFor,
   patchVideoBandwidth,
+  shareBudget,
   sortPreferredVideoCodecs,
+  videoConstraints,
   type SharePublish,
 } from './share-quality';
 import type { CameraPublish } from './camera-quality';
 import type { MicEncoding } from './voice-quality';
-import { selectedCandidatePair, toStats, type LinkSample, type LinkStats } from './call-stats';
+import {
+  encoderKind,
+  selectedCandidatePair,
+  toStats,
+  type EncoderKind,
+  type LinkSample,
+  type LinkStats,
+} from './call-stats';
 import {
   GRACE_MS,
   SIGNALLING_DEADLINE_MS,
@@ -455,6 +465,12 @@ class PeerLink {
    * client that never says is an older one that shows every share it receives.
    */
   private shareWatched = true;
+  /**
+   * What the encoder may be asked for on this link before the ladder spends
+   * anything. Decided by the mesh, because it depends on how many links are
+   * encoding at once. See `shareBudget`.
+   */
+  private shareBudget: ShareBudget | null = null;
   /** How loud this peer is, 0..1. See `pollAudioLevel`. */
   private level = 0;
   /**
@@ -488,6 +504,8 @@ class PeerLink {
       onExhausted: () => void;
       /** Something went wrong that the person in the call should be told about. */
       onProblem: (message: string) => void;
+      /** What the share's sender says its encoder is. See `Mesh.noteShareEncoder`. */
+      onShareEncoder: (kind: EncoderKind) => void;
     },
   ) {
     // Whoever has the larger peer id yields. Both sides compute this from the
@@ -721,8 +739,18 @@ class PeerLink {
         // The profile's rate is the ceiling. The ladder spends it down only
         // when the *encoder* cannot keep up - `ShareLadder.frameRate` - which
         // is a different failure from a link that cannot carry the picture.
-        maxFramerate: Math.min(this.sharePublish.maxFramerate, this.shareLadder.frameRate),
-        scaleResolutionDownBy: this.shareLadder.scale,
+        // The budget is a ceiling of the same kind, for an encoder that is
+        // keeping up but costing a core to do it.
+        maxFramerate: Math.min(
+          this.sharePublish.maxFramerate,
+          this.shareLadder.frameRate,
+          this.shareBudget?.frameRate ?? Number.POSITIVE_INFINITY,
+        ),
+        // Whichever wants the smaller picture; the two never multiply.
+        scaleResolutionDownBy: Math.max(
+          this.shareLadder.scale,
+          this.shareBudget?.scaleResolutionDownBy ?? 1,
+        ),
         priority: this.sharePublish.priority,
         // Off rather than removed: the track stays on the sender, so joining is
         // a `setParameters` and a keyframe, not a renegotiation.
@@ -1170,6 +1198,22 @@ class PeerLink {
     this.shareLadder.reset();
   }
 
+  /** See `shareBudget`. Returns whether anything changed. */
+  setShareBudget(budget: ShareBudget | null): boolean {
+    const now = this.shareBudget;
+    if (
+      now === budget ||
+      (now !== null &&
+        budget !== null &&
+        now.frameRate === budget.frameRate &&
+        now.scaleResolutionDownBy === budget.scaleResolutionDownBy)
+    ) {
+      return false;
+    }
+    this.shareBudget = budget;
+    return true;
+  }
+
   /** See `shareWatched`. Returns whether anything changed. */
   setShareWatched(watched: boolean): boolean {
     if (this.shareWatched === watched) return false;
@@ -1263,6 +1307,8 @@ class PeerLink {
     let selectedPairId: string | null = null;
     const candidates = new Map<string, string>();
     const reading: ShareReading = { limitedBy: null, framesPerSecond: null };
+    let encoderName: string | null = null;
+    let powerEfficient: boolean | null = null;
     // The share's sender by its m-line, and nothing else. The camera is an
     // outbound video stream on the same connection, and read alongside it a
     // camera at 30 fps hid a share at 1 fps - the ladder saw a healthy frame
@@ -1288,6 +1334,12 @@ class PeerLink {
         if (Number.isFinite(fps)) {
           reading.framesPerSecond = Math.max(reading.framesPerSecond ?? 0, fps);
         }
+        if (typeof entry.encoderImplementation === 'string' && entry.encoderImplementation) {
+          encoderName = entry.encoderImplementation;
+        }
+        if (typeof entry.powerEfficientEncoder === 'boolean') {
+          powerEfficient = entry.powerEfficientEncoder;
+        }
         return;
       }
       if (entry.type === 'candidate-pair') {
@@ -1306,6 +1358,12 @@ class PeerLink {
     const nominated = selectedCandidatePair(pairs, selectedPairId);
     await this.applyRelayCeiling(nominated, candidates);
     await this.applyLadder(reading);
+    // Only while this link is actually encoding the share: an inactive sender
+    // still reports the name of the encoder it last had.
+    if (this.sharePublish && this.shareWatched) {
+      const kind = encoderKind(encoderName, powerEfficient);
+      if (kind) this.events.onShareEncoder(kind);
+    }
 
     for (const slot of ['camera', 'screen'] as const) {
       const transceiver = this.transceivers.get(slot);
@@ -1663,6 +1721,14 @@ export class Mesh {
    * link starts from what the peer last said.
    */
   private readonly unwatched = new Set<string>();
+  /**
+   * The share's encoder as each link's sender reports it. Per link because a
+   * hardware encoder has a session limit - consumer NVIDIA cards stop at a
+   * handful - and the links past it fall back to software. See `shareEncoder`.
+   */
+  private readonly shareEncoders = new Map<string, EncoderKind>();
+  /** The rate the screen is being captured at, so it is only changed on a real move. */
+  private shareCaptureRate: number | null = null;
 
   constructor(private readonly options: MeshOptions) {}
 
@@ -1946,6 +2012,7 @@ export class Mesh {
         onDataOpen: () => this.options.onDataOpen?.(peer),
         onExhausted: () => this.rebuild(peer),
         onProblem: (message) => this.options.onProblem(message),
+        onShareEncoder: (kind) => void this.noteShareEncoder(peer.peerId, kind),
       },
     );
 
@@ -1963,7 +2030,10 @@ export class Mesh {
     for (const [slot, track] of this.local) {
       if (track) void link.setTrack(slot, track);
     }
+    link.setShareBudget(this.budget());
     void this.applyTuning(link);
+    // One more link may be one more encoder, which may change everybody's.
+    void this.rebudget();
 
     return link;
   }
@@ -2071,8 +2141,14 @@ export class Mesh {
 
   async setSharePublish(publish: SharePublish | null): Promise<void> {
     this.sharePublish = publish;
+    // A new capture starts from the probe's answer again: the last one's
+    // senders were describing an encoder for a different picture.
+    this.shareEncoders.clear();
+    this.shareCaptureRate = publish ? shareBudget(publish, publish.encoder, 1).frameRate : null;
+    const budget = this.budget();
     for (const link of this.links.values()) {
       link.setSharePublish(publish);
+      link.setShareBudget(budget);
       if (publish) link.preferShareCodec(publish.videoCodec);
     }
     if (!publish) return;
@@ -2105,7 +2181,58 @@ export class Mesh {
     if (watched) this.unwatched.delete(peerId);
     else this.unwatched.add(peerId);
     const link = this.links.get(peerId);
-    if (link?.setShareWatched(watched) && this.sharePublish) await link.applyShare();
+    if (!link?.setShareWatched(watched) || !this.sharePublish) return;
+    await link.applyShare();
+    // One encoder more or fewer, which is what the budget is counted in.
+    await this.rebudget();
+  }
+
+  /**
+   * The share's encoder: software if any link's sender says so, hardware if
+   * one says that, and the probe's guess until either does.
+   */
+  private shareEncoder(): EncoderKind | null {
+    const kinds = [...this.shareEncoders.values()];
+    if (kinds.includes('software')) return 'software';
+    if (kinds.includes('hardware')) return 'hardware';
+    return this.sharePublish?.encoder ?? null;
+  }
+
+  /** The budget every link encodes the share within. See `shareBudget`. */
+  private budget(): ShareBudget | null {
+    if (!this.sharePublish) return null;
+    let watchers = 0;
+    for (const peerId of this.links.keys()) if (!this.unwatched.has(peerId)) watchers += 1;
+    return shareBudget(this.sharePublish, this.shareEncoder(), watchers);
+  }
+
+  /**
+   * Pushes the budget to every link whose budget it changes, and moves the
+   * capture's frame rate with it.
+   *
+   * The capture follows so a share that started on the probe's guess ends up
+   * captured at what it is actually sent at - lower when the probe said GPU
+   * and the sender says CPU, and back up when it was the other way round.
+   */
+  private async rebudget(): Promise<void> {
+    const budget = this.budget();
+    const moved = [...this.links.values()].filter((link) => link.setShareBudget(budget));
+    await Promise.all(moved.map((link) => link.applyShare()));
+
+    const track = this.local.get('screen');
+    if (!budget || !track || !this.sharePublish) return;
+    if (this.shareCaptureRate === budget.frameRate) return;
+    this.shareCaptureRate = budget.frameRate;
+    await track
+      .applyConstraints(videoConstraints(this.sharePublish.captured, budget.frameRate))
+      .catch(() => undefined);
+  }
+
+  /** One link's sender reporting its encoder. Re-budgets only when that changes. */
+  private async noteShareEncoder(peerId: string, kind: EncoderKind): Promise<void> {
+    if (this.shareEncoders.get(peerId) === kind) return;
+    this.shareEncoders.set(peerId, kind);
+    await this.rebudget();
   }
 
   /** See `PeerLink.receiverTrack`. */
@@ -2225,8 +2352,10 @@ export class Mesh {
     this.peerIsExpected.delete(peerId);
     this.rebuilds.delete(peerId);
     this.unwatched.delete(peerId);
+    this.shareEncoders.delete(peerId);
     for (const slot of SLOTS) this.options.onTrack(peerId, slot, null);
     this.announcePeers();
+    void this.rebudget();
     if (!link) return;
 
     void link

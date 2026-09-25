@@ -41,6 +41,7 @@ import { playCallTone, rosterChange, setToneOutput } from '../services/call-tone
 import { micCapture, micEncoding, micProcessing, type VoiceSettings } from '../services/voice-quality';
 import {
   captureConstraints,
+  probeShareEncoder,
   shareOptions,
   type ShareIntent,
   type ShareSize,
@@ -647,17 +648,22 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       // for: when it runs, the display capture takes the picture alone.
       if (withAudio) ownAudio = await startShareAudio();
       await window.betweenus?.selectScreenSource(source?.id ?? '', withAudio && !ownAudio);
-      const options = shareOptions(
-        intent,
-        await captureSize(source),
-        {
-          // A soundtrack only when the share is one: the processing that makes
-          // speech clear is the processing that ruins music, and a shared
-          // terminal's beeps are not worth stereo Opus.
-          music: intent === 'motion',
-        },
-        useAudioSettings.getState().settings.share,
+      const size = await captureSize(source);
+      const quality = useAudioSettings.getState().settings.share;
+      // A soundtrack only when the share is one: the processing that makes
+      // speech clear is the processing that ruins music, and a shared
+      // terminal's beeps are not worth stereo Opus.
+      const music = intent === 'motion';
+      // Asked before the capture, because a share this machine will encode on
+      // the CPU is captured at the rate it will be sent at. See `shareBudget`.
+      const asked = shareOptions(intent, size, { music }, quality).publish;
+      const encoder = await probeShareEncoder(
+        asked.videoCodec,
+        asked.captured,
+        asked.maxFramerate,
+        asked.maxBitrate,
       );
+      const options = shareOptions(intent, size, { music }, quality, encoder);
       if (!withAudio || ownAudio) options.capture.audio = false;
 
       const stream = await navigator.mediaDevices.getDisplayMedia({
@@ -676,8 +682,9 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
           const realOptions = shareOptions(
             intent,
             { width: settings.width, height: settings.height },
-            { music: intent === 'motion' },
-            useAudioSettings.getState().settings.share,
+            { music },
+            quality,
+            encoder,
           );
           options.publish = realOptions.publish;
         }

@@ -23,6 +23,8 @@ import {
   patchVideoBandwidth,
   shareOptions,
   sortPreferredVideoCodecs,
+  SOFTWARE_FRAME_RATE,
+  shareBudget,
 } from './share-quality';
 
 /** The ladder's own answer, with nothing capped, for the assertions below. */
@@ -501,5 +503,44 @@ assert.match(
   sortPreferredVideoCodecs(baselineOnly, 'H264')[0]?.sdpFmtpLine ?? '',
   /packetization-mode=1/,
 );
+
+// --- The software-encoder budget.
+{
+  const fullHd = { width: 1920, height: 1080 };
+
+  // No budget on a GPU, or when nobody knows: the profile as asked for.
+  const auto = shareOptions('detail', fullHd, false);
+  assert.equal(auto.capture.video.frameRate, 60);
+  assert.equal(auto.publish.adaptsToEncoder, true);
+  assert.deepEqual(shareBudget(auto.publish, 'hardware', 4), { frameRate: 60, scaleResolutionDownBy: 1 });
+  assert.deepEqual(shareBudget(auto.publish, null, 4), { frameRate: 60, scaleResolutionDownBy: 1 });
+
+  // A CPU encoder is captured at the rate it is sent at, and the publish keeps
+  // the full rate so a sender that turns out to be a GPU can have it back.
+  const soft = shareOptions('detail', fullHd, false, NO_OVERRIDE, 'software');
+  assert.equal(soft.capture.video.frameRate, SOFTWARE_FRAME_RATE);
+  assert.equal(soft.publish.maxFramerate, 60);
+  assert.equal(soft.publish.encoder, 'software');
+
+  // One viewer keeps every pixel; two is two encoders, and 1080p goes to 720p.
+  assert.deepEqual(shareBudget(soft.publish, 'software', 1), { frameRate: 30, scaleResolutionDownBy: 1 });
+  assert.deepEqual(shareBudget(soft.publish, 'software', 2), { frameRate: 30, scaleResolutionDownBy: 1.5 });
+  // Nobody watching is not a reason to spend pixels either.
+  assert.deepEqual(shareBudget(soft.publish, 'software', 0), { frameRate: 30, scaleResolutionDownBy: 1 });
+
+  // Already 720p or smaller: nothing to take away.
+  const small = shareOptions('detail', { width: 1280, height: 720 }, false, NO_OVERRIDE, 'software');
+  assert.equal(shareBudget(small.publish, 'software', 3).scaleResolutionDownBy, 1);
+
+  // A frame rate picked by hand is what somebody asked for, CPU or not.
+  const picked = shareOptions('detail', fullHd, false, { ...NO_OVERRIDE, frameRate: 60 }, 'software');
+  assert.equal(picked.capture.video.frameRate, 60);
+  assert.equal(picked.publish.adaptsToEncoder, false);
+  assert.deepEqual(shareBudget(picked.publish, 'software', 3), { frameRate: 60, scaleResolutionDownBy: 1 });
+
+  // A hand-picked rate under the budget is never raised to it.
+  const slow = shareOptions('detail', fullHd, false, { ...NO_OVERRIDE, frameRate: 24 }, 'software');
+  assert.equal(slow.capture.video.frameRate, 24);
+}
 
 console.log('share-quality self-check passed');
