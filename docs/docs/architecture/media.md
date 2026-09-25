@@ -458,6 +458,28 @@ written and discarded at the panel boundary, so there was no way to tell from
 inside the app that a call was on TURN — while being held to `RELAY_MAX_BITRATE`
 on purpose and paying for every byte twice.
 
+`Encoder` is `GPU` or `CPU`, with the implementation's own name on hover, and
+`Out` now carries the frame rate actually sent (`1920×1080 @ 60`). Together with
+`Path` and `Held by`, one test share answers why a 1080p60 share is not 60:
+
+| Panel says | Bottleneck | Fix |
+|---|---|---|
+| `Encoder: CPU`, `Held by: cpu` | Software encoder (libvpx, OpenH264) | Hardware H.264 — on Linux, the VA-API flags below |
+| `Path: relay` | TURN, held to `RELAY_MAX_BITRATE` | A direct pair (NAT/firewall), or a bigger relay |
+| `Out` below the requested rate, nothing holding it | Capture | Windows WGC, or X11 / PipeWire on Linux |
+
+The classification prefers `powerEfficientEncoder` when the browser reports it,
+and falls back to the implementation name; an unrecognised name is left
+unknown rather than guessed, and the row hides. Android's connection sheet
+shows the same `Encoder` row.
+
+**Hardware encoding on Linux.** Windows gets a GPU H.264 encoder by default and
+macOS gets VideoToolbox; Linux Chromium encodes WebRTC H.264 in software unless
+asked. `electron/main.ts` enables the VA-API encode/decode features and the
+PipeWire capturer on Linux. On a GPU or driver without VA-API support Chromium
+falls back to software in silence — the `Encoder` row is how to tell.
+`BETWEENUS_DISABLE_VAAPI=1` skips the flags if a driver misbehaves.
+
 **Both clients show the same eight readings, since phase 50.** Android's
 connection sheet ported only four of the desktop's eight when it was written —
 `Down`, `Up`, `Loss`, `Round trip` — leaving `Link est.`, `Path`, `Held by` and
