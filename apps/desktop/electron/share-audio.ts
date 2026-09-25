@@ -24,11 +24,20 @@
  * Windows 10 2004 or later. Anything that stops the helper from starting
  * resolves `start` to false, and the share falls back to the old whole-mix
  * loopback rather than going out silent.
+ *
+ * Linux is `share-audio-linux.ts`: PipeWire, the same PCM, the same channel to
+ * the renderer. It has no whole-mix fallback - Electron's loopback is
+ * Windows-only - so a Linux share whose capture fails goes out without sound.
  */
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { app, type WebContents } from 'electron';
+import {
+  linuxShareAudioSupported,
+  startLinuxShareAudio,
+  stopLinuxShareAudio,
+} from './share-audio-linux';
 
 /** Bytes in one frame: two channels of 16-bit samples. */
 const FRAME_BYTES = 4;
@@ -225,7 +234,23 @@ public static class BetweenUsShareAudio {
 let helper: ChildProcessWithoutNullStreams | null = null;
 
 export function shareAudioSupported(): boolean {
+  if (process.platform === 'linux') return linuxShareAudioSupported();
   return process.platform === 'win32';
+}
+
+/**
+ * Hands PCM to `target` in whole frames. stdout arrives in whatever pieces the
+ * pipe cuts it into, and a frame split across two of them would swap the
+ * channels for the rest of the share.
+ */
+function framesTo(target: WebContents): (chunk: Buffer) => void {
+  let partial: Buffer = Buffer.alloc(0);
+  return (chunk) => {
+    const joined = partial.length > 0 ? Buffer.concat([partial, chunk]) : chunk;
+    const whole = joined.length - (joined.length % FRAME_BYTES);
+    partial = joined.subarray(whole);
+    if (whole > 0 && !target.isDestroyed()) target.send('share-audio:pcm', joined.subarray(0, whole));
+  };
 }
 
 function scriptPath(): string {
@@ -243,6 +268,13 @@ function scriptPath(): string {
 export function startShareAudio(target: WebContents): Promise<boolean> {
   stopShareAudio();
   if (!shareAudioSupported()) return Promise.resolve(false);
+  if (process.platform === 'linux') {
+    // Every process this app runs, the audio service among them: those are the
+    // streams that must stay out of the share.
+    return startLinuxShareAudio(framesTo(target), () =>
+      app.getAppMetrics().map((metric) => metric.pid),
+    );
+  }
 
   let child: ChildProcessWithoutNullStreams;
   try {
@@ -265,15 +297,7 @@ export function startShareAudio(target: WebContents): Promise<boolean> {
   }
   helper = child;
 
-  // stdout arrives in whatever pieces the pipe cuts it into, and a frame split
-  // across two of them would swap the channels for the rest of the share.
-  let partial: Buffer = Buffer.alloc(0);
-  child.stdout.on('data', (chunk: Buffer) => {
-    const joined = partial.length > 0 ? Buffer.concat([partial, chunk]) : chunk;
-    const whole = joined.length - (joined.length % FRAME_BYTES);
-    partial = joined.subarray(whole);
-    if (whole > 0 && !target.isDestroyed()) target.send('share-audio:pcm', joined.subarray(0, whole));
-  });
+  child.stdout.on('data', framesTo(target));
 
   return new Promise((resolve) => {
     let settled = false;
@@ -300,6 +324,7 @@ export function startShareAudio(target: WebContents): Promise<boolean> {
 
 /** Ends the capture. Called when the share stops, and on quit. */
 export function stopShareAudio(): void {
+  stopLinuxShareAudio();
   const child = helper;
   helper = null;
   if (!child) return;

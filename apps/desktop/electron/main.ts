@@ -27,7 +27,7 @@ import {
   setInputDisplay,
   stopInputBackend,
 } from './remote-input';
-import { startShareAudio, stopShareAudio } from './share-audio';
+import { shareAudioSupported, startShareAudio, stopShareAudio } from './share-audio';
 import { spawn } from 'node:child_process';
 import {
   closeYouTubeView,
@@ -1097,6 +1097,11 @@ ipcMain.handle('screen:select', (_event, id: unknown, audio: unknown): void => {
 // `share-audio.ts` for why the display-media handler cannot do this itself.
 ipcMain.handle('share-audio:start', (event): Promise<boolean> => startShareAudio(event.sender));
 ipcMain.on('share-audio:stop', (): void => stopShareAudio());
+// Synchronous because the preload exposes it as a plain value. On Linux it is a
+// look along PATH for the PipeWire tools, done once.
+ipcMain.on('share-audio:supported', (event): void => {
+  event.returnValue = shareAudioSupported();
+});
 
 // --- Keeping the desktop composited while a capture runs ---------------------
 //

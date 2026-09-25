@@ -137,12 +137,12 @@ const api = {
   releaseScreenCapture: (): Promise<void> => ipcRenderer.invoke('screen:release'),
   /**
    * A share's system audio with this app's own output left out, so the call
-   * is not sent back to the people in it. Windows only; `startShareAudio`
-   * resolves false anywhere it could not start, and the share then falls back
-   * to the whole-mix loopback. PCM arrives through `onShareAudio` as 48 kHz
-   * stereo 16-bit little-endian, interleaved.
+   * is not sent back to the people in it. Windows, and Linux with PipeWire;
+   * `startShareAudio` resolves false anywhere it could not start, and a Windows
+   * share then falls back to the whole-mix loopback. PCM arrives through
+   * `onShareAudio` as 48 kHz stereo 16-bit little-endian, interleaved.
    */
-  shareAudioSupported: process.platform === 'win32',
+  shareAudioSupported: ipcRenderer.sendSync('share-audio:supported') === true,
   startShareAudio: (): Promise<boolean> => ipcRenderer.invoke('share-audio:start'),
   stopShareAudio: (): void => {
     ipcRenderer.send('share-audio:stop');

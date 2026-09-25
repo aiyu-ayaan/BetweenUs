@@ -664,7 +664,10 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         asked.maxBitrate,
       );
       const options = shareOptions(intent, size, { music }, quality, encoder);
-      if (!withAudio || ownAudio) options.capture.audio = false;
+      // The whole-mix loopback behind a failed capture is Windows-only; a
+      // desktop anywhere else goes without sound rather than asking for it.
+      const loopbackFallback = !isDesktopRuntime() || window.betweenus?.platform === 'win32';
+      if (!withAudio || ownAudio || !loopbackFallback) options.capture.audio = false;
 
       const stream = await navigator.mediaDevices.getDisplayMedia({
         video: captureConstraints(options.capture),

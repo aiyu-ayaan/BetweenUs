@@ -32,13 +32,13 @@ export function ScreenSharePicker({ onClose }: { onClose: () => void }): JSX.Ele
   const [systemPicker, setSystemPicker] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   // Two different questions wearing one name. On the desktop this app captures
-  // the machine's output itself, which only Windows can do, so the offer is
-  // ours to make. In a browser the choice belongs to the surface picker - it
+  // the machine's output itself - Windows, and Linux with PipeWire - so the
+  // offer is ours to make. In a browser the choice belongs to the surface picker - it
   // offers a tab's audio or the whole system's, next to the thing being shared,
   // and it only offers either when the capture asked for audio at all. So the
   // browser is always asked, and never shown a checkbox of ours that would
   // either duplicate that one or quietly contradict it.
-  const audioSupported = native ? window.betweenus?.platform === 'win32' : true;
+  const audioSupported = native ? window.betweenus?.shareAudioSupported === true : true;
   const [withAudio, setWithAudio] = useState(audioSupported);
   // What is on the screen, not how good it should be. The two want opposite
   // things from the encoder and neither is the better one - see
@@ -198,7 +198,7 @@ export function ScreenSharePicker({ onClose }: { onClose: () => void }): JSX.Ele
               className={`flex items-center gap-2 text-sm ${
                 audioSupported ? 'text-slate-300' : 'text-slate-500'
               }`}
-              title={audioSupported ? undefined : 'System audio capture is Windows-only'}
+              title={audioSupported ? undefined : 'System audio needs Windows, or PipeWire on Linux'}
             >
               <input
                 type="checkbox"
