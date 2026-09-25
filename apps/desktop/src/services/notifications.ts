@@ -77,6 +77,17 @@ export function resetNotificationPreferences(): void {
   publish(DEFAULTS);
 }
 
+/**
+ * People this account blocked. Written by the friends store whenever its block
+ * list changes, rather than read from it, so this module stays below the
+ * stores it is imported by.
+ */
+let blockedAuthors: ReadonlySet<string> = new Set();
+
+export function setBlockedAuthors(ids: Iterable<string>): void {
+  blockedAuthors = new Set(ids);
+}
+
 /** True when this account has muted that person, wherever they write. */
 export function isUserMuted(userId: string): boolean {
   return preferences.mutedUserIds.includes(userId);
@@ -195,6 +206,9 @@ export function notifyMessage(message: MessageNotification): void {
   // includes writing your name, and a mute that any mention could bypass would
   // be a mute the loud person controls.
   if (message.authorId && isUserMuted(message.authorId)) return;
+  // Somebody blocked, in a server both are still in: their messages are folded
+  // away in the list, and a toast would put them straight back on screen.
+  if (message.authorId && blockedAuthors.has(message.authorId)) return;
   if (silenced(message.channelId, message.mentioned ?? false)) return;
 
   // Whether the window is really focused is the main process's answer, not

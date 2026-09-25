@@ -73,6 +73,7 @@ import {
 import { emojiQueryAt } from './emoji-names';
 import { mentionQueryAt } from './mention-query';
 import { arrivalLine } from './arrival';
+import { blockedRunLabel, blockedRuns } from './blocked-runs';
 import { clockTime, dayLabel, fullDateLabel, sameDay } from './day';
 import { isStaff, roleBadgeLabel } from '../members/MemberList';
 import { nextFollow } from './follow';
@@ -303,6 +304,39 @@ function ArrivalRow({ message }: { message: DecryptedMessage }): JSX.Element {
       <time dateTime={message.createdAt} className="shrink-0 text-xs text-slate-500">
         {clockTime(message.createdAt)}
       </time>
+    </li>
+  );
+}
+
+/**
+ * Where somebody this account blocked said something, folded away.
+ *
+ * Deliberately plain: no name and no avatar, since the point is not having
+ * them in front of you. Show opens the run for this view only.
+ */
+function BlockedRunRow({
+  id,
+  label,
+  onShow,
+}: {
+  id: string;
+  label: string;
+  onShow: () => void;
+}): JSX.Element {
+  return (
+    <li
+      id={`message-${id}`}
+      className="mt-2 flex items-center gap-2 px-3 text-xs text-slate-500"
+    >
+      <span>{label}</span>
+      <span aria-hidden="true">&middot;</span>
+      <button
+        type="button"
+        onClick={onShow}
+        className="cursor-pointer rounded font-medium text-slate-400 underline-offset-2 hover:text-slate-200 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+      >
+        Show
+      </button>
     </li>
   );
 }
@@ -740,6 +774,23 @@ function MessageList({
   const [forwardNote, setForwardNote] = useState<string | null>(null);
 
   /**
+   * Somebody this account blocked, still talking in a server both are in.
+   *
+   * Read from the friends store, which the block and unblock buttons and the
+   * `friends.changed` event all write to - so blocking or unblocking somebody
+   * folds or unfolds their messages here without a reload. A 1:1 conversation
+   * with them is closed outright, so this only ever matters in a room.
+   */
+  const blockedList = useFriendsStore((state) => state.blocked);
+  const blockedIds = useMemo(
+    () => new Set(blockedList.map((entry) => entry.user.id)),
+    [blockedList],
+  );
+  const folded = useMemo(() => blockedRuns(messages, blockedIds), [messages, blockedIds]);
+  /** Runs somebody chose to read anyway, by first message. This view only. */
+  const [revealed, setRevealed] = useState<ReadonlySet<string>>(() => new Set());
+
+  /**
    * Where each reader's face is drawn: once, against the newest message of
    * yours they have read. Recomputed on every render rather than memoised -
    * it is a pass over your own messages and a handful of markers, and it has
@@ -1034,6 +1085,29 @@ function MessageList({
                 {newDay && <DayDivider iso={message.createdAt} />}
                 {dividerId === message.id && <NewMessagesDivider />}
                 <ArrivalRow message={message} />
+              </Fragment>
+            );
+          }
+
+          // Folded: one quiet row for the whole run, drawn by its first
+          // message. The rest of the run draws nothing but the unread line, so
+          // "new messages" still marks the right place.
+          const run = folded.get(message.id);
+          if (run && !revealed.has(run.head)) {
+            if (run.head !== message.id) {
+              return dividerId === message.id ? (
+                <NewMessagesDivider key={message.id} />
+              ) : null;
+            }
+            return (
+              <Fragment key={message.id}>
+                {newDay && <DayDivider iso={message.createdAt} />}
+                {dividerId === message.id && <NewMessagesDivider />}
+                <BlockedRunRow
+                  id={message.id}
+                  label={blockedRunLabel(run.count)}
+                  onShow={() => setRevealed((current) => new Set(current).add(run.head))}
+                />
               </Fragment>
             );
           }

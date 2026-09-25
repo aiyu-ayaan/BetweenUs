@@ -6,6 +6,7 @@ import { create } from 'zustand';
 import type { BlockedUser, DirectChannel, Friend, UserSummary } from '@betweenus/shared-types';
 import { api } from '../services/api';
 import { chatSocket } from '../services/socket';
+import { setBlockedAuthors } from '../services/notifications';
 import { useAuthStore } from './auth';
 import { useChatStore } from './chat';
 
@@ -127,6 +128,14 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
   reset: () =>
     set({ friends: [], directChannels: [], blocked: [], searchResults: [], error: null }),
 }));
+
+// The notification gate follows the block list, whichever way it changed - a
+// button here, or `friends.changed` from another device reloading it.
+useFriendsStore.subscribe((state, previous) => {
+  if (state.blocked !== previous.blocked) {
+    setBlockedAuthors(state.blocked.map((entry) => entry.user.id));
+  }
+});
 
 /**
  * A request, an acceptance, a removal or a new conversation on the other side:
