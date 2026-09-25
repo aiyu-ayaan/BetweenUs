@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.0.11](https://github.com/aiyu-ayaan/BetweenUs/compare/v1.0.10...v1.0.11) (2026-09-25)
+
+### Bug fixes
+
+* Fix release image builds and Wayland screen share portal chooser
+* Pull base images from mirror.gcr.io instead of ECR Public
+* Use the portal's chooser for screen share on Wayland
+
+### Other changes
+
+* Document Wayland portal capture and PiP frame gating
+* Stop encoding PiP frames while no overlay is open
+
+### Artifacts
+
+| Platform | This release |
+| --- | --- |
+| Server images | Built here |
+| Desktop | Built here |
+| Android | Built here |
+
 ## [1.0.10](https://github.com/aiyu-ayaan/BetweenUs/compare/v1.0.9...v1.0.10) (2026-09-25)
 
 ### ⚠ Breaking changes
