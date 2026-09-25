@@ -66,6 +66,7 @@ const sockets: FakeSocket[] = [];
 const {
   ChatSocket,
   HANDSHAKE_TIMEOUT_MS,
+  OFFLINE_RETRY_MS,
   PING_INTERVAL_MS,
   PONG_TIMEOUT_MS,
   RECONNECT_DEADLINE_MS,
@@ -149,10 +150,43 @@ zombie.onclose?.({ code: 1006 });
 assert.equal(connectionState(), 'online', 'a dead predecessor must not un-connect the live socket');
 assert.equal(sockets.length, 3, 'nor open a second socket on top of a working one');
 
+// --- past the deadline: offline on the banner, still retrying underneath -----
+
+// A minimised window never gets the focus or visibility event that restarts a
+// socket, so an offline socket that stopped for good stayed deaf until somebody
+// opened the window - and nothing that arrived meanwhile was notified.
+live.die();
+assert.equal(connectionState(), 'reconnecting');
+const realNow = Date.now;
+Date.now = () => realNow() + RECONNECT_DEADLINE_MS + 1_000;
+await new Promise((resolve) => setTimeout(resolve, 1_100));
+assert.equal(sockets.length, 4, 'the ladder took its step');
+
+const realSetTimeout = globalThis.setTimeout;
+const delays: number[] = [];
+globalThis.setTimeout = ((handler: () => void, ms?: number) => {
+  delays.push(ms ?? 0);
+  return realSetTimeout(handler, ms);
+}) as typeof setTimeout;
+sockets[3]!.die();
+globalThis.setTimeout = realSetTimeout;
+Date.now = realNow;
+assert.equal(connectionState(), 'offline', 'past the deadline the banner says so');
+assert.ok(
+  delays.includes(OFFLINE_RETRY_MS),
+  'and a quiet retry is still scheduled, so a minimised window reconnects on its own',
+);
+
+// The button, or the window coming back, still retries at once.
+socket.retry();
+assert.equal(sockets.length, 5, 'retry does not wait for the quiet attempt');
+sockets[4]!.accept();
+assert.equal(connectionState(), 'online');
+
 // --- signing out is not a connection problem ----------------------------------
 
 socket.disconnect();
-assert.ok(live.closed);
+assert.ok(sockets[4]!.closed);
 assert.equal(connectionState(), 'online', 'no banner over the login form');
 
 console.log('socket.check.ts: ok');

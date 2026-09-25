@@ -31,13 +31,13 @@ export function onSocketTokenRejected(renew: () => Promise<unknown>): void {
  *
  * Both sockets report into it and the worst answer wins: presence being down
  * with chat up is still a window that is missing events, and saying so is the
- * whole point. `offline` is a deliberate stop rather than a slower retry - see
- * `RECONNECT_DEADLINE_MS`.
+ * whole point. `offline` stops the spinner, not the socket - see
+ * `RECONNECT_DEADLINE_MS` and `OFFLINE_RETRY_MS`.
  */
 export type ConnectionState = 'online' | 'reconnecting' | 'offline';
 
 /**
- * How long a socket is allowed to keep retrying before it is given up on.
+ * How long a socket may spend "Reconnecting…" before the window says offline.
  *
  * A backoff that never stops is a spinner that never stops, and thirty seconds
  * of "Reconnecting…" is already longer than anybody waits before deciding the
@@ -51,6 +51,19 @@ export type ConnectionState = 'online' | 'reconnecting' | 'offline';
  * fifty-nine minutes ago. See `wakeUp`.
  */
 export const RECONNECT_DEADLINE_MS = 30_000;
+
+/**
+ * How often a socket past the deadline still tries again, on its own.
+ *
+ * Offline used to be a full stop, waiting for the window to come back to the
+ * screen or for the button to be pressed. A window that is minimised or in the
+ * tray does neither - and that is exactly the window a desktop notification is
+ * for. One dropped connection while it sat there (a gateway restart, a tunnel
+ * recycling, wifi coming back) left it deaf until somebody opened it again, so
+ * nothing that arrived in between was ever notified. The banner still says
+ * offline; underneath it, one quiet attempt every this often.
+ */
+export const OFFLINE_RETRY_MS = 30_000;
 
 /**
  * How long a handshake may take before the attempt is written off.
@@ -321,14 +334,15 @@ abstract class JsonSocket<Incoming extends { type: string }, Outgoing extends { 
     // Given up on rather than retried more slowly: past the deadline the window
     // says it is disconnected and waits to be told to try again - by the button,
     // or by coming back to the screen.
+    let delay: number;
     if (Date.now() - this.downSince >= RECONNECT_DEADLINE_MS) {
       reportSocket(this.name, 'offline');
-      return;
+      delay = OFFLINE_RETRY_MS;
+    } else {
+      reportSocket(this.name, 'reconnecting');
+      delay = Math.min(1000 * 2 ** this.attempt, 30_000);
+      this.attempt += 1;
     }
-    reportSocket(this.name, 'reconnecting');
-
-    const delay = Math.min(1000 * 2 ** this.attempt, 30_000);
-    this.attempt += 1;
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       this.open();
