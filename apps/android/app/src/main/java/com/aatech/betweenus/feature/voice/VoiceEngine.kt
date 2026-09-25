@@ -2436,6 +2436,8 @@ class VoiceEngine(private val context: Context) {
                 var sendFps: Double? = null
                 var sendWidth: Int? = null
                 var sendHeight: Int? = null
+                var encoderImplementation: String? = null
+                var powerEfficientEncoder: Boolean? = null
                 val candidateTypes = HashMap<String, String>()
 
                 for (stats in report.statsMap.values) {
@@ -2483,6 +2485,10 @@ class VoiceEngine(private val context: Context) {
                                 if (width.toLong() * height > (sendWidth ?: 0).toLong() * (sendHeight ?: 0)) {
                                     sendWidth = width.takeIf { it > 0 }
                                     sendHeight = height.takeIf { it > 0 }
+                                    // Whose encoder made that picture - hardware
+                                    // or the software fallback the CPU pays for.
+                                    encoderImplementation = members["encoderImplementation"] as? String
+                                    powerEfficientEncoder = members["powerEfficientEncoder"] as? Boolean
                                 }
                             }
                         }
@@ -2546,6 +2552,8 @@ class VoiceEngine(private val context: Context) {
                     sendWidth = sendWidth,
                     sendHeight = sendHeight,
                     sendLimitedBy = limitedBy,
+                    encoderImplementation = encoderImplementation,
+                    powerEfficientEncoder = powerEfficientEncoder,
                     // Read straight from the ladder rather than from a fresh
                     // `qualityLimitationReason`: the ladder only moves after
                     // two sustained starved readings, so this is already the

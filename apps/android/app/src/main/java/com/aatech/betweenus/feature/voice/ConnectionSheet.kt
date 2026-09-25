@@ -166,6 +166,18 @@ private fun PeerRow(link: LinkStats) {
                 Stat("Out", it, Modifier.weight(1f))
             }
         }
+        // Hardware or software, while a picture is leaving this phone. A
+        // software encoder is why a share sits under 60 fps on a good link.
+        CallStats.encoderLabel(link)?.let {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Stat(
+                    "Encoder",
+                    it,
+                    Modifier.weight(1f),
+                    tone = if (it.startsWith("software")) CallStats.Tone.WARN else CallStats.Tone.PLAIN,
+                )
+            }
+        }
         // Only when something is actually holding the picture down - the
         // whole answer to "why did my share go soft": the link, this phone's
         // encoder, or neither.

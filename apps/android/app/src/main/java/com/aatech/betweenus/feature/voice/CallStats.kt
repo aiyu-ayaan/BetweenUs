@@ -51,6 +51,12 @@ data class LinkSample(
     /** Why the picture leaving this phone is smaller or slower than asked for. */
     val sendLimitedBy: String? = null,
     /**
+     * `encoderImplementation` on the sender of that biggest picture, and
+     * `powerEfficientEncoder` beside it - see [CallStats.encoderLabel].
+     */
+    val encoderImplementation: String? = null,
+    val powerEfficientEncoder: Boolean? = null,
+    /**
      * Whether [ShareQuality.Ladder] has actually moved off the top on this
      * link - resolution, frame rate, or both. The desktop's
      * `LinkSample.shareReduced`: read from the ladder's own position rather
@@ -99,6 +105,9 @@ data class LinkStats(
     val sendWidth: Int? = null,
     val sendHeight: Int? = null,
     val sendLimitedBy: String? = null,
+    /** See [LinkSample.encoderImplementation]. */
+    val encoderImplementation: String? = null,
+    val powerEfficientEncoder: Boolean? = null,
     /** See [LinkSample.shareReduced]. */
     val shareReduced: Boolean = false,
     /** False when we are sending them no audio at all - see [notBeingHeard]. */
@@ -244,6 +253,8 @@ object CallStats {
             sendWidth = now.sendWidth,
             sendHeight = now.sendHeight,
             sendLimitedBy = now.sendLimitedBy,
+            encoderImplementation = now.encoderImplementation,
+            powerEfficientEncoder = now.powerEfficientEncoder,
             shareReduced = now.shareReduced,
             // Any movement at all counts. Opus sends a few hundred bytes a
             // second even through silence, so a sender that is attached and
@@ -289,6 +300,41 @@ object CallStats {
         val height = link.sendHeight ?: return null
         if (width <= 0 || height <= 0) return null
         return "$width×$height"
+    }
+
+    /**
+     * Encoder names that are always software, whatever the device.
+     *
+     * `c2.android.` and `OMX.google.` are Android's own software codecs;
+     * libvpx, OpenH264 and libaom are what WebRTC falls back to when no
+     * hardware encoder took the stream. The same list the desktop checks.
+     */
+    private val SOFTWARE_ENCODERS = listOf("libvpx", "openh264", "libaom", "c2.android.", "omx.google.")
+
+    /**
+     * Whether a hardware encoder is producing the picture leaving this phone.
+     *
+     * `powerEfficientEncoder` is the direct answer where WebRTC reports it; the
+     * name is the fallback. Null when neither is known - nothing is being sent.
+     */
+    fun isHardwareEncoder(implementation: String?, powerEfficient: Boolean?): Boolean? {
+        if (powerEfficient != null) return powerEfficient
+        val name = implementation?.takeIf { it.isNotBlank() } ?: return null
+        val lower = name.lowercase()
+        return SOFTWARE_ENCODERS.none { lower.contains(it) }
+    }
+
+    /**
+     * "hardware (c2.qti.avc.encoder)" or "software (libvpx)" - the one reading
+     * that tells a CPU-bound share from a slow link before either shows up.
+     * Only while a picture is actually leaving this phone.
+     */
+    fun encoderLabel(link: LinkStats): String? {
+        if (sendResolution(link) == null) return null
+        val hardware = isHardwareEncoder(link.encoderImplementation, link.powerEfficientEncoder)
+            ?: return null
+        val kind = if (hardware) "hardware" else "software"
+        return link.encoderImplementation?.takeIf { it.isNotBlank() }?.let { "$kind ($it)" } ?: kind
     }
 
     /** `qualityLimitationReason`, said the way somebody in a call would say it. */

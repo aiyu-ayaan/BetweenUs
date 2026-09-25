@@ -284,4 +284,35 @@ class CallStatsTest {
         assertNull(CallStats.selectedPair(emptyList(), null))
         assertNull(CallStats.selectedPair(emptyList(), "pair-new"))
     }
+
+    @Test
+    fun `the encoder is hardware when the stack says so, whatever its name`() {
+        assertEquals(true, CallStats.isHardwareEncoder("libvpx", true))
+        assertEquals(false, CallStats.isHardwareEncoder("c2.qti.avc.encoder", false))
+    }
+
+    @Test
+    fun `without the flag the name decides, and the software fallbacks are named`() {
+        assertEquals(false, CallStats.isHardwareEncoder("OpenH264", null))
+        assertEquals(false, CallStats.isHardwareEncoder("libvpx", null))
+        assertEquals(false, CallStats.isHardwareEncoder("c2.android.avc.encoder", null))
+        assertEquals(false, CallStats.isHardwareEncoder("OMX.google.h264.encoder", null))
+        assertEquals(true, CallStats.isHardwareEncoder("c2.qti.avc.encoder", null))
+        assertEquals(true, CallStats.isHardwareEncoder("MediaCodec", null))
+        assertNull(CallStats.isHardwareEncoder(null, null))
+        assertNull(CallStats.isHardwareEncoder("", null))
+    }
+
+    @Test
+    fun `the encoder line only shows while a picture is leaving`() {
+        val quiet = LinkStats(peerId = "a", name = "A", encoderImplementation = "OpenH264")
+        assertNull(CallStats.encoderLabel(quiet))
+
+        val sharing = quiet.copy(sendWidth = 1920, sendHeight = 1080)
+        assertEquals("software (OpenH264)", CallStats.encoderLabel(sharing))
+        assertEquals(
+            "hardware (c2.qti.avc.encoder)",
+            CallStats.encoderLabel(sharing.copy(encoderImplementation = "c2.qti.avc.encoder", powerEfficientEncoder = true)),
+        )
+    }
 }
