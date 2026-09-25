@@ -10,6 +10,127 @@ displayed_sidebar: null
 All production release binaries (Windows Desktop installer and Android APK), asset checksums, and version tag comparisons are published on [GitHub Releases](https://github.com/aiyu-ayaan/BetweenUs/releases).
 :::
 
+## [1.0.8](https://github.com/aiyu-ayaan/BetweenUs/compare/v1.0.7...v1.0.8) (2026-09-21)
+
+### Features
+
+* Scheduled sends and reminders with WorkManager, a when-sheet and a scheduled list
+* Draw channels grouped under collapsible categories
+* Open a thread as its own screen from the chip or the long-press sheet
+* Group channels under collapsible categories with drag and keyboard reorder
+* Render poll cards, vote and close, and preview polls locally
+* Scheduling rules for sends and reminders, with unit tests
+* Poll composer, live poll card and vote/close actions
+* Send later from the composer, remind-me on a message, and a scheduled list
+* Thread side panel, reply-in-thread menu item and reply-count chip
+* Draw spoilers and highlighted code blocks, and mask spoilers in previews
+* Keep unsent composer drafts per conversation in the local cache
+* Channel category CRUD and a channel-layout reorder endpoint
+* Local scheduling rules, encrypted on-device store and clock for scheduled sends and reminders
+* Announce channel list changes as server.channels.changed
+* Parse ||spoilers|| and fence languages, and lex code for colour
+* Wake thread participants, keep thread replies out of unread
+* Thread replies, thread paging and the root reply summary
+* Referee poll votes by index without reading the question
+* Poll wire types, limits and durations
+* Keep unsent composer drafts per channel across restarts
+* Add thread root pointer and reply summary to messages
+* Add message_polls and poll_votes for refereed polls
+* Add channel categories and a channel position
+* Hold the account master key server-side, and reset a vault nobody can open
+
+### Bug fixes
+
+* Refereed polls, message threads, channel categories, and scheduled sends
+* Pass the thread root after the poll settings when replying in a thread
+* Read drafts in the direct message list after merging categories
+* Open the vault with the server-held key, and stop locking the phone
+* Open the vault with the server-held key, and drop the lock screen
+
+### Other changes
+
+* Point the submodule at the phase-41 write-up
+* Merge: threads
+* Merge: refereed polls
+* Merge: channel categories
+* Merge: local scheduled send and remind-me
+* Merge: describe spoilers and highlighted code blocks
+* Merge: describe per-channel drafts in features, README and the Android client page
+* Local scheduled send and reminders, the trade-off, notifications and feature matrix
+* Document channel categories, the layout endpoint and server.channels.changed
+* Document thread replies, paging, push rules and the schema
+* Document refereed polls across API, protocol, E2EE and schema pages
+* Describe spoilers and highlighted code blocks
+* Describe per-channel drafts in features, README and the Android client page
+* Describe the server-held vault key and the removed lock screen
+
+### Artifacts
+
+| Platform | This release |
+| --- | --- |
+| Server images | Built here |
+| Desktop | Built here |
+| Android | Built here |
+
+## [1.0.7](https://github.com/aiyu-ayaan/BetweenUs/compare/v1.0.6...v1.0.7) (2026-09-20)
+
+### Features
+
+* Open the account vault, and lock rather than fork
+* Show the recovery code, and say plainly when a device is locked
+* Open the account vault on every device, and never fork
+* Collect objects the database has no reference to
+* Wrap channel and moment keys for accounts, not machines
+* Add the account vault schema and contracts
+
+### Bug fixes
+
+* Account vault E2EE keyring, storage reconciler, and screen share fixes
+* Point default emulator endpoint to dev gateway on 8090 with 8080 fallback
+* Improve CPU handling in share quality checks and ladder logic
+* Share system audio without the call in it
+* Keep the picture-in-picture overlay out of a screen share
+
+### Other changes
+
+* Update public docs for account vault, object reconciler, and new E2EE architecture
+* Stop dev postgres and redis from auto-starting on boot
+* Document share audio without the call and the hidden PiP overlay
+
+### Artifacts
+
+| Platform | This release |
+| --- | --- |
+| Server images | Built here |
+| Desktop | Built here |
+| Android | Built here |
+
+## [1.0.6](https://github.com/aiyu-ayaan/BetweenUs/compare/v1.0.5...v1.0.6) (2026-09-19)
+
+### Features
+
+* One-line Linux installer that fetches the newest AppImage
+* Start with the session on Linux through an XDG autostart entry
+
+### Bug fixes
+
+* Linux desktop build, a one-line installer, and start with the system on Linux
+
+### Other changes
+
+* Merge: Linux AppImage build, installer script and startup entry
+* Document the Linux AppImage, its installer and autostart
+* Build, smoke-test and publish the Linux AppImage
+* Make the Linux AppImage start in seconds and run without libfuse2
+
+### Artifacts
+
+| Platform | This release |
+| --- | --- |
+| Server images | Built here |
+| Desktop | Built here |
+| Android | Built here |
+
 ## [1.0.5](https://github.com/aiyu-ayaan/BetweenUs/compare/v1.0.4...v1.0.5) (2026-09-18)
 
 ### Features

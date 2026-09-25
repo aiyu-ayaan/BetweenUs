@@ -70,7 +70,7 @@ not the process.
   swapping "yes" and "no" under everybody's votes. `PATCH` on a poll is refused.
   Deleting the message deletes the poll and its votes in the same transaction.
 - **Notifications** carry only the ciphertext envelope like any message. The
-  poll preview ("Poll: <question>") is built on the receiving client after it
+  poll preview ("Poll: `<question>`") is built on the receiving client after it
   opens the envelope; no service ever has the question to put in one.
 
 
