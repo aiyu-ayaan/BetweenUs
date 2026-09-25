@@ -185,7 +185,7 @@ to be framed, so no browser tab can ever show it.
 | Tiles shaped to the picture (portrait and landscape) | ✅ | ✅ | ✅ |
 | Ask to drive somebody's shared screen | ✅ | ✅ | ✅ on the share stage |
 | Be driven while sharing your screen | ✅ | — | — |
-| Share system audio without the call echoing back | ✅ Windows | — | — |
+| Share system audio without the call echoing back | ✅ Windows, Linux (PipeWire) | — | — |
 | Manual quality override | ✅ | ✅ | ⚠️ automatic |
 | Connection panel: bitrate, loss, round trip, frame size | ✅ | ✅ | ✅ |
 | Reconnects a dropped link, and ends a call it cannot recover | ✅ | ✅ | ✅ |

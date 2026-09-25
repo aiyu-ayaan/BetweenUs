@@ -997,6 +997,29 @@ within ten seconds, or exits, the share falls back to the whole-mix loopback
 rather than going out silent. The helper exits when its stdin closes, which
 happens when the share stops and when the app quits.
 
+On Linux the same exclusion is built out of the PipeWire graph
+(`electron/share-audio-linux.ts`). The main process runs `pw-record --target 0`,
+a capture node the session manager leaves unconnected, and `pw-link`s every
+application's playback stream (`media.class` `Stream/Output/Audio`) into it,
+*alongside* its existing link to the speakers, so nothing the user hears changes.
+Streams whose process is one of this app's (`app.getAppMetrics()`, which
+includes Chromium's audio service, the process that plays the call) are never
+linked. Sinks are never linked either, because a sink's monitor is the whole mix
+again. The graph is re-read with `pw-dump` every 1.5 s, so a video or game
+started mid-share is picked up. A process id is read from the node, or from its
+PipeWire client object for native clients like `pw-record`.
+
+| Step | Where |
+| :--- | :--- |
+| `pw-record` writes the same 48 kHz stereo 16-bit PCM to stdout | `electron/share-audio-linux.ts` |
+| `plannedLinks` decides which output ports go to which recorder input (mono, centre and LFE to both sides) | `electron/share-audio-linux.ts` |
+| Framing and `share-audio:pcm` are shared with Windows | `electron/share-audio.ts` |
+
+The picker offers audio when `pw-record`, `pw-dump` and `pw-link` are all on
+`PATH` (PipeWire, the default on current Ubuntu, Fedora, Debian and Arch).
+Electron's loopback is Windows-only, so a Linux capture that fails to start
+leaves the share silent rather than falling back.
+
 ### Full screen on the desktop, and the two keys it keeps
 
 Full screen is two wishes that pull opposite ways, so it is two modes with a
