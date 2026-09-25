@@ -114,6 +114,11 @@ object Workspace {
                         // both sides, and leaving a dead channel in the rail
                         // would leave a row that answers 404 when it is tapped.
                         loadDirectChannels()
+                        // And the block list, which a block or an unblock on
+                        // another of this account's devices changed - it is what
+                        // folds a blocked person's messages in shared servers,
+                        // so it has to follow without a restart.
+                        loadBlocked()
                     }
 
                     // A picture or a name changed. Patched in place rather

@@ -60,6 +60,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.aatech.betweenus.core.crypto.E2ee
+import com.aatech.betweenus.core.data.BlockedRuns
 import com.aatech.betweenus.core.data.Endpoint
 import com.aatech.betweenus.core.data.MessageReply
 import com.aatech.betweenus.core.data.PresenceStatus
@@ -141,6 +142,22 @@ fun ChatScreen(
     val anchors = remember(messages, receipts, self.id) {
         Receipts.anchorReceipts(messages, receipts, self.id)
     }
+    /**
+     * Somebody this account blocked, still talking in a server both are in.
+     *
+     * Collected rather than read once, so blocking or unblocking somebody -
+     * here, or on another device, which reloads the list through
+     * `friends.changed` - folds or unfolds their messages without reopening
+     * the conversation. A 1:1 conversation with them is closed outright, so
+     * this only ever matters in a room.
+     */
+    val blockedList by Workspace.blocked.collectAsState()
+    val blockedIds = remember(blockedList) { blockedList.map { it.user.id }.toSet() }
+    val folded = remember(messages, blockedIds) {
+        BlockedRuns.of(messages.map { it.message }, blockedIds)
+    }
+    /** Runs somebody chose to read anyway, by first message. This screen only. */
+    var revealed by remember(channelId) { mutableStateOf(emptySet<String>()) }
     val channel = Workspace.channel(channelId)
     val direct = Workspace.directChannel(channelId)
     val title = channel?.name ?: direct?.participant?.label ?: "Conversation"
@@ -693,6 +710,12 @@ fun ChatScreen(
                 items(messages, key = { it.id }) { readable ->
                     val index = messages.indexOf(readable)
                     val previous = messages.getOrNull(index - 1)
+                    // Folded: one quiet row for the whole run, drawn by its
+                    // first message; the rest of the run draws nothing.
+                    val run = folded[readable.id]
+                    if (run != null && run.head !in revealed && run.head != readable.id) {
+                        return@items
+                    }
                     // The bubbles only carry a clock time, so the first message
                     // of each day carries the date for all of them.
                     if (previous == null ||
@@ -705,6 +728,13 @@ fun ChatScreen(
                     // reply to, react to or long-press.
                     if (readable.message.isArrival) {
                         ArrivalRow(readable)
+                        return@items
+                    }
+                    if (run != null && run.head !in revealed) {
+                        BlockedRunRow(
+                            label = BlockedRuns.label(run.count),
+                            onShow = { revealed = revealed + run.head },
+                        )
                         return@items
                     }
                     MessageRow(

@@ -314,6 +314,10 @@ class PushService : FirebaseMessagingService() {
         val preferences = PushGate.preferences()
         if (preferences?.enabled == false) return
         if (channelId in preferences?.mutedChannelIds.orEmpty()) return
+        // Somebody this account blocked, in a server both are still in. The
+        // server already drops these; this covers one that has not been
+        // redeployed, from whatever block list this process has in hand.
+        if (Workspace.blocked.value.any { it.user.id == authorId }) return
         // Quiet hours are minutes on this phone's clock, which is why the
         // server sent the push and left the decision here.
         if (PushGate.quiet(preferences)) return
