@@ -44,6 +44,7 @@ class BetweenUsApp : Application(), ImageLoaderFactory {
         DeviceIdentity.init(this)
         E2ee.init(this)
         LastPlace.init(this)
+        com.aatech.betweenus.core.store.CollapsedCategories.init(this)
         Cache.init(this)
         ThemePreferences.init(this)
         CallTones.init(this)

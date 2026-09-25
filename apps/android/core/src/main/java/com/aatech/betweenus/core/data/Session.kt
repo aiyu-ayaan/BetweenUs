@@ -424,6 +424,7 @@ object Session {
         // The drafts first: they are in memory too, and a write still waiting
         // must not land in the cache the next account claims.
         com.aatech.betweenus.core.store.Drafts.forget()
+        com.aatech.betweenus.core.store.CollapsedCategories.forget()
         Cache.clear()
     }
 
