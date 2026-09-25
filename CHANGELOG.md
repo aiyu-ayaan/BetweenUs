@@ -1,5 +1,41 @@
 # Changelog
 
+## [1.0.9](https://github.com/aiyu-ayaan/BetweenUs/compare/v1.0.8...v1.0.9) (2026-09-25)
+
+### Features
+
+* Show the share encoder in the connection sheet
+* Show share encoder and sent frame rate in the connection panel
+* Draw uncategorized channels under Text and Voice headings
+* Create text and voice channels straight into a category
+
+### Bug fixes
+
+* Socket reconnect resilience, multi-server notifications, VA-API encode, and category UX
+* Take every service address from the ports in .env
+* Keep reconnecting past the offline deadline, as desktop does
+* Keep reconnecting past the offline deadline
+* Listen to every server's channels, not only the open one
+* Let the whole top bar drag the window
+* Keep text channels above voice channels in every sidebar section
+
+### Other changes
+
+* The share encoder row and Linux hardware encoding
+* Ask for VA-API hardware encoding on Linux
+* Moving a dev service off a port another program holds
+* Point the submodule at the end-to-end check
+* Point the submodule at the sidebar and notification write-up
+* Offline sockets keep retrying, every server is subscribed, create into a category
+
+### Artifacts
+
+| Platform | This release |
+| --- | --- |
+| Server images | Built here |
+| Desktop | Built here |
+| Android | Built here |
+
 ## [1.0.8](https://github.com/aiyu-ayaan/BetweenUs/compare/v1.0.7...v1.0.8) (2026-09-21)
 
 ### Features
