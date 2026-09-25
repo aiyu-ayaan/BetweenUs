@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { ChannelType } from '@betweenus/shared-types';
+import type { ChannelCategory, ChannelType } from '@betweenus/shared-types';
 import { useChatStore } from '../../stores/chat';
 import { useAuthStore } from '../../stores/auth';
 import { Avatar } from '../../components/Avatar';
@@ -13,9 +13,12 @@ import { useFocusTrap } from '../../services/focus-trap';
  */
 export function CreateChannelDialog({
   type,
+  category = null,
   onClose,
 }: {
   type: ChannelType;
+  /** The category it is created in, or null for the loose list above them. */
+  category?: ChannelCategory | null;
   onClose: () => void;
 }): JSX.Element {
   const trap = useFocusTrap<HTMLDivElement>();
@@ -49,6 +52,7 @@ export function CreateChannelDialog({
         type,
         isPrivate,
         memberIds: isPrivate ? [...invited] : undefined,
+        categoryId: category?.id ?? null,
       });
       onClose();
     } catch (error) {
@@ -75,6 +79,12 @@ export function CreateChannelDialog({
           <h2 className="text-xl font-bold text-slate-50">Create channel</h2>
           <p className="mt-1 text-sm text-slate-400">
             {type === 'VOICE' ? 'Voice channel' : 'Text channel'}
+            {category && (
+              <>
+                {' in '}
+                <span className="font-semibold text-slate-300">{category.name}</span>
+              </>
+            )}
           </p>
 
           <label

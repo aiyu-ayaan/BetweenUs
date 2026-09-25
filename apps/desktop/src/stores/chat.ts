@@ -214,6 +214,8 @@ interface ChatState {
     type?: ChannelType;
     isPrivate?: boolean;
     memberIds?: string[];
+    /** File it under this category from the start; null or absent for the loose list. */
+    categoryId?: string | null;
   }) => Promise<void>;
   /**
    * The page before the oldest message on screen. Called by the message list
@@ -688,10 +690,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
     await get().selectServer(server.id);
   },
 
-  createChannel: async ({ name, type = 'TEXT', isPrivate, memberIds }) => {
+  createChannel: async ({ name, type = 'TEXT', isPrivate, memberIds, categoryId }) => {
     const serverId = get().activeServerId;
     if (!serverId) return;
-    const channel = await api.createChannel({ serverId, name, type, isPrivate, memberIds });
+    const channel = await api.createChannel({
+      serverId,
+      name,
+      type,
+      isPrivate,
+      memberIds,
+      categoryId: categoryId ?? null,
+    });
     set({ channels: [...get().channels, channel] });
     // Mint its key now, while we know we are a member: an unkeyed channel puts
     // the cost on whoever opens it next, and that used to fail for anyone but

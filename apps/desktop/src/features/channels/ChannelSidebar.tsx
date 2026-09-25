@@ -64,7 +64,10 @@ export function ChannelSidebar({
     deleteCategory,
   } = useChatStore();
 
-  const [creating, setCreating] = useState<ChannelType | null>(null);
+  const [creating, setCreating] = useState<{
+    type: ChannelType;
+    category: ChannelCategory | null;
+  } | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [categoryDialog, setCategoryDialog] = useState<
     { mode: 'create' } | { mode: 'rename'; category: ChannelCategory } | null
@@ -180,10 +183,10 @@ export function ChannelSidebar({
           <span className="text-[11px] font-bold tracking-wider text-slate-400">CHANNELS</span>
           {canManageChannels && (
             <div className="flex items-center gap-0.5">
-              <HeadingButton label="Create text channel" onClick={() => setCreating('TEXT')}>
+              <HeadingButton label="Create text channel" onClick={() => setCreating({ type: 'TEXT', category: null })}>
                 <HashIcon className="h-3.5 w-3.5" />
               </HeadingButton>
-              <HeadingButton label="Create voice channel" onClick={() => setCreating('VOICE')}>
+              <HeadingButton label="Create voice channel" onClick={() => setCreating({ type: 'VOICE', category: null })}>
                 <SpeakerIcon className="h-3.5 w-3.5" />
               </HeadingButton>
               <HeadingButton
@@ -238,6 +241,7 @@ export function ChannelSidebar({
                       category.name,
                     );
                   }}
+                  onCreate={(type) => setCreating({ type, category })}
                   onRename={() => setCategoryDialog({ mode: 'rename', category })}
                   onDelete={() => void removeCategory(category)}
                   onMove={(delta) =>
@@ -323,7 +327,11 @@ export function ChannelSidebar({
       <UserPanel onOpenSettings={onOpenUserSettings} />
 
       {creating && (
-        <CreateChannelDialog type={creating} onClose={() => setCreating(null)} />
+        <CreateChannelDialog
+          type={creating.type}
+          category={creating.category}
+          onClose={() => setCreating(null)}
+        />
       )}
 
       {categoryDialog && (
@@ -553,6 +561,7 @@ function CategoryHeader({
   dragging,
   onToggle,
   onKeyDown,
+  onCreate,
   onRename,
   onDelete,
   onMove,
@@ -566,6 +575,8 @@ function CategoryHeader({
   dragging: boolean;
   onToggle: () => void;
   onKeyDown: (event: React.KeyboardEvent) => void;
+  /** Opens the create dialog with this category already chosen. */
+  onCreate: (type: ChannelType) => void;
   onRename: () => void;
   onDelete: () => void;
   onMove: (delta: -1 | 1) => void;
@@ -602,6 +613,27 @@ function CategoryHeader({
 
       {canManage && (
         <>
+          {/* Shown on hover like the options button, and always to the
+              keyboard: creating straight into a category saves dragging
+              the new channel in afterwards. */}
+          <button
+            type="button"
+            aria-label={`Create text channel in ${category.name}`}
+            title="Create text channel"
+            onClick={() => onCreate('TEXT')}
+            className="cursor-pointer rounded-md p-0.5 text-slate-400 opacity-0 transition-opacity hover:bg-white/[0.07] hover:text-slate-100 focus:opacity-100 group-hover:opacity-100"
+          >
+            <HashIcon className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            aria-label={`Create voice channel in ${category.name}`}
+            title="Create voice channel"
+            onClick={() => onCreate('VOICE')}
+            className="cursor-pointer rounded-md p-0.5 text-slate-400 opacity-0 transition-opacity hover:bg-white/[0.07] hover:text-slate-100 focus:opacity-100 group-hover:opacity-100"
+          >
+            <SpeakerIcon className="h-3.5 w-3.5" />
+          </button>
           <button
             type="button"
             aria-haspopup="menu"
@@ -619,9 +651,11 @@ function CategoryHeader({
               onKeyDown={(event) => {
                 if (event.key === 'Escape') setMenu(false);
               }}
-              className="absolute end-0 top-full z-30 mt-0.5 w-40 overflow-hidden rounded-lg border border-edge bg-surface-950 py-1 shadow-pop"
+              className="absolute end-0 top-full z-30 mt-0.5 w-48 overflow-hidden rounded-lg border border-edge bg-surface-950 py-1 shadow-pop"
             >
               {[
+                { label: 'Create text channel', run: () => onCreate('TEXT'), danger: false },
+                { label: 'Create voice channel', run: () => onCreate('VOICE'), danger: false },
                 { label: 'Rename', run: onRename, danger: false },
                 { label: 'Move up', run: () => onMove(-1), danger: false },
                 { label: 'Move down', run: () => onMove(1), danger: false },
