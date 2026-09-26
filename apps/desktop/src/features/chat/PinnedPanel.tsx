@@ -28,7 +28,10 @@ export function PinnedPanel({
   const pins = useChatStore((state) => state.pins);
   const loadingPins = useChatStore((state) => state.loadingPins);
   const loadPins = useChatStore((state) => state.loadPins);
-  const jumpToMessage = useChatStore((state) => state.jumpToMessage);
+  const loadMorePins = useChatStore((state) => state.loadMorePins);
+  const pinsCursor = useChatStore((state) => state.pinsCursor);
+  const loadingMore = useChatStore((state) => state.loadingMorePins);
+  const revealMessage = useChatStore((state) => state.revealMessage);
   const showPanel = useChatStore((state) => state.showPanel);
   const channelId = useChatStore((state) => state.activeChannelId);
 
@@ -66,12 +69,19 @@ export function PinnedPanel({
           Nothing pinned yet. Right-click a message and choose <em>Pin</em>.
         </p>
       ) : (
-        <ul className="min-h-0 flex-1 space-y-2 overflow-y-auto p-2">
+        <ul
+          className="min-h-0 flex-1 space-y-2 overflow-y-auto p-2"
+          onScroll={(event) => {
+            const list = event.currentTarget;
+            // Near the bottom: the next page is asked for before it is needed.
+            if (list.scrollHeight - list.scrollTop - list.clientHeight < 120) void loadMorePins();
+          }}
+        >
           {pins.map((message) => (
             <li key={message.id}>
               <button
                 type="button"
-                onClick={() => jumpToMessage(message.id)}
+                onClick={() => void revealMessage(message.id)}
                 className="w-full cursor-pointer rounded-lg bg-surface-800 p-2.5 text-start transition-colors duration-200 hover:bg-white/[0.06]"
               >
                 <span className="flex items-center gap-2">
@@ -96,6 +106,18 @@ export function PinnedPanel({
               </button>
             </li>
           ))}
+          {pinsCursor && (
+            <li>
+              <button
+                type="button"
+                onClick={() => void loadMorePins()}
+                disabled={loadingMore}
+                className="w-full cursor-pointer rounded-lg py-2 text-xs text-slate-400 transition-colors duration-150 hover:bg-white/[0.06] hover:text-slate-100 disabled:cursor-default"
+              >
+                {loadingMore ? 'Loading more pins…' : 'Load more pins'}
+              </button>
+            </li>
+          )}
         </ul>
       )}
     </aside>

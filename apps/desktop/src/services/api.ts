@@ -633,8 +633,18 @@ export const api = {
   messageEdits: (messageId: string): Promise<MessageEditsResponse> =>
     request(`/api/v1/messages/${messageId}/edits`),
 
-  pins: (channelId: string): Promise<Message[]> =>
-    request(`/api/v1/messages/pins?channelId=${encodeURIComponent(channelId)}`),
+  /**
+   * One page of pins, newest pin first. Asking for a limit opts in to the
+   * paged shape; a server that predates it answers a bare array, which is the
+   * whole list and has no next page.
+   */
+  pins: async (channelId: string, cursor?: string | null): Promise<Paginated<Message>> => {
+    const answer = await request<Message[] | Paginated<Message>>(
+      `/api/v1/messages/pins?channelId=${encodeURIComponent(channelId)}&limit=25` +
+        (cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''),
+    );
+    return Array.isArray(answer) ? { items: answer, nextCursor: null } : answer;
+  },
 
   pinMessage: (messageId: string): Promise<Message> =>
     request(`/api/v1/messages/${messageId}/pin`, { method: 'PUT' }),
