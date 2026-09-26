@@ -20,8 +20,16 @@ import type {
 } from '@betweenus/shared-types';
 import { voiceLifetime } from './voice-lifetime';
 import { readableLastSeen, toVisibility } from './last-seen-visibility';
+import { accountIsOffline, socketMember } from './socket-member';
 
 const ONLINE_KEY = 'presence:online';
+/**
+ * Every live socket, `<userId>:<socketId>`, scored by its last heartbeat.
+ * `presence:online` stays one entry per account; this is what says whether the
+ * account still has a socket anywhere, on any instance.
+ */
+const SOCKETS_KEY = 'presence:sockets';
+const USER_SOCKETS_KEY = (userId: string): string => `presence:sockets:${userId}`;
 const STATUS_KEY = 'presence:status';
 const VOICE_KEY = (channelId: string): string => `presence:voice:${channelId}`;
 const VOICE_INDEX = 'presence:voice:channels';
@@ -57,15 +65,47 @@ export class PresenceStore implements OnModuleDestroy {
    * not *seen*, and a last-seen time that kept ticking while somebody was
    * hidden would be a green dot spelled differently.
    */
-  async touch(userId: string): Promise<void> {
+  async touch(userId: string, socketId?: string): Promise<void> {
     const now = Date.now();
-    await this.redis.zadd(ONLINE_KEY, now, userId);
+    const pipeline = this.redis.multi().zadd(ONLINE_KEY, now, userId);
+    if (socketId) {
+      pipeline
+        .zadd(SOCKETS_KEY, now, socketMember(userId, socketId))
+        .zadd(USER_SOCKETS_KEY(userId), now, socketId)
+        .pexpire(USER_SOCKETS_KEY(userId), STALE_AFTER_MS);
+    }
+    await pipeline.exec();
     if ((await this.statusOf(userId)) === 'invisible') return;
     await this.redis.hset(LAST_SEEN_KEY, userId, now);
   }
 
-  async goOffline(userId: string): Promise<void> {
+  /**
+   * Removes one socket. The account leaves `presence:online` only when this was
+   * its last live socket on any instance; the answer is whether it did.
+   */
+  async goOffline(userId: string, socketId: string): Promise<boolean> {
+    const userKey = USER_SOCKETS_KEY(userId);
+    await this.redis
+      .multi()
+      .zrem(SOCKETS_KEY, socketMember(userId, socketId))
+      .zrem(userKey, socketId)
+      .zremrangebyscore(userKey, '-inf', Date.now() - STALE_AFTER_MS)
+      .exec();
+    const remaining = await this.redis.zcard(userKey);
+    if (!accountIsOffline(remaining)) return false;
     await this.redis.zrem(ONLINE_KEY, userId);
+    return true;
+  }
+
+  /** Live sockets and the accounts holding them, stale members ignored. */
+  async socketCounts(): Promise<{ sockets: number; accounts: number }> {
+    const cutoff = Date.now() - STALE_AFTER_MS;
+    await this.redis.zremrangebyscore(SOCKETS_KEY, '-inf', cutoff);
+    const [sockets, accounts] = await Promise.all([
+      this.redis.zcard(SOCKETS_KEY),
+      this.redis.zcount(ONLINE_KEY, cutoff, '+inf'),
+    ]);
+    return { sockets, accounts };
   }
 
   /**

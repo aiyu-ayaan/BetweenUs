@@ -194,18 +194,20 @@ Where the numbers come from, and what they are not:
 | `live.onlineUsers`, `activeCalls`, `activeCallParticipants` | Redis: `presence:online` (fresh entries only, same 90 s cutoff `PresenceStore` uses), `presence:voice:channels`, `presence:voice:<channelId>` | a second reader of presence-service's keys; if they change, this changes with them |
 | `live.activeRemoteSessions` | `RemoteSession` where `endedAt` is null | — |
 
-Two figures are honestly limited rather than exact, and the reason is written
-into the code beside each:
+Realtime counts, and what each one means:
 
-- **`live.totalSockets` is connected *accounts*, not sockets.** Presence is
-  keyed per account — two windows of one account are one entry in
-  `presence:online` — and nothing anywhere keeps a per-device count, so it will
-  never exceed `onlineUsers`. A true socket count needs presence to key by
-  device, which is a change to presence-service rather than to this endpoint.
-- **`/ws/chat` reports `connections: 0`, meaning "not tracked".**
+- **`live.onlineUsers`** and **`live.presenceAccounts`** are distinct
+  *accounts* with a fresh entry in `presence:online`.
+- **`live.totalSockets`** and **`live.presenceSockets`** are *sockets*: live
+  members of `presence:sockets`, one per device or window, so one account on
+  three devices is three. Presence keys per device and ages a crashed instance's
+  sockets out by heartbeat. `totalSockets` keeps its name and counts only the
+  surfaces that are tracked, which today is presence.
+- **`/ws/presence` reports `presenceSockets`**, no longer the account count.
+- **`/ws/chat` still reports `connections: 0`, meaning "not tracked".**
   `chat-service` keeps its subscriptions inside the gateway process and
-  publishes nothing about them. The endpoint's `state` still comes from that
-  service's own probe, which is the question the endpoint list is really asked.
+  publishes nothing about them; tracking them would mean a Redis dependency in
+  that service. The endpoint's `state` still comes from its own probe.
 
 The endpoint URLs are built from `PUBLIC_API_URL` with the scheme swapped for
 its WebSocket equivalent, never hardcoded: an administrator checking their

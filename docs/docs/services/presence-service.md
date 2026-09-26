@@ -27,6 +27,25 @@ Requests are made with a two-second timeout and answered with `null` on any
 failure — an invite preview that hangs because presence is restarting is
 worse than one that just omits the online count.
 
+## One entry per device
+
+Presence is keyed per socket, not per account. Every `/ws/presence` connection
+gets its own id and is a member of two sorted sets, scored by its last
+heartbeat: `presence:sockets` (member `<userId>:<socketId>`, what the health
+page counts) and `presence:sockets:<userId>` (what decides whether an account is
+still here). `presence:online` is still one entry per account.
+
+An account goes offline only when its **last** socket goes, on any instance:
+closing a socket removes it and asks Redis whether the account has any live
+socket left, so two presence-service instances agree without sticky sessions.
+Last-seen, invisibility and the Postgres flush happen at that same moment and
+are unchanged.
+
+A crashed instance cannot close its sockets, so they age out the way
+`presence:online` and the voice rosters do: a socket not heartbeated within
+90 seconds is ignored and swept, and the per-account set also carries a TTL.
+The gateway heartbeat (30 s) refreshes every live socket.
+
 ## Last seen
 
 `presence:online` is trimmed of anybody stale, which is precisely the moment

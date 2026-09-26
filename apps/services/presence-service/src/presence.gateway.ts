@@ -7,6 +7,7 @@
  * pattern the chat gateway uses.
  */
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import type { Server as HttpServer } from 'node:http';
 import { WebSocket, WebSocketServer } from 'ws';
 import { EVENTS, EventBus } from '@betweenus/events';
@@ -36,6 +37,8 @@ const HEARTBEAT_INTERVAL_MS = 30_000;
 const QUERY_LIMIT = 100;
 
 interface SocketState {
+  /** This socket's own id: presence is keyed per device, not per account. */
+  socketId: string;
   userId: string;
   username: string;
   alive: boolean;
@@ -76,13 +79,14 @@ export class PresenceGateway implements OnModuleDestroy {
       }
 
       this.state.set(socket, {
+        socketId: randomUUID(),
         userId: user.id,
         username: user.username,
         alive: true,
         issuedAt: user.issuedAt,
         focused: null,
       });
-      void this.onConnect(socket, user.id);
+      void this.onConnect(socket, user.id, this.state.get(socket)?.socketId ?? '');
 
       socket.on('pong', () => {
         const state = this.state.get(socket);
@@ -114,7 +118,7 @@ export class PresenceGateway implements OnModuleDestroy {
         socket.ping();
         // A live socket is a live user; this is what keeps them out of the
         // stale window in Redis.
-        void this.store.touch(state.userId);
+        void this.store.touch(state.userId, state.socketId);
         // And a live socket still looking at a channel is still looking at it.
         // Without this the focus ages out after 90 seconds and a phone starts
         // buzzing for a conversation that is open on a desktop.
@@ -232,8 +236,8 @@ export class PresenceGateway implements OnModuleDestroy {
     }
   }
 
-  private async onConnect(socket: WebSocket, userId: string): Promise<void> {
-    await this.store.touch(userId);
+  private async onConnect(socket: WebSocket, userId: string, socketId: string): Promise<void> {
+    await this.store.touch(userId, socketId);
 
     // Nothing is cleared here any more. A client connecting used to drop itself
     // from every voice channel on the assumption that a leftover was a dead
@@ -291,10 +295,10 @@ export class PresenceGateway implements OnModuleDestroy {
       await this.store.blur(state.focused, userId);
     }
 
-    // Another window of the same user may still be connected to this instance.
-    if (this.hasOtherSocket(userId, socket)) return;
-
-    await this.store.goOffline(userId);
+    // Another window of the same user may still be connected - here or on
+    // another instance. The store knows, because every socket is in Redis.
+    if (!state) return;
+    if (!(await this.store.goOffline(userId, state.socketId))) return;
 
     // The last window of this account has gone, so the last-seen value has
     // stopped moving - which is the moment it is worth a row rather than a
@@ -341,16 +345,6 @@ export class PresenceGateway implements OnModuleDestroy {
     );
   }
 
-  /** Is this user connected through some socket other than `except`? */
-  private hasOtherSocket(userId: string, except?: WebSocket): boolean {
-    for (const socket of this.server?.clients ?? []) {
-      if (socket === except) continue;
-      if (socket.readyState !== WebSocket.OPEN) continue;
-      if (this.state.get(socket)?.userId === userId) return true;
-    }
-    return false;
-  }
-
   private async handleClientEvent(socket: WebSocket, raw: string): Promise<void> {
     const state = this.state.get(socket);
     if (!state) return;
@@ -382,7 +376,7 @@ export class PresenceGateway implements OnModuleDestroy {
       }
 
       case 'ping':
-        await this.store.touch(state.userId);
+        await this.store.touch(state.userId, state.socketId);
         this.send(socket, { type: 'pong' });
         return;
 

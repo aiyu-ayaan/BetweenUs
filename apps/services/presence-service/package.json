@@ -9,7 +9,7 @@
     "start": "node dist/main.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "smoke": "node smoke.mjs",
-    "check": "tsx src/voice-lifetime.check.ts && tsx src/last-seen-visibility.check.ts"
+    "check": "tsx src/voice-lifetime.check.ts && tsx src/last-seen-visibility.check.ts && tsx src/socket-member.check.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.18",

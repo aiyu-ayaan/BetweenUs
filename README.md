@@ -452,7 +452,7 @@ installed and compiled once rather than once per image.
 | `auth-service` | 3001 | Registration, login, JWT access and refresh tokens with rotation, OAuth, the admin API |
 | `server-service` | 3003 | Servers, members, roles, permission overrides, channels, invites |
 | `chat-service` | 3004 | Messages, `/ws/chat` fanout, uploads, the E2EE key directory, friends and DMs |
-| `presence-service` | 3005 | `/ws/presence`, online status, typing, voice rosters, all Redis-backed |
+| `presence-service` | 3005 | `/ws/presence`, online status, typing, voice rosters, per-device sockets, all Redis-backed |
 | `notification-service` | 3006 | Notification preferences, per-channel mutes, quiet hours, read markers |
 | `call-service` | 3007 | Call permissions, the peer roster, and `/ws/call` signalling. Never media |
 | `remote-gateway` | 3008 | Remote machines, per-machine permissions, session relay on `/ws/remote`, audit log |
@@ -891,7 +891,7 @@ docs/                     full Docusaurus documentation suite (architecture, ser
 | `pnpm db:backup` | Trigger pre-migration or manual database dump to `BACKUP_DATA_PATH` |
 | `pnpm admin:create` | Create the first administrator |
 | `pnpm --filter @betweenus/chat-service smoke` | End-to-end check against running services |
-| `pnpm --filter @betweenus/presence-service smoke` | Presence, typing and voice rosters |
+| `pnpm --filter @betweenus/presence-service smoke` | Presence (per-device sockets), typing and voice rosters |
 | `pnpm --filter @betweenus/notification-service smoke` | Preferences, unread counting, read markers |
 | `pnpm --filter @betweenus/remote-gateway smoke` | Enrolment, grants, and what the remote relay refuses |
 | `pnpm android:test` | Run Android core & UI unit test suite |
