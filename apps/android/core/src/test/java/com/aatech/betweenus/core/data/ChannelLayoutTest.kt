@@ -186,4 +186,19 @@ class ChannelLayoutTest {
         val applied = applyChannelLayout(cats, flat, layoutFrom(moved))
         assertEquals(names(moved), names(channelSections(applied.categories, applied.channels)))
     }
+
+    @Test
+    fun categoryNameIsTrimmedAndCollapsed() {
+        assertEquals("Game night", normalizeCategoryName("  Game \t  night \n"))
+    }
+
+    @Test
+    fun blankCategoryNameBecomesCategory() {
+        assertEquals("Category", normalizeCategoryName("   "))
+    }
+
+    @Test
+    fun categoryNameIsCutToSixtyFourCharacters() {
+        assertEquals(64, normalizeCategoryName("a".repeat(100)).length)
+    }
 }

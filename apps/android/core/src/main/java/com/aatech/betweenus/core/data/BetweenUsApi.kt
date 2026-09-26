@@ -462,6 +462,28 @@ object BetweenUsApi {
         authedArray("GET", "/api/v1/servers/${enc(serverId)}/categories").map { ChannelCategory.from(it) }
     }
 
+    /** `MANAGE_CHANNEL`. The server trims and collapses the name; see [normalizeCategoryName]. */
+    suspend fun createChannelCategory(serverId: String, name: String): ChannelCategory = io {
+        ChannelCategory.from(
+            authed("POST", "/api/v1/servers/${enc(serverId)}/categories", JSONObject().put("name", name)),
+        )
+    }
+
+    suspend fun renameChannelCategory(serverId: String, categoryId: String, name: String): ChannelCategory = io {
+        ChannelCategory.from(
+            authed(
+                "PATCH",
+                "/api/v1/servers/${enc(serverId)}/categories/${enc(categoryId)}",
+                JSONObject().put("name", name),
+            ),
+        )
+    }
+
+    /** Its channels move to uncategorized; none is deleted. */
+    suspend fun deleteChannelCategory(serverId: String, categoryId: String): Unit = io {
+        authed("DELETE", "/api/v1/servers/${enc(serverId)}/categories/${enc(categoryId)}")
+    }
+
     /**
      * Rearranges the sidebar in one go: category order, and each channel's
      * category and place. `MANAGE_CHANNEL`. The answer is not read - the
@@ -478,6 +500,8 @@ object BetweenUsApi {
         type: ChannelType,
         isPrivate: Boolean,
         memberIds: List<String>,
+        /** File it under this category from the start; null for the loose list. */
+        categoryId: String? = null,
     ): Channel = io {
         val body = JSONObject()
             .put("serverId", serverId)
@@ -485,6 +509,7 @@ object BetweenUsApi {
             .put("type", type.name)
             .put("isPrivate", isPrivate)
         if (memberIds.isNotEmpty()) body.put("memberIds", jsonArrayOf(memberIds))
+        if (categoryId != null) body.put("categoryId", categoryId)
         Channel.from(authed("POST", "/api/v1/channels", body))
     }
 

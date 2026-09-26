@@ -504,8 +504,9 @@ object Workspace {
         type: ChannelType,
         isPrivate: Boolean,
         memberIds: List<String>,
+        categoryId: String? = null,
     ): Channel {
-        val channel = BetweenUsApi.createChannel(serverId, name, type, isPrivate, memberIds)
+        val channel = BetweenUsApi.createChannel(serverId, name, type, isPrivate, memberIds, categoryId)
         loadChannels(serverId)
         // Key it now, so it is usable by whoever opens it first rather than by
         // whoever happens to type in it first.
@@ -541,6 +542,26 @@ object Workspace {
             }
             throw failure
         }
+    }
+
+    /** Adds a heading at the end of the list, then re-reads so its position is the server's. */
+    suspend fun createCategory(serverId: String, name: String) {
+        BetweenUsApi.createChannelCategory(serverId, name)
+        loadChannels(serverId)
+    }
+
+    suspend fun renameCategory(serverId: String, categoryId: String, name: String) {
+        BetweenUsApi.renameChannelCategory(serverId, categoryId, name)
+        loadChannels(serverId)
+    }
+
+    /**
+     * Removes a heading. Its channels are not deleted - the server appends them
+     * to the loose list - so the list is re-read to land on the positions it chose.
+     */
+    suspend fun deleteCategory(serverId: String, categoryId: String) {
+        BetweenUsApi.deleteChannelCategory(serverId, categoryId)
+        loadChannels(serverId)
     }
 
     suspend fun deleteChannel(channel: Channel) {

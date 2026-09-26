@@ -208,3 +208,12 @@ fun stepCategory(sections: List<ChannelSection>, categoryId: String, delta: Int)
     // Index 0 is the loose section, so a category's place among categories is at - 1.
     return if (at < 1) sections else moveCategory(sections, categoryId, at - 1 + delta)
 }
+
+/**
+ * The name the server will store for a category: trimmed, inner whitespace
+ * collapsed, cut to 64 characters, and "Category" when nothing is left. The
+ * port of `normalizeCategoryName` in server-service, so a dialog can say what
+ * it is about to save.
+ */
+fun normalizeCategoryName(name: String): String =
+    name.trim().replace(Regex("\\s+"), " ").take(64).ifEmpty { "Category" }
