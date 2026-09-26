@@ -1,5 +1,14 @@
 import assert from 'node:assert/strict';
-import { isThreadReply, replyAge, takesPartIn, threadChipLabel } from './thread';
+import type { ThreadFollowState } from '@betweenus/shared-types';
+import {
+  followMap,
+  isThreadReply,
+  replyAge,
+  takesPartIn,
+  threadChipLabel,
+  threadUnreadBadge,
+  withFollow,
+} from './thread';
 
 const now = new Date('2026-09-22T12:00:00.000Z');
 const ago = (ms: number): string => new Date(now.getTime() - ms).toISOString();
@@ -37,5 +46,30 @@ assert.equal(takesPartIn('me', 'me', []), true, 'the root author is in it');
 assert.equal(takesPartIn('me', 'ada', ['grace', 'me']), true, 'so is anybody who replied');
 assert.equal(takesPartIn('me', 'ada', ['grace']), false);
 assert.equal(takesPartIn(undefined, undefined, []), false, 'nobody signed in is in nothing');
+
+// --- Followed threads -------------------------------------------------------------
+const state = (rootId: string, following: boolean, unreadCount: number): ThreadFollowState => ({
+  rootId,
+  channelId: 'channel',
+  serverId: 'server',
+  following,
+  lastReadAt: null,
+  unreadCount,
+});
+// Only followed threads are kept.
+assert.deepEqual(Object.keys(followMap([state('a', true, 1), state('b', false, 0)])), ['a']);
+// A new state replaces the old; an unfollow drops it.
+const map = followMap([state('a', true, 1)]);
+assert.equal(withFollow(map, state('a', true, 3)).a?.unreadCount, 3);
+assert.deepEqual(withFollow(map, state('a', false, 0)), {});
+assert.equal(withFollow(map, state('z', false, 0)), map, 'an unknown unfollow changes nothing');
+assert.deepEqual(Object.keys(withFollow(map, state('b', true, 0))).sort(), ['a', 'b']);
+
+// The badge: followed and unread only, capped for the chip.
+assert.equal(threadUnreadBadge(undefined), null);
+assert.equal(threadUnreadBadge(state('a', true, 0)), null);
+assert.equal(threadUnreadBadge(state('a', false, 5)), null, 'not following means no badge');
+assert.equal(threadUnreadBadge(state('a', true, 4)), '4');
+assert.equal(threadUnreadBadge(state('a', true, 250)), '99+');
 
 console.log('thread check ok');

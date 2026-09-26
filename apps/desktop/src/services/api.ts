@@ -4,6 +4,9 @@ import type {
   BackupSecretKind,
   CreatePollSettings,
   VotePollRequest,
+  FollowedThread,
+  MarkThreadReadRequest,
+  ThreadFollowState,
   CreateServerInviteRequest,
   ApiErrorBody,
   AuthResponse,
@@ -566,6 +569,29 @@ export const api = {
     request('/api/v1/messages', {
       method: 'POST',
       body: JSON.stringify({ channelId, content, attachmentKeys, viewOnce, poll, threadRootId }),
+    }),
+
+  /**
+   * The threads this account follows, each with its root and unread count,
+   * most recently active first. `serverId` narrows it to one server.
+   */
+  followedThreads: (serverId?: string): Promise<FollowedThread[]> =>
+    request(
+      '/api/v1/messages/threads/followed' +
+        (serverId ? `?serverId=${encodeURIComponent(serverId)}` : ''),
+    ),
+
+  /** Follows or stops following the thread under `rootId`, on every device. */
+  setThreadFollowing: (rootId: string, following: boolean): Promise<ThreadFollowState> =>
+    request(`/api/v1/messages/${encodeURIComponent(rootId)}/thread/follow`, {
+      method: following ? 'PUT' : 'DELETE',
+    }),
+
+  /** Moves this account's read marker in a thread up to the reply named. */
+  readThread: (rootId: string, messageId: string): Promise<ThreadFollowState> =>
+    request(`/api/v1/messages/${encodeURIComponent(rootId)}/thread/read`, {
+      method: 'PUT',
+      body: JSON.stringify({ messageId } satisfies MarkThreadReadRequest),
     }),
 
   /**

@@ -16,6 +16,7 @@ import type {
   ServerMember,
   ServerCustomRole,
   ServerWithRole,
+  ThreadFollowState,
   UserSummary,
   UpdateServerMemberRequest,
   UpdateServerRequest,
@@ -39,7 +40,7 @@ import {
   windowIsFocused,
 } from '../services/notifications';
 import { mentionsMe } from '../services/mentions';
-import { takesPartIn } from '../features/chat/thread';
+import { followMap, takesPartIn, withFollow } from '../features/chat/thread';
 import { cache } from '../services/cache';
 import { forgetAttachments, openAttachment, uploadAttachment } from '../services/attachments';
 import { emojiFor, forgetEmoji, loadEmoji, usedEmoji } from '../services/server-emoji';
@@ -156,7 +157,7 @@ interface ChatState {
   loadingOlder: boolean;
   error: string | null;
   /** What the right-hand column shows, if anything. */
-  rightPanel: 'members' | 'pins' | 'search' | 'scheduled' | 'thread' | 'none';
+  rightPanel: 'members' | 'pins' | 'search' | 'scheduled' | 'thread' | 'threads' | 'none';
   /**
    * The thread on screen: its root, and the replies loaded so far, oldest
    * first. Kept apart from `messages` on purpose - a thread reply is never in
@@ -164,6 +165,15 @@ interface ChatState {
    * filter it back out of every reader of it.
    */
   thread: OpenThread | null;
+  /**
+   * rootId -> this account's follow and unread state in that thread, for every
+   * thread it follows anywhere. Loaded when the socket is ready and kept
+   * current by `thread.follow`, which the server sends on every reply, read
+   * and follow change. What the "N replies" chip reads its unread dot from.
+   */
+  followedThreads: Record<string, ThreadFollowState>;
+  /** The followed-threads panel: the roots, decrypted, most recently active first. */
+  followedList: { items: DecryptedMessage[]; loading: boolean; error: string | null };
   /** Pinned messages of the open channel, newest pin first. */
   pins: DecryptedMessage[];
   /** True while the pin list is being fetched and decrypted for this channel. */
@@ -185,8 +195,20 @@ interface ChatState {
   closeThread: () => void;
   /** The page of the open thread before its oldest reply. */
   loadOlderThread: () => Promise<void>;
-  /** Sends into the open thread. Sealed with the channel key like any message. */
-  sendThreadReply: (content: string) => Promise<void>;
+  /**
+   * Sends into the open thread. Sealed with the channel key like any message;
+   * `attachments` were uploaded through the same path the channel composer
+   * uses, and their keys travel beside the envelope the same way.
+   */
+  sendThreadReply: (content: string, attachments?: MessageAttachment[]) => Promise<void>;
+  /** Every thread this account follows, into `followedThreads`. */
+  loadFollowedThreads: () => Promise<void>;
+  /** The followed-threads panel's list, for the server on screen (or the DMs). */
+  loadFollowedList: () => Promise<void>;
+  /** Follows or stops following a thread, on every device. */
+  setThreadFollowing: (rootId: string, following: boolean) => Promise<void>;
+  /** Says the newest reply in a thread has been seen. A no-op when nothing is unread. */
+  markThreadRead: (rootId: string, reply: Pick<Message, 'id' | 'createdAt'>) => void;
 
   loadServers: () => Promise<void>;
   /** Read markers live on the account, so a badge survives a restart. */
@@ -375,6 +397,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   error: null,
   rightPanel: 'none',
   thread: null,
+  followedThreads: {},
+  followedList: { items: [], loading: false, error: null },
   pins: [],
   loadingPins: false,
   jumpTo: null,
@@ -1063,20 +1087,82 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  sendThreadReply: async (content) => {
+  sendThreadReply: async (content, attachments = []) => {
     const open = get().thread;
     if (!open) return;
     const emoji = usedEmoji(content, emojiFor(get().activeServerId));
+    // The manifest rides inside the envelope exactly as it does in the
+    // channel, so a thread reply's files are as sealed as any other.
     const envelope = await encryptForChannel(
       open.channelId,
       encodeBody({
         text: content,
-        attachments: [],
+        attachments,
         ...(emoji.length > 0 ? { emoji } : {}),
       }),
     );
-    // Arrives over the socket like every other message.
-    await api.sendMessage(open.channelId, envelope, undefined, false, undefined, open.root.id);
+    // Arrives over the socket like every other message. The keys travel
+    // outside the envelope too, so deleting the reply can sweep its blobs.
+    await api.sendMessage(
+      open.channelId,
+      envelope,
+      attachments.map((attachment) => attachment.key),
+      false,
+      undefined,
+      open.root.id,
+    );
+  },
+
+  loadFollowedThreads: async () => {
+    const list = await api.followedThreads().catch(() => null);
+    if (!list) return;
+    set({ followedThreads: followMap(list) });
+  },
+
+  loadFollowedList: async () => {
+    const { view, activeServerId } = get();
+    set({ followedList: { ...get().followedList, loading: true, error: null } });
+    try {
+      // A server's followed threads on a server; the direct messages' at home,
+      // which the server cannot filter for - "no server" is not a server id.
+      const list = view === 'server' && activeServerId
+        ? await api.followedThreads(activeServerId)
+        : (await api.followedThreads()).filter((item) => item.serverId === null);
+      const items = await Promise.all(list.map((item) => decrypt(item.root)));
+      set({
+        followedThreads: { ...get().followedThreads, ...followMap(list) },
+        followedList: { items, loading: false, error: null },
+      });
+    } catch (error) {
+      set({
+        followedList: { ...get().followedList, loading: false, error: (error as Error).message },
+      });
+    }
+  },
+
+  setThreadFollowing: async (rootId, following) => {
+    const before = get().followedThreads[rootId];
+    const state = await api.setThreadFollowing(rootId, following);
+    // The event carries the same state to every device, this one included;
+    // applying the answer here as well means no flicker waiting for it.
+    applyFollow(state);
+    if (!before && following && get().rightPanel === 'threads') void get().loadFollowedList();
+  },
+
+  markThreadRead: (rootId, reply) => {
+    const state = get().followedThreads[rootId];
+    if (!state?.following || state.unreadCount === 0) return;
+    if (state.lastReadAt && state.lastReadAt >= reply.createdAt) return;
+    if (threadReadsInFlight.has(rootId)) return;
+    threadReadsInFlight.add(rootId);
+    // Cleared at once, so the dot goes the moment the reply is on screen; the
+    // answer (and the event) put the real count back if one arrived meanwhile.
+    applyFollow({ ...state, unreadCount: 0, lastReadAt: reply.createdAt });
+    void api
+      .readThread(rootId, reply.id)
+      .then(applyFollow)
+      .catch(() => undefined)
+      .finally(() => threadReadsInFlight.delete(rootId));
   },
 
   showPanel: (panel) => {
@@ -1272,6 +1358,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       error: null,
       pins: [],
       thread: null,
+      followedThreads: {},
+      followedList: { items: [], loading: false, error: null },
       rightPanel: 'none',
       loadingPins: false,
       jumpTo: null,
@@ -1323,6 +1411,15 @@ function markActiveReadSoon(): void {
     readTimer = null;
     useChatStore.getState().markActiveRead();
   }, 1000);
+}
+
+/** Threads whose read marker is being written, so a burst of renders asks once. */
+const threadReadsInFlight = new Set<string>();
+
+/** One thread's follow state, into the map every chip reads. */
+function applyFollow(state: ThreadFollowState): void {
+  const { followedThreads } = useChatStore.getState();
+  useChatStore.setState({ followedThreads: withFollow(followedThreads, state) });
 }
 
 /**
@@ -1681,6 +1778,31 @@ function patchProfile(user: UserSummary): void {
 // Realtime events land here regardless of which component is mounted, for
 // every subscribed channel - not only the one on screen.
 chatSocket.on((event) => {
+  // Every (re)connection: whatever was said while this socket was away moved
+  // the unread counts, and none of those events reached it.
+  if (event.type === 'ready') {
+    void useChatStore.getState().loadFollowedThreads();
+    return;
+  }
+
+  /**
+   * This account's place in one thread moved - a reply arrived, another device
+   * read it, or it was followed or unfollowed somewhere. The server sends it
+   * to this account's sockets only, with the count already worked out.
+   */
+  if (event.type === 'thread.follow') {
+    const state = useChatStore.getState();
+    const known = event.thread.rootId in state.followedThreads;
+    applyFollow(event.thread);
+    // A thread newly followed while the list is on screen has no root there to
+    // draw yet; asking again is simpler than fetching one root.
+    const listed = state.followedList.items.some((item) => item.id === event.thread.rootId);
+    if (event.thread.following && !known && !listed && state.rightPanel === 'threads') {
+      void state.loadFollowedList();
+    }
+    return;
+  }
+
   if (event.type === 'user.updated') {
     patchProfile(event.user);
     return;

@@ -11,7 +11,7 @@
  * Android's `ThreadRules.kt` is the same rule; if one changes, so does the
  * other.
  */
-import type { Message, MessageThreadSummary } from '@betweenus/shared-types';
+import type { Message, MessageThreadSummary, ThreadFollowState } from '@betweenus/shared-types';
 
 const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
@@ -66,4 +66,35 @@ export function takesPartIn(
 ): boolean {
   if (!selfId) return false;
   return rootAuthorId === selfId || replyAuthorIds.includes(selfId);
+}
+
+/**
+ * The follow states a list holds, keyed by root. Only threads being followed:
+ * an unfollowed one has no dot to draw and no place in the followed list.
+ */
+export function followMap(list: ThreadFollowState[]): Record<string, ThreadFollowState> {
+  const out: Record<string, ThreadFollowState> = {};
+  for (const item of list) if (item.following) out[item.rootId] = item;
+  return out;
+}
+
+/** The map after one state arrived: kept while followed, dropped once not. */
+export function withFollow(
+  map: Record<string, ThreadFollowState>,
+  state: ThreadFollowState,
+): Record<string, ThreadFollowState> {
+  if (state.following) return { ...map, [state.rootId]: state };
+  if (!(state.rootId in map)) return map;
+  const rest = { ...map };
+  delete rest[state.rootId];
+  return rest;
+}
+
+/**
+ * What the chip's unread badge says, or null for no badge: a followed thread
+ * with replies this account has not seen. Capped, because it sits in a chip.
+ */
+export function threadUnreadBadge(state: ThreadFollowState | undefined): string | null {
+  if (!state?.following || state.unreadCount <= 0) return null;
+  return state.unreadCount > 99 ? '99+' : String(state.unreadCount);
 }
