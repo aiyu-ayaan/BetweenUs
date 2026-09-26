@@ -31,7 +31,12 @@ node apps/services/chat-service/smoke.mjs
 node apps/services/presence-service/smoke.mjs
 node apps/services/notification-service/smoke.mjs
 node apps/services/remote-gateway/smoke.mjs
+node apps/services/server-service/smoke.mjs   # categories and the channel layout
 ```
+
+The server-service smoke reads `AUTH_URL` (default `http://127.0.0.1:3001`) and
+`SERVER_URL` (default `http://127.0.0.1:3003`), so it can run against an auth
+service on another port.
 
 These are what CI's `integration` job runs against Postgres/Redis service
 containers — see [CI](/deployment/ci).
