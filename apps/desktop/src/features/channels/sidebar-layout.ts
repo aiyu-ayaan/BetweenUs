@@ -177,6 +177,14 @@ export function moveCategoryBefore(
  * list into a category without a pointer. Swapping a voice channel with the
  * text channel above it would only be undone by the grouping, so that edge
  * crosses too.
+ *
+ * The drawn order is loose text list, loose voice list, then each category
+ * (text, voice). A step goes to the previous or next place the channel's own
+ * kind can sit in that order: the other kind's list is stepped over, never
+ * entered (a text channel "moved into" the voice list would be regrouped
+ * straight back), so the last loose text channel steps down into the first
+ * category and the step back undoes it. A voice channel with only its own
+ * section's text above it has nowhere to go and stays put.
  */
 export function stepChannel(
   sections: readonly Section[],

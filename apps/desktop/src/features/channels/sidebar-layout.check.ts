@@ -122,6 +122,17 @@ assert.deepEqual(names(stepChannel(mixed, 't2', 1)), ['-:t1,v1', 'A:t2,t3,v2', '
 assert.deepEqual(names(stepChannel(mixed, 'v1', 1)), ['-:t1,t2', 'A:t3,v1,v2', 'B:']);
 assert.deepEqual(names(stepChannel(mixed, 't2', -1)), ['-:t2,t1,v1', 'A:t3,v2', 'B:'], 'same kind still swaps');
 
+// The drawn order is: loose text list, loose voice list, then each category
+// (text, then voice). A step moves a channel to the previous or next place its
+// own kind can sit in that order, so the other kind's list is stepped over,
+// never entered, and every step can be undone by the opposite one.
+for (const [id, delta] of [['t2', 1], ['t3', -1], ['v2', 1], ['t1', 1]] as const) {
+  const back = stepChannel(stepChannel(mixed, id, delta), id, delta === 1 ? -1 : 1);
+  assert.ok(sameLayout(back, mixed), `${id} ${delta} then back restores the layout`);
+}
+assert.deepEqual(names(stepChannel(mixed, 't2', 1)), ['-:t1,v1', 'A:t2,t3,v2', 'B:'], 'last loose text steps over the voice list into the first category');
+assert.deepEqual(names(stepChannel(mixed, 'v1', -1)), ['-:t1,t2,v1', 'A:t3,v2', 'B:'], 'top loose voice has only the text list above it: nowhere to go');
+
 // Folded categories keep their unread and "you are here".
 const a = sections[1];
 assert.ok(a);

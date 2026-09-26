@@ -174,6 +174,12 @@ fun moveChannel(
  * of the same kind; at the edge of its group it crosses into the next section
  * - the bottom of its group in the one above, the top in the one below - so a
  * channel can be carried into and out of a category one step at a time.
+ *
+ * The drawn order is loose text, loose voice, then each category (text, voice).
+ * A step goes to the previous or next place the channel's own kind can sit in
+ * that order, stepping over the other kind's list rather than entering it, so
+ * the opposite step undoes it. A voice channel with only its own section's
+ * text above it has nowhere to go and stays put.
  */
 fun stepChannel(sections: List<ChannelSection>, channelId: String, delta: Int): List<ChannelSection> {
     val (section, index) = locate(sections, channelId) ?: return sections

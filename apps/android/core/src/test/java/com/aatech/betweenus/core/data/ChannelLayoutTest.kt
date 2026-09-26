@@ -158,6 +158,15 @@ class ChannelLayoutTest {
     }
 
     @Test
+    fun `a step goes to the next place its own kind can sit and the opposite step undoes it`() {
+        val down = stepChannel(mixed, "t2", 1)
+        assertEquals(listOf("-:t1,v1", "cat-a:t2,a1,av", "cat-b:b1"), names(down))
+        assertTrue(sameLayout(mixed, stepChannel(down, "t2", -1)))
+        // The top loose voice channel has only the text list above it.
+        assertTrue(sameLayout(mixed, stepChannel(mixed, "v1", -1)))
+    }
+
+    @Test
     fun `nothing moves past either end of the list`() {
         assertTrue(sameLayout(mixed, stepChannel(mixed, "t1", -1)))
         assertTrue(sameLayout(mixed, stepChannel(mixed, "b1", 1)))
