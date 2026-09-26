@@ -556,14 +556,14 @@ object BetweenUsApi {
     }
 
     /**
-     * rootId -> unread replies, for every thread this account follows. Only
-     * the counts: the roots come along too, but the chip needs none of them.
+     * This account's place in every thread it follows: the counts the chip
+     * draws its badge from, and which server (or none) each hangs off. The
+     * roots come along too, but the chip needs none of them.
      */
-    suspend fun followedThreadUnread(): Map<String, Int> = io {
+    suspend fun followedThreadStates(): List<ThreadFollowState> = io {
         authedArray("GET", "/api/v1/messages/threads/followed")
-            .map { it }
-            .filter { it.optBoolean("following") }
-            .associate { it.optString("rootId") to it.optInt("unreadCount") }
+            .map { ThreadFollowState.from(it) }
+            .filter { it.following }
     }
 
     /** The followed threads with their roots, newest activity first; one server's when named. */

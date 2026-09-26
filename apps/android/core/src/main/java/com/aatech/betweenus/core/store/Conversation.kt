@@ -13,6 +13,7 @@ import com.aatech.betweenus.core.data.MessageMoment
 import com.aatech.betweenus.core.data.MessageReply
 import com.aatech.betweenus.core.data.BetweenUsApi
 import com.aatech.betweenus.core.data.PollSettings
+import com.aatech.betweenus.core.data.ThreadFollowState
 import com.aatech.betweenus.core.data.ThreadRules
 import com.aatech.betweenus.core.data.UploadedObject
 import com.aatech.betweenus.core.data.UploadedPart
@@ -125,6 +126,14 @@ object Conversation {
     private val _threadUnread = MutableStateFlow<Map<String, Int>>(emptyMap())
     val threadUnread: StateFlow<Map<String, Int>> = _threadUnread.asStateFlow()
 
+    /**
+     * rootId -> the server its thread belongs to, null for a direct message.
+     * Kept beside [threadUnread] so a count can be asked for per scope - the
+     * drawer's and home's followed-threads entries each show their own.
+     */
+    private val _threadScope = MutableStateFlow<Map<String, String?>>(emptyMap())
+    val threadScope: StateFlow<Map<String, String?>> = _threadScope.asStateFlow()
+
     /** Threads whose read marker is being written, so a recomposition asks once. */
     private val threadReads = ConcurrentHashMap.newKeySet<String>()
 
@@ -158,8 +167,12 @@ object Conversation {
     /** Every followed thread's unread count, replacing what was held. */
     fun loadThreadUnread() {
         scope.launch {
-            runCatching { BetweenUsApi.followedThreadUnread() }
-                .onSuccess { _threadUnread.value = it }
+            runCatching { BetweenUsApi.followedThreadStates() }.onSuccess { states ->
+                _threadUnread.value = states.associate { it.rootId to it.unreadCount }
+                _threadScope.value = states.associate { it.rootId to it.serverId }
+            }
+            // The set may have changed under an open list.
+            refreshFollowedList()
         }
     }
 
@@ -169,10 +182,9 @@ object Conversation {
      * other device. Nothing is written for a thread with nothing unread.
      */
     fun markThreadSeen(rootId: String, replyId: String) {
-        if ((_threadUnread.value[rootId] ?: 0) <= 0) return
         // A thread left open behind the lock screen is not being read.
-        if (!AppForeground.visible) return
-        if (!threadReads.add(rootId)) return
+        if (!ThreadRules.shouldMarkSeen(_threadUnread.value[rootId], AppForeground.visible, rootId in threadReads)) return
+        threadReads.add(rootId)
         _threadUnread.update { it + (rootId to 0) }
         scope.launch {
             runCatching { BetweenUsApi.readThread(rootId, replyId) }.onSuccess { left ->
@@ -187,6 +199,9 @@ object Conversation {
         _receipts.value = emptyMap()
         _threads.value = emptyMap()
         _threadUnread.value = emptyMap()
+        _threadScope.value = emptyMap()
+        _followedList.value = FollowedList()
+        followedWatch = null
         cursors.clear()
         exhausted.clear()
         visibleChannelId = null
@@ -197,13 +212,9 @@ object Conversation {
         // device, or a follow change. Only this account's sockets receive it.
         if (event.optString("type") == "thread.follow") {
             val thread = event.optJSONObject("thread") ?: return
-            val rootId = thread.optString("rootId")
-            if (rootId.isEmpty()) return
-            if (thread.optBoolean("following")) {
-                _threadUnread.update { it + (rootId to thread.optInt("unreadCount")) }
-            } else {
-                _threadUnread.update { it - rootId }
-            }
+            val state = ThreadFollowState.from(thread)
+            if (state.rootId.isEmpty()) return
+            applyFollow(state.rootId, state.following, state.unreadCount, state.serverId)
             return
         }
         // Somebody read a channel this client is subscribed to. It carries no
@@ -478,13 +489,22 @@ object Conversation {
      */
     suspend fun setThreadFollowing(rootId: String, following: Boolean) {
         val state = BetweenUsApi.setThreadFollowing(rootId, following)
-        applyFollow(state.rootId, state.following, state.unreadCount)
+        applyFollow(state.rootId, state.following, state.unreadCount, state.serverId)
     }
 
-    private fun applyFollow(rootId: String, following: Boolean, unread: Int) {
+    private fun applyFollow(rootId: String, following: Boolean, unread: Int, serverId: String?) {
         if (rootId.isEmpty()) return
-        if (following) _threadUnread.update { it + (rootId to unread) }
-        else _threadUnread.update { it - rootId }
+        val was = rootId in _threadUnread.value
+        if (following) {
+            _threadUnread.update { it + (rootId to unread) }
+            _threadScope.update { it + (rootId to serverId) }
+        } else {
+            _threadUnread.update { it - rootId }
+            _threadScope.update { it - rootId }
+        }
+        // A thread joining or leaving the set is a change the open list has
+        // to show; a count moving on one already in it is not.
+        if (was != following) refreshFollowedList()
     }
 
     /** A followed thread as the list draws it: which thread, and its root, opened. */
@@ -499,6 +519,9 @@ object Conversation {
         val items: List<FollowedRow> = emptyList(),
         val loading: Boolean = false,
         val error: String? = null,
+        /** The scope [items] belong to, and whether they were ever loaded. */
+        val scopeServerId: String? = null,
+        val loaded: Boolean = false,
     )
 
     private val _followedList = MutableStateFlow(FollowedList())
@@ -511,8 +534,37 @@ object Conversation {
      * which roots and how many replies are unread.
      */
     fun loadFollowedList(serverId: String?) {
-        _followedList.update { it.copy(loading = true, error = null) }
-        scope.launch {
+        followedWatch = FollowWatch(serverId)
+        // A different scope starts empty; the same one keeps its rows on
+        // screen while it reloads, so a refresh does not flicker.
+        _followedList.update {
+            if (it.scopeServerId == serverId && it.loaded) it.copy(error = null)
+            else FollowedList(loading = true, scopeServerId = serverId)
+        }
+        fetchFollowedList(serverId)
+    }
+
+    /** The list on screen has stopped being watched. */
+    fun closeFollowedList() {
+        followedWatch = null
+    }
+
+    /** Reloads the list on screen, if there is one, without touching its rows until the answer. */
+    fun refreshFollowedList() {
+        val watch = followedWatch ?: return
+        fetchFollowedList(watch.serverId)
+    }
+
+    private class FollowWatch(val serverId: String?)
+
+    private var followedWatch: FollowWatch? = null
+    private var followedJob: Job? = null
+
+    private fun fetchFollowedList(serverId: String?) {
+        // The newest ask wins: an older answer landing late must not put back
+        // a thread that has since been unfollowed.
+        followedJob?.cancel()
+        followedJob = scope.launch {
             runCatching {
                 val all = BetweenUsApi.followedThreads(serverId)
                 val rows = all.filter { ThreadRules.inScope(it.state.serverId, serverId) }
@@ -525,8 +577,9 @@ object Conversation {
                     FollowedRow(it.state.rootId, it.state.channelId, it.state.serverId, read(it.root))
                 }
             }.onSuccess { rows ->
-                _followedList.value = FollowedList(rows)
+                _followedList.value = FollowedList(rows, scopeServerId = serverId, loaded = true)
             }.onFailure { error ->
+                if (error is kotlinx.coroutines.CancellationException) throw error
                 _followedList.update {
                     it.copy(loading = false, error = error.message ?: "Could not load threads")
                 }

@@ -128,4 +128,22 @@ class ThreadRulesTest {
         assertTrue(state.following)
         assertEquals(3, state.unreadCount)
     }
+
+    @Test
+    fun `an entry counts only its own scope`() {
+        val unread = mapOf("a" to 2, "b" to 3, "c" to 0, "d" to 4, "e" to 5)
+        val scopes = mapOf<String, String?>("a" to "s1", "b" to null, "c" to "s1", "d" to "s2")
+        assertEquals(2, ThreadRules.scopeUnread(unread, scopes, "s1"))
+        assertEquals(3, ThreadRules.scopeUnread(unread, scopes, null))
+        assertEquals(0, ThreadRules.scopeUnread(emptyMap(), scopes, "s1"))
+    }
+
+    @Test
+    fun `marking seen waits for unread, the front and a free line`() {
+        assertTrue(ThreadRules.shouldMarkSeen(2, appVisible = true, inFlight = false))
+        assertFalse(ThreadRules.shouldMarkSeen(0, appVisible = true, inFlight = false))
+        assertFalse(ThreadRules.shouldMarkSeen(null, appVisible = true, inFlight = false))
+        assertFalse(ThreadRules.shouldMarkSeen(2, appVisible = false, inFlight = false))
+        assertFalse(ThreadRules.shouldMarkSeen(2, appVisible = true, inFlight = true))
+    }
 }

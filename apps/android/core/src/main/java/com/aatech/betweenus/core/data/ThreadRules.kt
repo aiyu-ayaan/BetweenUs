@@ -34,6 +34,29 @@ object ThreadRules {
         else -> unread.toString()
     }
 
+    /**
+     * The followed replies waiting in one scope - a server, or (null) the
+     * direct messages - for the drawer's and home's entry to the list. Roots
+     * whose scope is not known yet count for nothing rather than for
+     * everywhere.
+     */
+    fun scopeUnread(
+        unread: Map<String, Int>,
+        scopes: Map<String, String?>,
+        scopeServerId: String?,
+    ): Int = unread.entries.sumOf { (root, count) ->
+        if (count > 0 && root in scopes && inScope(scopes[root], scopeServerId)) count else 0
+    }
+
+    /**
+     * Whether a thread on screen should tell the server it has been read: only
+     * with something unread, while the app is in front (a thread left open
+     * behind the lock screen is not being read), and with no such write
+     * already on its way.
+     */
+    fun shouldMarkSeen(unread: Int?, appVisible: Boolean, inFlight: Boolean): Boolean =
+        (unread ?: 0) > 0 && appVisible && !inFlight
+
     /** The toggle's words. */
     fun followLabel(following: Boolean): String = if (following) "Unfollow" else "Follow"
 

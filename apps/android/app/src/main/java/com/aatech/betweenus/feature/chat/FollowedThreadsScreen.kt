@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,6 +18,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -30,6 +32,7 @@ import com.aatech.betweenus.core.data.PublicUser
 import com.aatech.betweenus.core.data.ThreadRules
 import com.aatech.betweenus.core.store.Conversation
 import com.aatech.betweenus.core.store.Workspace
+import com.aatech.betweenus.ui.components.Badge
 import com.aatech.betweenus.ui.components.BetweenUsIcons
 import com.aatech.betweenus.ui.components.EmptyState
 import com.aatech.betweenus.ui.components.IconAction
@@ -66,7 +69,11 @@ fun FollowedThreadsScreen(
     val directs by Workspace.directChannels.collectAsState()
 
     // A different server is a different list.
+    // The list stays current while it is open - a thread followed elsewhere, or
+    // a reply counted on resume, reloads it in place - and stops being
+    // reloaded once it is not.
     LaunchedEffect(serverId) { Conversation.loadFollowedList(serverId) }
+    DisposableEffect(Unit) { onDispose { Conversation.closeFollowedList() } }
 
     val kept = ThreadRules.stillFollowed(list.items.map { it.rootId }, unread.keys)
     val rows = list.items.filter { it.rootId in kept }
@@ -181,5 +188,21 @@ fun FollowedThreadsScreen(
                 }
             }
         }
+    }
+}
+
+/**
+ * The way into the followed-threads list from the drawer and from home: an
+ * icon, with a badge when replies in this scope's followed threads are unread.
+ * [serverId] is the scope - a server's, or null for the direct messages.
+ */
+@Composable
+fun FollowedThreadsButton(serverId: String?, onClick: () -> Unit) {
+    val unread by Conversation.threadUnread.collectAsState()
+    val scopes by Conversation.threadScope.collectAsState()
+    val waiting = ThreadRules.scopeUnread(unread, scopes, serverId)
+    Box {
+        IconAction(BetweenUsIcons.Message, "Followed threads", onClick)
+        if (waiting > 0) Badge(count = waiting, modifier = Modifier.align(Alignment.TopEnd))
     }
 }
