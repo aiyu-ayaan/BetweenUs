@@ -645,7 +645,10 @@ different account. `friends.changed` reloads it as well as the friend and
 conversation lists, because it is what folds a blocked person's messages in
 shared servers: `ChatScreen` turns each run of theirs into one `BlockedRunRow`
 ("Blocked message · Show", revealed for that screen only), and `PushService`
-drops a push from them even if the server has not been redeployed yet.
+drops a push from them even if the server has not been redeployed yet. A push
+in a cold process checks the list before `Workspace.refresh()` has hydrated it,
+so `PushGate.blockedList()` falls back to the cached `blocked` row when the list
+in memory is empty (`PushGate.blockedOrCached`, tested in `PushGateTest`).
 
 **Drafts live in the same Room table.** `Drafts` keeps unsent composer text and
 the reply target per conversation in memory first, and writes one `drafts` row
