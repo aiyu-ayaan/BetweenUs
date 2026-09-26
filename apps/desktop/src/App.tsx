@@ -39,6 +39,7 @@ import { MemberList } from './features/members/MemberList';
 import { ChatView } from './features/chat/ChatView';
 import { PinnedPanel } from './features/chat/PinnedPanel';
 import { ThreadPanel } from './features/chat/ThreadPanel';
+import { FollowedThreadsPanel } from './features/chat/FollowedThreadsPanel';
 import { SearchPanel } from './features/chat/SearchPanel';
 import { ScheduledPanel } from './features/chat/ScheduledPanel';
 import { followScheduledNotification, useScheduledStore } from './stores/scheduled';
@@ -471,6 +472,7 @@ function Workbench(): JSX.Element {
     rightPanel === 'search' ||
     rightPanel === 'scheduled' ||
     rightPanel === 'thread' ||
+    rightPanel === 'threads' ||
     (rightPanel === 'members' && view === 'server');
   const rightSheet = useFocusTrap<HTMLDivElement>(isRightPanelOpen);
 
@@ -650,6 +652,9 @@ function Workbench(): JSX.Element {
                 {rightPanel === 'search' && <SearchPanel onClose={handleCloseRightPanel} />}
                 {rightPanel === 'scheduled' && <ScheduledPanel onClose={handleCloseRightPanel} />}
                 {rightPanel === 'thread' && <ThreadPanel onClose={handleCloseRightPanel} />}
+                {rightPanel === 'threads' && (
+                  <FollowedThreadsPanel onClose={handleCloseRightPanel} />
+                )}
                 {rightPanel === 'members' && view === 'server' && (
                   <MemberList onClose={handleCloseRightPanel} />
                 )}
@@ -694,6 +699,12 @@ function Workbench(): JSX.Element {
             )}
             {rightPanel === 'thread' && (
               <ThreadPanel onClose={handleCloseRightPanel} className="h-full w-full border-none bg-surface-900" />
+            )}
+            {rightPanel === 'threads' && (
+              <FollowedThreadsPanel
+                onClose={handleCloseRightPanel}
+                className="h-full w-full border-none bg-surface-900"
+              />
             )}
             {rightPanel === 'members' && view === 'server' && (
               <MemberList onClose={handleCloseRightPanel} className="h-full w-full border-none bg-surface-900 flex" />

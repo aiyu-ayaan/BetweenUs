@@ -42,7 +42,7 @@ import { ChannelMenu } from './ChannelMenu';
 import { ForwardDialog } from './ForwardDialog';
 import { PollCard } from './PollCard';
 import { PollComposer } from './PollComposer';
-import { threadChipLabel } from './thread';
+import { threadChipLabel, threadUnreadBadge } from './thread';
 import { MessageMenu } from './MessageMenu';
 import { WhenPicker } from './WhenPicker';
 import { useScheduledStore } from '../../stores/scheduled';
@@ -405,6 +405,43 @@ function ScheduledButton(): JSX.Element {
 }
 
 /**
+ * Opens the followed threads of the server on screen (or of the direct
+ * messages, at home). The dot counts threads with replies not yet seen - how
+ * many threads, not how many replies, because "which conversations" is what
+ * the list answers.
+ */
+function ThreadsButton(): JSX.Element {
+  const current = useChatStore((state) => state.rightPanel);
+  const showPanel = useChatStore((state) => state.showPanel);
+  const unreadThreads = useChatStore((state) => {
+    const scope = state.view === 'server' ? state.activeServerId : null;
+    return Object.values(state.followedThreads).filter(
+      (thread) => thread.serverId === scope && thread.unreadCount > 0,
+    ).length;
+  });
+  const open = current === 'threads';
+  return (
+    <button
+      type="button"
+      onClick={() => showPanel(open ? 'none' : 'threads')}
+      aria-pressed={open}
+      aria-label={`Followed threads${unreadThreads > 0 ? `, ${unreadThreads} with new replies` : ''}`}
+      title="Followed threads"
+      className={`relative flex h-9 w-9 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:h-8 sm:w-8 cursor-pointer items-center justify-center rounded-md p-1.5 transition-colors duration-150 hover:bg-white/[0.07] hover:text-slate-100 ${
+        open ? 'bg-white/[0.07] text-slate-100' : 'text-slate-400'
+      }`}
+    >
+      <MessageIcon className="h-5 w-5" />
+      {unreadThreads > 0 && (
+        <span className="absolute -end-0.5 -top-0.5 min-w-[16px] rounded-full bg-accent px-1 text-center text-[10px] font-semibold leading-4 text-white">
+          {unreadThreads}
+        </span>
+      )}
+    </button>
+  );
+}
+
+/**
  * Call the person on the other side of a direct message.
  *
  * A one-to-one call has no voice channel to join: the DM *is* the channel the
@@ -624,6 +661,7 @@ export function ChatView({
             icon={<PinIcon className="h-5 w-5" />}
           />
           <PanelButton panel="search" label="Search" icon={<SearchIcon className="h-5 w-5" />} />
+          <ThreadsButton />
           <ScheduledButton />
           <MuteButton channelId={channel.id} />
 
@@ -740,6 +778,7 @@ function MessageList({
   const react = useChatStore((state) => state.react);
   const setReplyTo = useChatStore((state) => state.setReplyTo);
   const openThread = useChatStore((state) => state.openThread);
+  const followedThreads = useChatStore((state) => state.followedThreads);
   const loadOlder = useChatStore((state) => state.loadOlder);
   const loadingOlder = useChatStore((state) => state.loadingOlder);
   const exhausted = useChatStore((state) => state.cursors[channel.id] === null);
@@ -1358,14 +1397,23 @@ function MessageList({
                   {(() => {
                     const chip = threadChipLabel(message.thread);
                     if (!chip) return null;
+                    // A followed thread with replies not yet seen says how
+                    // many; every device clears it once the panel shows them.
+                    const badge = threadUnreadBadge(followedThreads[message.id]);
                     return (
                       <button
                         type="button"
                         onClick={() => void openThread(message)}
+                        aria-label={badge ? `${chip}, ${badge} new` : chip}
                         className="mt-1 flex max-w-full cursor-pointer items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-medium text-accent transition-colors duration-150 hover:bg-white/[0.07]"
                       >
                         <MessageIcon className="h-3.5 w-3.5 shrink-0" />
                         <span className="truncate">{chip}</span>
+                        {badge && (
+                          <span className="shrink-0 rounded-full bg-accent px-1.5 text-[10px] font-semibold leading-4 text-white">
+                            {badge}
+                          </span>
+                        )}
                       </button>
                     );
                   })()}
