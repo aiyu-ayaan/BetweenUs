@@ -790,10 +790,6 @@ object Conversation {
     }
 
     /**
-     * Replaces this account's ballot. The server referees it and answers with
-     * the tally, which is what gets drawn - no optimistic bar.
-     */
-    /**
      * Sends a poll. The question is the text, so a client that has never heard
      * of polls still shows what was asked; the labels ride beside it inside the
      * envelope. The server is told only how many options there are, whether
@@ -817,6 +813,10 @@ object Conversation {
         insert(read(message))
     }
 
+    /**
+     * Replaces this account's ballot. The server referees it and answers with
+     * the tally, which is what gets drawn - no optimistic bar.
+     */
     suspend fun votePoll(message: Message, options: List<Int>) {
         replace(read(BetweenUsApi.votePoll(message.id, options)))
     }
