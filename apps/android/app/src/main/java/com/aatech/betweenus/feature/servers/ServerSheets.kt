@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.aatech.betweenus.core.data.ChannelCategory
 import com.aatech.betweenus.core.data.ChannelType
 import com.aatech.betweenus.core.data.InviteLink
 import com.aatech.betweenus.core.data.InvitePreview
@@ -331,6 +332,8 @@ fun CreateChannelSheet(
     onDismiss: () -> Unit,
     /** Opened from the Voice channels heading: start on Voice. Still changeable. */
     initialVoice: Boolean = false,
+    /** Opened from a category's heading: file the channel under it. */
+    category: ChannelCategory? = null,
 ) {
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
@@ -344,7 +347,11 @@ fun CreateChannelSheet(
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(20.dp)) {
             Text(
-                text = "Create a channel in ${server.name}",
+                text = if (category != null) {
+                    "Create a channel in ${category.name}"
+                } else {
+                    "Create a channel in ${server.name}"
+                },
                 style = MaterialTheme.typography.titleMedium,
                 color = Slate100,
             )
@@ -408,7 +415,74 @@ fun CreateChannelSheet(
                                 type = if (voice) ChannelType.VOICE else ChannelType.TEXT,
                                 isPrivate = private,
                                 memberIds = emptyList(),
+                                categoryId = category?.id,
                             )
+                            onDismiss()
+                        }.exceptionOrNull()?.message
+                        busy = false
+                    }
+                },
+            )
+        }
+    }
+}
+
+/**
+ * A category's name, for making one ([category] null) or renaming one. What is
+ * sent is the trimmed text; the server collapses spaces and caps it at 64, and
+ * `normalizeCategoryName` says what will be stored.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CategoryNameSheet(
+    server: ServerWithRole,
+    category: ChannelCategory?,
+    onDismiss: () -> Unit,
+) {
+    val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope = rememberCoroutineScope()
+
+    var name by remember { mutableStateOf(category?.name.orEmpty()) }
+    var busy by remember { mutableStateOf(false) }
+    var note by remember { mutableStateOf<String?>(null) }
+
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
+        Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(20.dp)) {
+            Text(
+                text = if (category == null) "Create a category in ${server.name}" else "Rename ${category.name}",
+                style = MaterialTheme.typography.titleMedium,
+                color = Slate100,
+            )
+
+            Spacer(Modifier.height(16.dp))
+            BetweenUsField(
+                label = "Name",
+                value = name,
+                onValueChange = { name = it; note = null },
+                placeholder = "Games",
+                imeAction = ImeAction.Done,
+                enabled = !busy,
+            )
+
+            note?.let {
+                Spacer(Modifier.height(12.dp))
+                Notice(it, Danger)
+            }
+
+            Spacer(Modifier.height(16.dp))
+            BetweenUsButton(
+                text = if (category == null) "Create" else "Save",
+                busy = busy,
+                enabled = name.isNotBlank(),
+                onClick = {
+                    scope.launch {
+                        busy = true
+                        note = runCatching {
+                            if (category == null) {
+                                Workspace.createCategory(server.id, name.trim())
+                            } else {
+                                Workspace.renameCategory(server.id, category.id, name.trim())
+                            }
                             onDismiss()
                         }.exceptionOrNull()?.message
                         busy = false

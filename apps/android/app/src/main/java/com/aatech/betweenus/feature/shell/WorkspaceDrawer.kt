@@ -3,12 +3,15 @@ package com.aatech.betweenus.feature.shell
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
+import com.aatech.betweenus.core.data.ChannelCategory
 import com.aatech.betweenus.core.data.ChannelSection
 import com.aatech.betweenus.core.data.layoutFrom
 import com.aatech.betweenus.core.data.sameLayout
@@ -54,12 +57,14 @@ import com.aatech.betweenus.core.data.Channel
 import com.aatech.betweenus.core.data.ChannelType
 import com.aatech.betweenus.core.data.channelSections
 import com.aatech.betweenus.core.data.PublicUser
+import com.aatech.betweenus.core.data.Session
 import com.aatech.betweenus.core.data.ServerWithRole
 import com.aatech.betweenus.core.data.PresenceStatus
 import com.aatech.betweenus.core.store.Drafts
 import com.aatech.betweenus.core.store.Presence
 import com.aatech.betweenus.core.store.Statuses
 import com.aatech.betweenus.core.store.Workspace
+import com.aatech.betweenus.feature.servers.CategoryNameSheet
 import com.aatech.betweenus.feature.servers.CreateChannelSheet
 import com.aatech.betweenus.feature.servers.JoinOrCreateServerSheet
 import com.aatech.betweenus.ui.components.AvatarWithStatus
@@ -95,6 +100,14 @@ fun WorkspaceDrawer(
     var addingServer by remember { mutableStateOf(false) }
     /** The create-channel sheet: null closed, false starting on Text, true on Voice. */
     var addingChannel by remember { mutableStateOf<Boolean?>(null) }
+    /** The category the create-channel sheet files into; null for the loose list. */
+    var addingChannelIn by remember { mutableStateOf<ChannelCategory?>(null) }
+    /** The category-name sheet: closed, making one, or renaming this one. */
+    var namingCategory by remember { mutableStateOf<CategoryNaming?>(null) }
+    var deletingCategory by remember { mutableStateOf<ChannelCategory?>(null) }
+    var deleteError by remember { mutableStateOf<String?>(null) }
+    var deleteBusy by remember { mutableStateOf(false) }
+    var createMenu by remember { mutableStateOf(false) }
 
     val channels by Workspace.channels.collectAsState()
     val categories by Workspace.categories.collectAsState()
@@ -143,13 +156,19 @@ fun WorkspaceDrawer(
         )
     }
 
-    fun categoryMoves(categoryId: String): Moves? {
+    fun categoryMoves(category: ChannelCategory): Moves? {
         if (!canArrange) return null
-        val up = stepCategory(sections, categoryId, -1)
-        val down = stepCategory(sections, categoryId, 1)
+        val up = stepCategory(sections, category.id, -1)
+        val down = stepCategory(sections, category.id, 1)
         return Moves(
             up = if (sameLayout(sections, up)) null else { { arrange(up) } },
             down = if (sameLayout(sections, down)) null else { { arrange(down) } },
+            more = listOf(
+                MenuEntry("Add text channel") { addingChannelIn = category; addingChannel = false },
+                MenuEntry("Add voice channel") { addingChannelIn = category; addingChannel = true },
+                MenuEntry("Rename category") { namingCategory = CategoryNaming(category) },
+                MenuEntry("Delete category") { deleteError = null; deletingCategory = category },
+            ),
         )
     }
 
@@ -277,11 +296,30 @@ fun WorkspaceDrawer(
                     )
                 }
                 if (server != null && server.can("MANAGE_CHANNEL")) {
-                    IconAction(
-                        icon = BetweenUsIcons.Plus,
-                        contentDescription = "Create a channel",
-                        onClick = { addingChannel = false },
-                    )
+                    Box {
+                        IconAction(
+                            icon = BetweenUsIcons.Plus,
+                            contentDescription = "Create a channel or category",
+                            onClick = { createMenu = true },
+                        )
+                        DropdownMenu(expanded = createMenu, onDismissRequest = { createMenu = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Create a channel") },
+                                onClick = {
+                                    createMenu = false
+                                    addingChannelIn = null
+                                    addingChannel = false
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Create a category") },
+                                onClick = {
+                                    createMenu = false
+                                    namingCategory = CategoryNaming(null)
+                                },
+                            )
+                        }
+                    }
                 }
             }
             arrangeError?.let {
@@ -325,7 +363,7 @@ fun WorkspaceDrawer(
                                 LooseHeading(
                                     label = "Text channels",
                                     createLabel = "Create text channel".takeIf { canArrange },
-                                    onCreate = { addingChannel = false },
+                                    onCreate = { addingChannelIn = null; addingChannel = false },
                                 )
                             }
                             items(text, key = { it.id }) { row(it) }
@@ -336,7 +374,7 @@ fun WorkspaceDrawer(
                                 LooseHeading(
                                     label = "Voice channels",
                                     createLabel = "Create voice channel".takeIf { canArrange },
-                                    onCreate = { addingChannel = true },
+                                    onCreate = { addingChannelIn = null; addingChannel = true },
                                 )
                             }
                             items(voice, key = { it.id }) { row(it) }
@@ -355,7 +393,7 @@ fun WorkspaceDrawer(
                                 // happened, and that you are inside it.
                                 unread = if (folded) section.channels.sumOf { unread[it.id] ?: 0 } else 0,
                                 containsSelected = folded && section.channels.any { it.id == selectedChannelId },
-                                moves = categoryMoves(category.id),
+                                moves = categoryMoves(category),
                                 onToggle = {
                                     collapsed = CollapsedCategories.toggle(user.id, server.id, category.id)
                                 },
@@ -406,7 +444,47 @@ fun WorkspaceDrawer(
     }
     val voice = addingChannel
     if (voice != null && server != null) {
-        CreateChannelSheet(server = server, onDismiss = { addingChannel = null }, initialVoice = voice)
+        CreateChannelSheet(
+            server = server,
+            onDismiss = { addingChannel = null; addingChannelIn = null },
+            initialVoice = voice,
+            category = addingChannelIn,
+        )
+    }
+    val naming = namingCategory
+    if (naming != null && server != null) {
+        CategoryNameSheet(server = server, category = naming.category, onDismiss = { namingCategory = null })
+    }
+    val doomed = deletingCategory
+    if (doomed != null && server != null) {
+        // Says what happens to the channels: the fear with "delete" is losing them.
+        AlertDialog(
+            onDismissRequest = { if (!deleteBusy) deletingCategory = null },
+            title = { Text("Delete ${doomed.name}?") },
+            text = {
+                Text(
+                    "Its channels are not deleted. They move to the uncategorized channels, " +
+                        "outside any category." + (deleteError?.let { "\n\n$it" } ?: ""),
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !deleteBusy,
+                    onClick = {
+                        deleteBusy = true
+                        scope.launch {
+                            val failure = runCatching { Workspace.deleteCategory(server.id, doomed.id) }
+                                .exceptionOrNull()
+                            deleteBusy = false
+                            if (failure == null) deletingCategory = null else deleteError = Session.messageOf(failure)
+                        }
+                    },
+                ) { Text("Delete category") }
+            },
+            dismissButton = {
+                TextButton(enabled = !deleteBusy, onClick = { deletingCategory = null }) { Text("Cancel") }
+            },
+        )
     }
 }
 
@@ -415,14 +493,24 @@ fun WorkspaceDrawer(
  * Offered twice: as the long-press menu, and as screen-reader actions on the
  * row itself, so moving never depends on seeing or holding anything.
  */
-private class Moves(val up: (() -> Unit)?, val down: (() -> Unit)?) {
+private class Moves(
+    val up: (() -> Unit)?,
+    val down: (() -> Unit)?,
+    /** More entries after the two moves - a category heading's rename, delete and add-channel. */
+    val more: List<MenuEntry> = emptyList(),
+) {
     fun accessibilityActions(): List<CustomAccessibilityAction> = listOfNotNull(
         up?.let { move -> CustomAccessibilityAction("Move up") { move(); true } },
         down?.let { move -> CustomAccessibilityAction("Move down") { move(); true } },
-    )
+    ) + more.map { entry -> CustomAccessibilityAction(entry.label) { entry.run(); true } }
 }
 
-/** The long-press menu: Move up, Move down. */
+private class MenuEntry(val label: String, val run: () -> Unit)
+
+/** What the category-name sheet is for: [category] null makes one, otherwise renames it. */
+private class CategoryNaming(val category: ChannelCategory?)
+
+/** The long-press menu: Move up, Move down, then any [Moves.more]. */
 @Composable
 private fun MoveMenu(expanded: Boolean, moves: Moves, onDismiss: () -> Unit) {
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
@@ -442,6 +530,15 @@ private fun MoveMenu(expanded: Boolean, moves: Moves, onDismiss: () -> Unit) {
                 moves.down?.invoke()
             },
         )
+        moves.more.forEach { entry ->
+            DropdownMenuItem(
+                text = { Text(entry.label) },
+                onClick = {
+                    onDismiss()
+                    entry.run()
+                },
+            )
+        }
     }
 }
 
@@ -543,7 +640,7 @@ private fun CategoryHeader(
             .semantics { if (moves != null) customActions = moves.accessibilityActions() }
             .combinedClickable(
                 onClickLabel = if (folded) "Expand $name" else "Collapse $name",
-                onLongClickLabel = if (moves != null) "Move $name" else null,
+                onLongClickLabel = if (moves != null) "Manage $name" else null,
                 onLongClick = if (moves != null) { { menu = true } } else null,
                 onClick = onToggle,
             )
