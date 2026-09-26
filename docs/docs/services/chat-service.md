@@ -97,7 +97,7 @@ not the process.
 | DELETE | `/:messageId/thread/follow` | Stop following it; remembered until the caller replies there |
 | PUT | `/:messageId/thread/read` | Move the caller's read marker in the thread up to `{ messageId }`, a reply in it |
 | GET | `/unfurl` | Link preview metadata |
-| GET | `/pins` | A channel's pinned messages |
+| GET | `/pins` | A channel's pinned messages, newest pin first. `?channelId=` alone returns the bare array (capped at 100) older clients read. Adding `limit` (1-100) and/or `cursor` returns `{ items, nextCursor }`, paged by (pinned-at, id) so pins added or removed while scrolling neither shift nor repeat rows. A malformed cursor is `400 INVALID_CURSOR` |
 | POST | `/` | Send a message; `threadRootId` posts it into that root's thread |
 | GET | `/:messageId/edits` | Earlier versions of an edited message, newest first, capped at 50, still sealed. Same visibility as the message (404 outside its channel or before the caller's clear-chat cut-off); empty for a tombstone |
 | PATCH | `/:messageId` | Edit (author only); the old envelope is kept in `message_edits` in the same transaction |

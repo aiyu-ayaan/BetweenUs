@@ -162,12 +162,12 @@ to be framed, so no browser tab can ever show it.
 | Edit history — tap "(edited)" to see earlier versions, sealed like the message and opened on the device | ✅ popover | ✅ popover | ✅ bottom sheet |
 | Polls, refereed not decrypted (vote, change, retract, close) | ✅ create + vote | ✅ create + vote | ✅ create + vote |
 | Threads — a side conversation under one message, with an "N replies" chip, follow / unfollow, unread badge, followed list and files in a reply | ✅ side panel | ✅ side panel | ✅ own screen |
-| Pinned messages | ✅ | ✅ | ✅ |
+| Pinned messages, paged as you scroll | ✅ | ✅ | ✅ |
 | Scheduled send and remind-me (kept on the device, never on the server) | ✅ | ✅ | ✅ |
 | Custom emoji in messages | ✅ | ✅ | ✅ |
 | `:` emoji suggestion menu while typing | ✅ | ✅ | ✅ a bar |
 | Emoji picker, including the server's own | ✅ | ✅ | ✅ |
-| Search within a channel | ✅ | ✅ | ✅ |
+| Search within a channel, walking back through older history on the device in capped runs | ✅ | ✅ | ✅ |
 | Quick switcher | ✅ Ctrl+K | ✅ Ctrl+K | ✅ drawer |
 | Search a conversation from the keyboard (Ctrl+F) | ✅ | ✅ | — |
 | Keyboard shortcut sheet (`?`) | ✅ | ✅ | — |
