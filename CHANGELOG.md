@@ -1,5 +1,108 @@
 # Changelog
 
+## [1.0.12](https://github.com/aiyu-ayaan/BetweenUs/compare/v1.0.11...v1.0.12) (2026-09-26)
+
+### Features
+
+* Page the pinned list and walk older history in search
+* Search walks older history on the device in bounded batches
+* Page the pinned panel with infinite scroll and a load-more button
+* Page the pinned list with a keyset cursor
+* Open earlier versions of an edited message from its marker
+* Keep sealed prior versions on edit and serve GET /messages/:id/edits
+* Add message_edits for sealed prior versions of an edited message
+* Inject remote input on Linux X11 and macOS, and tell the viewer when it cannot
+* Validate remote input events in the agent, with a pure key and scaling table
+* Report real presence socket counts beside distinct accounts on the health page
+* Key presence per socket so an account goes offline with its last device
+* Followed-threads entries in the drawer and on Friends
+* Keep the followed-threads list fresh and scope its unread count
+* Follow toggle, thread files and the followed-threads screen
+* Let the outbox send files into a thread
+* Follow toggle, followed-threads list and resume marking in the thread store
+* Manage categories from the drawer and create channels into one
+* Category create, rename and delete calls, and categoryId on create channel
+* Unread badge on a followed thread's replies chip
+* Thread composer files, unread chip badge and followed threads
+* Track followed threads and send files into a thread
+* Wake thread followers and respect an unfollow
+* Follow threads, per-thread read markers and the followed list
+* Thread follow state, followed threads and the thread.follow event
+* Add thread follows with a per-thread read marker
+* Join a share to watch it and keep the stage pin for the call
+* Add pure stage rules for the hero, the pin and share joining
+* Keep the stage pin for the session of a call
+* Fold a blocked person's messages in shared servers
+* Skip pushes from somebody the recipient blocked
+* Share the username filter across instances over the event bus
+* Reorder channels and categories from the drawer
+* Open the create-channel sheet on a chosen kind
+* Let a list row carry a labelled long-press
+* Create a poll from the attachment sheet
+* Keep folded categories per account and server across launches
+* Rearrange a server's channels optimistically with rollback
+* Send a poll as a sealed message with its settings beside it
+* Port the channel layout rules and step moves
+* Share system audio on Linux through PipeWire
+
+### Bug fixes
+
+* Android composer schedule button alignment, sealed edit history, and paged pins
+* Align schedule message button with send button in composer
+* Check the cached block list before a cold-process push
+* Let the second smoke account speak again before it replies in a thread
+* Tie a stage pin's clearing to the call it was set in
+* Open a folded blocked run when a jump targets a message inside it
+* Drop a malformed username event instead of throwing on it
+* Stop offering Forward on a poll
+* Say why a poll cannot be sent yet
+* Put the vote comment back on votePoll
+* Show only a joined share in picture-in-picture
+
+### Other changes
+
+* Record phase 52, the message finished and the machine hardened
+* Document paged pins and the on-device search walk
+* Document edit history across chat-service, schema, protocol, shared types and features
+* Restore smoke labels
+* Fix smoke history name clash
+* Smoke edit history, its privacy and its removal with the message
+* Document input backends, agent-side validation and platform support
+* Smoke three devices of one account stay online until the last closes
+* Record the followed-thread entries, step rule pin and server smoke
+* Say why Web has no picture-in-picture, document the server smoke
+* Add a smoke for categories and the channel layout endpoint
+* Pin the step rule to the drawn order on both clients
+* Document the followed-threads entries and live refresh
+* Note the cached block list in cold-process pushes
+* Record the live migration and smoke run
+* Record the gap closures for blocked-run jumps, stage pins and Android categories and threads
+* Document following threads, the followed list and thread files
+* Word the Android picture-in-picture trigger accurately
+* Android has picture-in-picture while minimised
+* Document category management
+* Track the phase 51, blocking and call-stage follow-ups
+* Document followed threads, the read marker and thread files
+* Document Android watching, share placeholders and the call-long stage pin
+* Note the shared username filter, blocked-run folding and poll forwarding
+* Document folding a blocked person in shared servers and the cached block list
+* Document that a poll cannot be forwarded
+* Document the username filter shared over the event bus
+* Mark Android poll creation and channel reordering in the feature matrix
+* Document the channel list, rearranging it, and creating a poll
+* Document Linux share system audio through PipeWire
+* Document the software encoder budget and joined-only share encoding
+* Hold a share on a software encoder to 30 fps and 720p
+* Encode a share only for peers who joined the stream
+
+### Artifacts
+
+| Platform | This release |
+| --- | --- |
+| Server images | Built here |
+| Desktop | Built here |
+| Android | Built here |
+
 ## [1.0.11](https://github.com/aiyu-ayaan/BetweenUs/compare/v1.0.10...v1.0.11) (2026-09-25)
 
 ### Bug fixes
