@@ -40,6 +40,7 @@ import {
   windowIsFocused,
 } from '../services/notifications';
 import { mentionsMe } from '../services/mentions';
+import { appendPinPage, refreshPinPages } from '../features/chat/pin-paging';
 import { followMap, takesPartIn, withFollow } from '../features/chat/thread';
 import { cache } from '../services/cache';
 import { forgetAttachments, openAttachment, uploadAttachment } from '../services/attachments';
@@ -178,6 +179,10 @@ interface ChatState {
   pins: DecryptedMessage[];
   /** True while the pin list is being fetched and decrypted for this channel. */
   loadingPins: boolean;
+  /** Where the next page of pins starts; null once the last one is loaded. */
+  pinsCursor: string | null;
+  /** True while a further page of pins is in flight. */
+  loadingMorePins: boolean;
   /**
    * A message the pinned list or the search results asked to be shown. The
    * message list watches it, scrolls there and highlights it, then clears it.
@@ -330,6 +335,22 @@ interface ChatState {
   /** Stops voting early. */
   closePoll: (messageId: string) => Promise<void>;
   loadPins: () => Promise<void>;
+  /** Appends the next page of pins, when there is one. */
+  loadMorePins: () => Promise<void>;
+  /**
+   * One older page of the open channel, fetched and opened for the search to
+   * read. The window's own history and cursor are not touched.
+   */
+  fetchSearchPage: (
+    channelId: string,
+    cursor: string,
+  ) => Promise<{ items: DecryptedMessage[]; nextCursor: string | null }>;
+  /**
+   * Makes sure a message is in the window - reading back until it is, within
+   * a bound - and then scrolls to it. A pin or a search hit can be older than
+   * anything loaded.
+   */
+  revealMessage: (messageId: string) => Promise<void>;
   /** Who else has read the open channel. Cheap, and only for the open one. */
   loadReceipts: (channelId: string) => Promise<void>;
   showPanel: (panel: ChatState['rightPanel']) => void;
@@ -401,6 +422,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   followedList: { items: [], loading: false, error: null },
   pins: [],
   loadingPins: false,
+  pinsCursor: null,
+  loadingMorePins: false,
   jumpTo: null,
   receipts: {},
 
@@ -644,6 +667,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       error: null,
       // Pins belong to a channel, so they go with it; the panel reloads them.
       pins: [],
+      pinsCursor: null,
       jumpTo: null,
     });
     chatSocket.subscribe(channelId);
@@ -1012,19 +1036,65 @@ export const useChatStore = create<ChatState>((set, get) => ({
   loadPins: async () => {
     const channelId = get().activeChannelId;
     if (!channelId) {
-      set({ pins: [], loadingPins: false });
+      set({ pins: [], pinsCursor: null, loadingPins: false });
       return;
     }
     set({ loadingPins: true });
     try {
-      const rows = await api.pins(channelId).catch(() => []);
-      const pins = await Promise.all(rows.map((message) => decrypt(message)));
-      if (get().activeChannelId === channelId) set({ pins });
+      const page = await api.pins(channelId).catch(() => ({ items: [], nextCursor: null }));
+      const fresh = await Promise.all(page.items.map((message) => decrypt(message)));
+      if (get().activeChannelId === channelId) {
+        // A reload (somebody pinned something) keeps the pages already read.
+        const { pins, cursor } = refreshPinPages(get().pins, get().pinsCursor, {
+          items: fresh,
+          nextCursor: page.nextCursor,
+        });
+        set({ pins, pinsCursor: cursor });
+      }
     } finally {
       // A decryption that threw must still clear the flag, or the panel is grey
       // bars until the channel is changed.
       if (get().activeChannelId === channelId) set({ loadingPins: false });
     }
+  },
+
+  loadMorePins: async () => {
+    const channelId = get().activeChannelId;
+    const cursor = get().pinsCursor;
+    if (!channelId || !cursor || get().loadingMorePins || get().loadingPins) return;
+    set({ loadingMorePins: true });
+    try {
+      const page = await api.pins(channelId, cursor);
+      const more = await Promise.all(page.items.map((message) => decrypt(message)));
+      if (get().activeChannelId === channelId) {
+        set({ pins: appendPinPage(get().pins, more), pinsCursor: page.nextCursor });
+      }
+    } catch {
+      // The cursor is kept, so the next scroll tries the same page again.
+    } finally {
+      set({ loadingMorePins: false });
+    }
+  },
+
+  fetchSearchPage: async (channelId, cursor) => {
+    const page = await api.messages(channelId, cursor);
+    void cache.putMessages(page.items).catch(() => undefined);
+    // Pages the window already decrypted are not opened twice: the ids it
+    // holds are reused as they are.
+    const held = new Map((get().history[channelId] ?? []).map((message) => [message.id, message]));
+    const items = await Promise.all(
+      page.items.map((message) => held.get(message.id) ?? decrypt(message)),
+    );
+    return { items, nextCursor: page.nextCursor };
+  },
+
+  revealMessage: async (messageId) => {
+    for (let step = 0; step < 40; step += 1) {
+      if (get().messages.some((message) => message.id === messageId)) break;
+      if (!get().cursors[get().activeChannelId ?? '']) break;
+      await get().loadOlder();
+    }
+    set({ jumpTo: messageId });
   },
 
   openThread: async (root) => {
@@ -1362,6 +1432,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       followedList: { items: [], loading: false, error: null },
       rightPanel: 'none',
       loadingPins: false,
+      pinsCursor: null,
+      loadingMorePins: false,
       jumpTo: null,
       readMarkers: {},
       divider: {},
@@ -1843,7 +1915,7 @@ chatSocket.on((event) => {
 
     const clearedHere = !event.channelId || event.channelId === activeChannelId;
     if (clearedHere) {
-      useChatStore.setState({ messages: [], pins: [], divider: {}, receipts: {} });
+      useChatStore.setState({ messages: [], pins: [], pinsCursor: null, divider: {}, receipts: {} });
       if (activeChannelId) void useChatStore.getState().selectChannel(activeChannelId);
     }
     // Whichever it was, the unread counts moved with it: a badge promising

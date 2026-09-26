@@ -1,9 +1,17 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { dayLabel } from './day';
 import { useChatStore, type DecryptedMessage } from '../../stores/chat';
 import { useAuthStore } from '../../stores/auth';
 import { PersonAvatar } from '../../components/Avatar';
 import { SearchIcon, XIcon } from '../../components/icons';
+import {
+  matchMessages,
+  mergeHits,
+  normaliseTerm,
+  walkOlder,
+  walkStatus,
+  type WalkStop,
+} from './search-walk';
 
 export interface SearchPanelProps {
   onClose?: () => void;
@@ -13,12 +21,14 @@ export interface SearchPanelProps {
 /**
  * Search inside the open conversation.
  *
- * It runs in the client, over the decrypted history this window is holding,
- * and it has to: `messages.content` is ciphertext, so the server cannot match a
- * word in it without being given the channel key, which is the one thing the
- * design will not do. What this means in practice is documented rather than
- * hidden - the footer says how far back the search reached, and scrolling the
- * conversation further back widens it.
+ * It runs in the client, and it has to: `messages.content` is ciphertext, so
+ * the server cannot match a word in it without being given the channel key,
+ * which is the one thing the design will not do. Matches in the window this
+ * device has already decrypted appear at once. Then the search walks back
+ * through older pages - fetched as ciphertext with the ordinary history
+ * cursor, opened here, matched here - in a bounded run that shows how far back
+ * it has read, can be stopped, and stops on its own at a cap rather than
+ * decrypting a whole channel because somebody typed two letters.
  */
 export function SearchPanel({
   onClose,
@@ -28,20 +38,100 @@ export function SearchPanel({
   const channelId = useChatStore((state) => state.activeChannelId);
   const history = useChatStore((state) => (channelId ? state.history[channelId] : undefined));
   const messages = useChatStore((state) => state.messages);
-  const jumpToMessage = useChatStore((state) => state.jumpToMessage);
+  const revealMessage = useChatStore((state) => state.revealMessage);
+  const fetchSearchPage = useChatStore((state) => state.fetchSearchPage);
   const showPanel = useChatStore((state) => state.showPanel);
 
   const [query, setQuery] = useState('');
   const searchable = history ?? messages;
+  const term = normaliseTerm(query);
 
-  const results = useMemo(() => {
-    const term = query.trim().toLowerCase();
-    if (term.length < 2) return [];
-    return searchable
-      .filter((message) => !message.deletedAt && message.content.toLowerCase().includes(term))
-      .slice(-100)
-      .reverse();
-  }, [query, searchable]);
+  const [older, setOlder] = useState<DecryptedMessage[]>([]);
+  const [walk, setWalk] = useState<{
+    running: boolean;
+    stop: WalkStop | null;
+    scanned: number;
+    oldestAt: string | null;
+  } | null>(null);
+  // Bumped to abandon a walk in flight: a new term, another channel, Stop.
+  const generation = useRef(0);
+  const stopped = useRef(false);
+  const resume = useRef<string | null>(null);
+  const scannedBefore = useRef(0);
+
+  const run = useCallback(
+    async (cursor: string, forTerm: string, forChannel: string) => {
+      const mine = ++generation.current;
+      stopped.current = false;
+      setWalk((current) => ({
+        running: true,
+        stop: null,
+        scanned: scannedBefore.current,
+        oldestAt: current?.oldestAt ?? null,
+      }));
+      const result = await walkOlder({
+        term: forTerm,
+        cursor,
+        fetchPage: (next) => fetchSearchPage(forChannel, next),
+        isStopped: () => generation.current !== mine || stopped.current,
+        onProgress: (progress) => {
+          setOlder((current) => mergeHits(current, progress.hits));
+          setWalk({
+            running: true,
+            stop: null,
+            scanned: scannedBefore.current + progress.scanned,
+            oldestAt: progress.oldestAt,
+          });
+          resume.current = progress.cursor;
+        },
+      });
+      // Somebody else's run now: leave the state to it.
+      if (generation.current !== mine) return;
+      scannedBefore.current += result.scanned;
+      resume.current = result.cursor;
+      setWalk((current) => ({
+        running: false,
+        stop: result.stop,
+        scanned: scannedBefore.current,
+        oldestAt: result.oldestAt ?? current?.oldestAt ?? null,
+      }));
+    },
+    [fetchSearchPage],
+  );
+
+  // A new term or channel starts over: the window is matched instantly, the
+  // walk begins from the oldest page it has not read after a short pause so
+  // typing a word does not start a decryption per letter.
+  useEffect(() => {
+    generation.current += 1;
+    setOlder([]);
+    setWalk(null);
+    scannedBefore.current = 0;
+    resume.current = null;
+    if (!term || !channelId) return;
+    const cursor = useChatStore.getState().cursors[channelId];
+    if (!cursor) return; // whole history is already in the window, or not loaded yet
+    const timer = window.setTimeout(() => void run(cursor, term, channelId), 400);
+    return () => {
+      window.clearTimeout(timer);
+      generation.current += 1;
+    };
+  }, [term, channelId, run]);
+
+  const stop = () => {
+    stopped.current = true;
+    setWalk((current) => (current ? { ...current, running: false, stop: 'stopped' } : current));
+  };
+
+  const goOn = () => {
+    if (!term || !channelId || !resume.current) return;
+    void run(resume.current, term, channelId);
+  };
+
+  const results = useMemo(
+    () => (term ? mergeHits(matchMessages(searchable, term).slice(0, 100), older) : []),
+    [term, searchable, older],
+  );
 
   const handleClose = () => {
     if (onClose) {
@@ -78,8 +168,10 @@ export function SearchPanel({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
-        {query.trim().length >= 2 && results.length === 0 && (
-          <p className="px-2 py-4 text-sm text-slate-400">Nothing in the loaded history matches.</p>
+        {term && results.length === 0 && !walk?.running && (
+          <p className="px-2 py-4 text-sm text-slate-400">
+            {walk ? 'Nothing found in the part of the history searched.' : 'Nothing in the loaded history matches.'}
+          </p>
         )}
 
         <ul className="space-y-2">
@@ -87,7 +179,7 @@ export function SearchPanel({
             <li key={message.id}>
               <button
                 type="button"
-                onClick={() => jumpToMessage(message.id)}
+                onClick={() => void revealMessage(message.id)}
                 className="w-full cursor-pointer rounded-lg bg-surface-800 p-2.5 text-start transition-colors duration-200 hover:bg-white/[0.06]"
               >
                 <span className="flex items-center gap-2">
@@ -118,10 +210,40 @@ export function SearchPanel({
         </ul>
       </div>
 
-      <p className="shrink-0 border-t border-edge px-3 py-2 text-xs text-slate-500">
-        Searches the {searchable.length} messages this window has decrypted. Messages are encrypted,
-        so the server cannot search them.
-      </p>
+      <div className="shrink-0 space-y-1.5 border-t border-edge px-3 py-2 text-xs text-slate-500">
+        {walk ? (
+          <p role="status" aria-live="polite">
+            {walkStatus(
+              walk.running ? null : walk.stop,
+              walk.scanned,
+              walk.oldestAt ? dayLabel(walk.oldestAt) : null,
+            )}
+          </p>
+        ) : (
+          <p>
+            Searches the {searchable.length} messages this window has decrypted. Messages are
+            encrypted, so the server cannot search them.
+          </p>
+        )}
+        {walk?.running && (
+          <button
+            type="button"
+            onClick={stop}
+            className="cursor-pointer rounded bg-surface-800 px-2 py-1 text-slate-200 hover:bg-white/[0.08]"
+          >
+            Stop
+          </button>
+        )}
+        {walk && !walk.running && (walk.stop === 'cap' || walk.stop === 'stopped' || walk.stop === 'error') && (
+          <button
+            type="button"
+            onClick={goOn}
+            className="cursor-pointer rounded bg-surface-800 px-2 py-1 text-slate-200 hover:bg-white/[0.08]"
+          >
+            {walk.stop === 'error' ? 'Try again' : 'Search further back'}
+          </button>
+        )}
+      </div>
     </aside>
   );
 }
