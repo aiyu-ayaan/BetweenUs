@@ -582,18 +582,18 @@ const editedAgain = await json(`${CHAT}/api/v1/messages/${dmMessage.id}`, {
   body: JSON.stringify({ content: 'hello over DM, corrected' }),
 });
 ok('a second edit makes two', editedAgain.editCount === 2, String(editedAgain.editCount));
-const history = await json(`${CHAT}/api/v1/messages/${dmMessage.id}/edits`, { headers: other });
+const editHistory = await json(`${CHAT}/api/v1/messages/${dmMessage.id}/edits`, { headers: other });
 ok(
-  'history is newest first and holds the stored envelopes',
-  history.items.length === 2 &&
-    history.items[0].content === 'hello over DM, corrected' &&
-    history.items[1].content === 'hello over DM' &&
-    history.items[0].writtenAt >= history.items[1].writtenAt &&
-    history.items[1].replacedAt <= history.items[0].replacedAt,
-  JSON.stringify(history.items.map((item) => item.content)),
+  'editHistory is newest first and holds the stored envelopes',
+  editHistory.items.length === 2 &&
+    editHistory.items[0].content === 'hello over DM, corrected' &&
+    editHistory.items[1].content === 'hello over DM' &&
+    editHistory.items[0].writtenAt >= editHistory.items[1].writtenAt &&
+    editHistory.items[1].replacedAt <= editHistory.items[0].replacedAt,
+  JSON.stringify(editHistory.items.map((item) => item.content)),
 );
 ok(
-  'history is exactly as private as the message',
+  'editHistory is exactly as private as the message',
   (await statusOf(`${CHAT}/api/v1/messages/${dmMessage.id}/edits`, { headers: rejected })) === 404,
 );
 const untouched = await json(`${CHAT}/api/v1/messages`, {
