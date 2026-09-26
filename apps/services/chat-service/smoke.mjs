@@ -574,6 +574,52 @@ const editRefused = await fetch(`${CHAT}/api/v1/messages/${dmMessage.id}`, {
 });
 ok('only the author may edit', editRefused.status === 403);
 
+// --- Edit history: sealed prior versions ---------------------------------------
+ok('the first edit leaves one prior version', edited.editCount === 1, String(edited.editCount));
+const editedAgain = await json(`${CHAT}/api/v1/messages/${dmMessage.id}`, {
+  method: 'PATCH',
+  headers: authed,
+  body: JSON.stringify({ content: 'hello over DM, corrected' }),
+});
+ok('a second edit makes two', editedAgain.editCount === 2, String(editedAgain.editCount));
+const history = await json(`${CHAT}/api/v1/messages/${dmMessage.id}/edits`, { headers: other });
+ok(
+  'history is newest first and holds the stored envelopes',
+  history.items.length === 2 &&
+    history.items[0].content === 'hello over DM, corrected' &&
+    history.items[1].content === 'hello over DM' &&
+    history.items[0].writtenAt >= history.items[1].writtenAt &&
+    history.items[1].replacedAt <= history.items[0].replacedAt,
+  JSON.stringify(history.items.map((item) => item.content)),
+);
+ok(
+  'history is exactly as private as the message',
+  (await statusOf(`${CHAT}/api/v1/messages/${dmMessage.id}/edits`, { headers: rejected })) === 404,
+);
+const untouched = await json(`${CHAT}/api/v1/messages`, {
+  method: 'POST',
+  headers: authed,
+  body: JSON.stringify({ channelId: direct.channelId, content: 'never edited' }),
+});
+const untouchedHistory = await json(`${CHAT}/api/v1/messages/${untouched.id}/edits`, {
+  headers: authed,
+});
+ok(
+  'an unedited message has no history',
+  untouched.editCount === 0 && untouchedHistory.items.length === 0,
+);
+const onceMessage = await json(`${CHAT}/api/v1/messages`, {
+  method: 'POST',
+  headers: authed,
+  body: JSON.stringify({ channelId: direct.channelId, content: 'look once', viewOnce: true }),
+});
+const onceEdited = await json(`${CHAT}/api/v1/messages/${onceMessage.id}`, {
+  method: 'PATCH',
+  headers: authed,
+  body: JSON.stringify({ content: 'look once, corrected' }),
+});
+ok('a one-time message keeps no history', onceEdited.editCount === 0, String(onceEdited.editCount));
+
 // Either participant may pin in a direct message - there is no role to hold.
 const pinned = await json(`${CHAT}/api/v1/messages/${dmMessage.id}/pin`, {
   method: 'PUT',
@@ -738,6 +784,11 @@ ok(
   tombstone !== undefined && tombstone.deletedAt !== null && tombstone.content === '',
 );
 ok('the author deleting is not attributed', tombstone?.deletedBy === null);
+ok('a tombstone reports no edits', tombstone?.editCount === 0, String(tombstone?.editCount));
+const tombstoneHistory = await json(`${CHAT}/api/v1/messages/${dmMessage.id}/edits`, {
+  headers: other,
+});
+ok('deleting drops the history', tombstoneHistory.items.length === 0);
 
 // Someone else's message, without the permission: refused.
 const doomed = await json(`${CHAT}/api/v1/messages`, {
