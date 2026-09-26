@@ -182,6 +182,8 @@ to be framed, so no browser tab can ever show it.
 | Peer-to-peer voice channels | ✅ | ✅ | ✅ |
 | Camera | ✅ | ✅ | ✅ |
 | Screen share | ✅ | ✅ | ✅ |
+| Join a share to watch it, encoded only for who joined | ✅ | ✅ | ✅ |
+| Stage pin kept through leaving and rejoining the call | ✅ | ✅ | ✅ |
 | Tiles shaped to the picture (portrait and landscape) | ✅ | ✅ | ✅ |
 | Ask to drive somebody's shared screen | ✅ | ✅ | ✅ on the share stage |
 | Be driven while sharing your screen | ✅ | — | — |

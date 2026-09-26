@@ -869,12 +869,18 @@ moves anybody else's. Three rules, shared by the web/desktop client
 | --- | --- |
 | **The stage is the other people** | The local tile is drawn as a small floating window over the corner of the stage, never as a grid cell — the one face in the call nobody joined to watch. It takes the whole stage only when there is nobody else in the call yet. |
 | **Nothing moves on its own** | Promoting a recent speaker exists to keep them on page one, so it runs only when there *is* a page two: while everybody fits on one page the order is left exactly as it arrived. Where one face fills the stage (a big call on either client), it follows the *last* speaker stickily rather than the current one, so a conversation does not throw the layout around between sentences. |
-| **A pin outranks both** | Any tile, the local one included, can be pinned to hold the stage with everybody else in a strip underneath. The pin is per-viewer, is never sent anywhere, and is dropped the moment that person leaves the call. |
+| **A pin outranks both** | Any tile, the local one included, can be pinned to hold the stage with everybody else in a strip underneath. The pin is per-viewer and is never sent anywhere. It is kept for the call rather than the screen: web and desktop hold it in the window's `sessionStorage` (`stage-pin.ts`), Android on `VoiceEngine.stagePin` for the life of the process. Either way it is keyed by the channel, survives a reload (web) or backing out of the call screen (Android) and leaving and rejoining the same call, and follows the pinned person to a new peer id through their user id. It ends on unpin, when the pinned person leaves, and when the call ends (the channel's voice roster going from somebody to nobody). |
 
 The first two are the same complaint answered twice: a grid that rearranges
 itself around whoever is talking is unreadable in exactly the moment somebody is
-trying to read it. `stage-order.check.ts` pins them down, because the fault is
-invisible in a screenshot and obvious in a call.
+trying to read it. `stage-order.check.ts` and `stage-pin.check.ts` pin them
+down on web and desktop, and `StageRulesTest` on Android, where the hero choice
+is the pure `StageRules.hero` (a pin over the last speaker, then the first
+tile with a picture, then anybody, and your own tile when alone or
+self-pinned). The fault is invisible in a screenshot and obvious in a call.
+
+On Android the picture-in-picture window follows the same decision: it shows
+the stage's hero, so it follows the pin, and it has no pin button of its own.
 
 A screen share never rearranges anything by itself either: it is announced by a
 banner and joined on purpose, and it never replaces the sharer's own tile. That
@@ -883,16 +889,21 @@ the same bargain on all three — a line at the bottom of the call saying who is
 presenting, with a button, and nothing moves until it is pressed. Leaving the
 share puts the banner back rather than suppressing the share.
 
-**Joining is also what starts the encoder.** The web and desktop client
-publishes `watching` in its voice-state envelope (`betweenus.voice-state`,
-over the peer data channel): the peer id of the share on its stage, or `null`.
-The sharer encodes only for peers whose `watching` names it (see *What a mesh
-costs*). A peer that never sends the field is treated as watching. That covers
-Android, whose dock and picture-in-picture show a share nobody joined, and
-older desktop builds. A share that has not been joined has no frames at all,
-so the banner is driven by the sharer's declared `screen`, and the stage opens
-on the receiver's track before the first frame arrives. For the same reason,
-the desktop's picture-in-picture shows only the share its viewer has joined.
+**Joining is also what starts the encoder.** Every client publishes
+`watching` in its voice-state envelope (`betweenus.voice-state`, over the peer
+data channel): the peer id of the share on its stage, or `null`. Android sends
+it too, with the same meaning: `VoiceEngine.watching`, set by Join (or by
+tapping a share offered in the dock) and cleared by closing the share, by the
+share stopping, and by leaving the call. The sharer, on either client, encodes
+only for peers whose `watching` names it (see *What a mesh costs*): the
+desktop's `Mesh.setShareWatched`, Android's `PeerLink.setShareWatched`, both
+behind the same `joinedShare` rule (`StageRules.joinedShare` on Android). A
+peer that never sends the field is treated as watching, which now covers only
+older builds. A share that has not been joined has no frames at all, so the
+banner is driven by the sharer's declared `screen`, and the stage opens on the
+receiver's track before the first frame arrives (`Participant.screenPending`
+on Android). For the same reason, picture-in-picture on both clients and the
+Android dock show only the share their viewer has joined.
 
 **"Nothing moves" includes the tiles, and that is the part that broke.** A tile
 shows a person's *camera* and never their share. Android's `Participant.video`
@@ -903,9 +914,13 @@ started, so it was already on screen behind a banner still asking whether to
 join it. Somebody who never pressed Join was watching anyway. A share now
 reaches the screen through exactly one door, which is pressing the button.
 
-The dock and picture-in-picture are the deliberate exception, via
-`Participant.anyPicture`: both are a glance at whether anything is happening,
-neither has room to offer a choice, and neither is a stage anybody opted into.
+The Android dock and picture-in-picture used to be the exception, via
+`Participant.anyPicture`, and drew anybody's share. Once a sharer encodes only
+for the people who joined, that was a black window and joining without asking.
+They now draw a share only if it is the joined one (`Participant.pictureFor`).
+Any other share is a placeholder: in the dock a card saying who is sharing,
+where the tap joins it and returns to the call, and in picture-in-picture a
+line saying who is sharing, since that window takes no taps of its own.
 
 Asking for the mouse (`ShareControlBar`) lives on the share itself for the same
 reason it has to: the far end is sent *fractions* of the picture, so the surface

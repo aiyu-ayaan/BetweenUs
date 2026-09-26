@@ -845,6 +845,16 @@ and only for a call with a picture in it. So the two shapes match what is
 actually in the call: audio follows you out as a notification and a bar, video
 follows you out as a window.
 
+Picture-in-picture shows the stage's hero (`StageRules.hero`), so a pin made
+on the call screen carries into the window with no button there.
+The pin itself lives on `VoiceEngine.stagePin`, not on the screen, so it
+survives backing out to a conversation and leaving and rejoining the same call
+for as long as the app runs. Somebody else's share is never drawn in either
+until this phone has joined it, because its owner does not encode for a phone
+that has not said `watching`. Until then the dock shows a "sharing, tap to
+watch" card, and the tap joins, and picture-in-picture shows a line naming the
+sharer. See *Who is on the stage* in the media architecture page.
+
 Two rules keep the drawer honest alongside this. A drawer open on a screen that
 has no way to open it closes itself — stated that way rather than as a list of
 screens, so the next screen added does not have to be remembered twice. And an
