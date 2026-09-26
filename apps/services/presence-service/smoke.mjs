@@ -11,11 +11,12 @@
 // Needs Postgres, Redis, auth-service, server-service, call-service and
 // presence-service - call-service because the voice roster is published by it.
 import WebSocket from 'ws';
+import Redis from 'ioredis';
 
-const AUTH = 'http://127.0.0.1:3001';
-const SERVER = 'http://127.0.0.1:3003';
-const PRESENCE = 'ws://127.0.0.1:3005/ws/presence';
-const CALL = 'ws://127.0.0.1:3007/ws/call';
+const AUTH = process.env.SMOKE_AUTH ?? 'http://127.0.0.1:3001';
+const SERVER = process.env.SMOKE_SERVER ?? 'http://127.0.0.1:3003';
+const PRESENCE = process.env.SMOKE_PRESENCE ?? 'ws://127.0.0.1:3005/ws/presence';
+const CALL = process.env.SMOKE_CALL ?? 'ws://127.0.0.1:3007/ws/call';
 
 const json = async (url, options = {}) => {
   const response = await fetch(url, {
@@ -289,8 +290,41 @@ ok(
     .some((event) => event.type === 'presence.changed' && event.user.userId === carol.user.id),
 );
 
-// Closing a socket takes that user offline for everyone still connected.
+// --- presence is keyed per device --------------------------------------------
+//
+// Alice is on three devices. Redis must say three sockets for one account, and
+// she must stay online for everybody until the LAST one closes.
+const redis = new Redis(process.env.REDIS_URL ?? 'redis://127.0.0.1:6379');
+const a2 = await connect(alice.accessToken);
+const a3 = await connect(alice.accessToken);
+await a3.waitFor((event) => event.type === 'presence.sync');
+await new Promise((resolve) => setTimeout(resolve, 300));
+ok('three devices are three sockets', (await redis.zcard(`presence:sockets:${alice.user.id}`)) === 3);
+ok(
+  'and one account',
+  (await redis.zscore('presence:online', alice.user.id)) !== null,
+);
+
+const beforeDrop = b.events.length;
 a.socket.close();
+a2.socket.close();
+await new Promise((resolve) => setTimeout(resolve, 800));
+ok(
+  'closing two of three devices does not take her offline',
+  !b.events
+    .slice(beforeDrop)
+    .some(
+      (event) =>
+        event.type === 'presence.changed' &&
+        event.user.userId === alice.user.id &&
+        event.user.status === 'offline',
+    ),
+);
+ok('one socket left', (await redis.zcard(`presence:sockets:${alice.user.id}`)) === 1);
+ok('still online', (await redis.zscore('presence:online', alice.user.id)) !== null);
+
+// Closing the last socket takes that user offline for everyone still connected.
+a3.socket.close();
 const offline = await b.waitFor(
   (event) =>
     event.type === 'presence.changed' &&
@@ -302,6 +336,8 @@ ok('offline fanout', offline !== null);
 // depends on the reader, and a broadcast has one payload for all of them - so
 // the answer only ever travels down `presence.query`, which is per-asker.
 ok('the offline broadcast carries no timestamp', offline?.user.lastSeenAt === undefined);
+ok('her sockets are gone from Redis', (await redis.zcard(`presence:sockets:${alice.user.id}`)) === 0);
+ok('and she left the online set', (await redis.zscore('presence:online', alice.user.id)) === null);
 
 // Bob asks about Alice, who has just left and has never narrowed her setting.
 // This is the path that may answer, and the only one.
@@ -374,5 +410,6 @@ ok(
 
 b.socket.close();
 c.socket.close();
+await redis.quit();
 console.log('\nPRESENCE SMOKE PASSED');
 process.exit(0);
