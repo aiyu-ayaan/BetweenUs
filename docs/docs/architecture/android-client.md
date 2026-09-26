@@ -624,6 +624,16 @@ tapped, which tells the far side exactly what the design was avoiding.
 rather than waiting for that announcement to come back round, because the screen
 the button was pressed on has to be right immediately.
 
+**The block list is cached and followed.** `Workspace.blocked` is written to the
+Room `Cache` as a `blocked` row beside the other lists (codec round-trip in
+`CacheCodecTest`), so the privacy screen offline shows who is blocked, and
+`Cache.clear()` / `Cache.claim()` drop it with the rest on sign-out or a
+different account. `friends.changed` reloads it as well as the friend and
+conversation lists, because it is what folds a blocked person's messages in
+shared servers: `ChatScreen` turns each run of theirs into one `BlockedRunRow`
+("Blocked message · Show", revealed for that screen only), and `PushService`
+drops a push from them even if the server has not been redeployed yet.
+
 **Drafts live in the same Room table.** `Drafts` keeps unsent composer text and
 the reply target per conversation in memory first, and writes one `drafts` row
 to `Cache` after a 500 ms pause. Because it is a row beside the lists,

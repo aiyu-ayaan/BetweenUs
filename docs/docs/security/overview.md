@@ -313,7 +313,10 @@ tokens, secrets, and FCM push tokens are never logged.
   decided on-device, after the wake-up, because the server can't read the
   ciphertext or know a timezone.
 - **A block doesn't unshare a server** — it closes the direct message; both
-  people are still members of any room they both joined.
+  people are still members of any room they both joined. The blocker's
+  clients fold the other person's messages there and pushes from them are
+  dropped, but that is a view, not a redaction: Show reveals the run, and the
+  rows are the same ones every other member reads.
 - **`chatsClearedAt` hides rather than redacts** — the ciphertext is still
   in the table and in every backup taken since.
 - **Last-seen privacy does not bind an administrator.** The admin panel reads

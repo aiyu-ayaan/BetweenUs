@@ -153,6 +153,13 @@ security boundary — every route re-checks.
   refusal is indistinguishable from a channel the caller was never on. It is a
   fourth reason a DM can be closed and it lives in the same resolver as the
   other three — never in a controller.
+- A block does **not** take anybody out of a server both people are in. There
+  it is a preference of the blocker's, not a gate: the channel stays readable
+  by both, the blocker's clients fold each run of the blocked person's messages
+  into one "Blocked message · Show" row (desktop `blocked-runs.ts`, Android
+  `BlockedRuns.kt`), and notification-service drops pushes from them to the
+  blocker only (`blockersAmong` in `@betweenus/database`). The blocked person
+  is not affected by having been blocked.
 
 ## Trust boundaries: the phase-27 audit
 

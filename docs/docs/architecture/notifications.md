@@ -211,6 +211,7 @@ shape WhatsApp uses, for the same reason.
 | --- | --- | --- |
 | Notifications turned off | Server | On the account; saves waking the phone at all |
 | Muted channel / muted person | Server | Both are on the envelope the server can see |
+| Author is somebody I blocked | Server (`blockersAmong`) + client | A block closes the DM but not a shared server; the blocker's client folds that person's messages away, so a push for one would undo it. The phone and desktop drop it too, from the block list they hold |
 | My own message | Client | Cheap, and the id is right there |
 | Channel already on screen *here* | Client | Cheapest where the screen actually is |
 | Channel on screen on *another* device | Server | Only the server sees every device — see below |
