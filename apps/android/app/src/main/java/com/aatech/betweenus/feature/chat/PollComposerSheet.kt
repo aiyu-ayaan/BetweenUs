@@ -190,6 +190,17 @@ internal fun PollComposerSheet(channelId: String, onDismiss: () -> Unit) {
                 Spacer(Modifier.height(8.dp))
                 Notice(it, Danger)
             }
+            // Why Send is greyed out, once something has been typed: the
+            // button alone cannot say that two options are the same.
+            val touched = question.isNotBlank() || options.any { it.isNotBlank() }
+            if (failure == null && touched && ready is PollReady.Refused) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = ready.reason,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
 
             Spacer(Modifier.height(16.dp))
             BetweenUsButton(
