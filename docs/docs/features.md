@@ -30,7 +30,7 @@ import useBaseUrl from '@docusaurus/useBaseUrl';
 | **Scheduled Send & Remind Me (device-local)** | ✅ App open or in tray | ✅ Tab open | ✅ WorkManager |
 | **Moments (24h Ephemeral Stories)** | ✅ Full Support | ✅ Full Support | ✅ Full Support |
 | **Multi-Theme Engine (16 Themes)** | ✅ 16 Themes + Accents | ✅ 16 Themes + Accents | ✅ 16 Themes + Material You |
-| **Channel Categories (collapse, drag to reorder, create into)** | ✅ Full, folding per machine | ✅ Full, folding per machine | ⚠️ Collapse (kept per account and server) and long-press to reorder; categories are made on desktop and web |
+| **Channel Categories (collapse, drag to reorder, create into)** | ✅ Full, folding per machine | ✅ Full, folding per machine | ✅ Collapse (kept per account and server), long-press to reorder, create, rename, delete and add a channel into one |
 | **Server Rail Folders** | ✅ Collapsible, per machine | ✅ Collapsible, per machine | ➖ Flat rail |
 | **Granular Server RBAC & Roles** | ✅ Full Administration | ✅ Full Administration | ✅ Member Views |
 | **E2EE Key Backup & Machine Revocation** | ✅ Full Device Registry | ✅ Full Device Registry | ✅ Passphrase Backup |

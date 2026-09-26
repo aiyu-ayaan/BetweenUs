@@ -148,7 +148,7 @@ to be framed, so no browser tab can ever show it.
 | Per-member permission overrides | ✅ | ✅ | ✅ |
 | Add a friend to a server, kick, change role | ✅ | ✅ | ✅ |
 | Text and voice channels, private channel allowlists | ✅ | ✅ | ✅ |
-| Channel categories: collapse, drag or keyboard to reorder | ✅ | ✅ | ✅ long-press Move up / down; categories are made on desktop and web |
+| Channel categories: collapse, drag or keyboard to reorder | ✅ | ✅ | ✅ long-press Move up / down; create, rename, delete and create-into from the drawer |
 | Custom emoji: add and remove | ✅ | ✅ | ✅ |
 | **Messaging** | | | |
 | End-to-end encrypted messages, realtime, history paging | ✅ | ✅ | ✅ |

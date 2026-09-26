@@ -514,8 +514,21 @@ A step is drawn at once: `Workspace.arrangeChannels` applies the layout locally
 with the same `applyChannelLayout` the server runs, then sends
 `PUT /servers/:id/channel-layout`. If the server refuses, the list is put back -
 unless a refetch has already replaced it, which is newer than either copy - and
-the reason is shown above the list. Creating, renaming and deleting categories,
-and creating a channel straight into one, are still desktop and web only.
+the reason is shown above the list.
+
+Managers also make and maintain categories. The **+** in the drawer header opens
+**Create a channel** / **Create a category**; a category heading's long-press
+menu (and its screen-reader actions) adds **Add text channel**, **Add voice
+channel**, **Rename category** and **Delete category** after the two moves.
+These mirror the desktop endpoints: `POST /servers/:id/categories` and
+`PATCH` / `DELETE /servers/:id/categories/:categoryId` (all `MANAGE_CHANNEL`,
+audited server-side), and `categoryId` on `POST /channels`. Delete asks first and
+says the channels are kept - the server moves them to the uncategorized list.
+`Workspace.createCategory`, `renameCategory` and `deleteCategory` re-read the
+list afterwards, as does the `server.channels.changed` event, so positions are
+the server's. Names are shown as the server will store them
+(`normalizeCategoryName`, tested in `ChannelLayoutTest`); a refusal appears in
+the sheet or dialog.
 
 ## Creating a poll
 
