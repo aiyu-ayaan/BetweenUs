@@ -78,9 +78,12 @@ object StageRules {
      * empty stage. Matched by user id as well, because a pin that followed
      * them to a new peer id still names the old one - unless another of their
      * devices is still here, which the pin then resolves to.
+     *
+     * [channelId] is the call [left] hung up from. A pin made in another call
+     * is never touched, even by somebody with the same user id.
      */
-    fun pinAfterLeft(pin: StagePin?, left: Seat, remaining: List<Seat>): StagePin? {
-        if (pin == null || pin.peerId == SELF) return pin
+    fun pinAfterLeft(pin: StagePin?, channelId: String?, left: Seat, remaining: List<Seat>): StagePin? {
+        if (pin == null || pin.peerId == SELF || pin.channelId != channelId) return pin
         if (pin.peerId == left.peerId) return null
         val userId = pin.userId ?: return pin
         if (left.userId != userId) return pin

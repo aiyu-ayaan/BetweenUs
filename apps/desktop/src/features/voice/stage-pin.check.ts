@@ -65,29 +65,29 @@ assert.equal(readStagePin(null, 'call-1'), null);
 
 // Resolved by key; after a reconnect gave them a new peer id, by user id.
 const stage = [tile('local', 'me', true), tile('peer-a', 'user-a'), tile('peer-b', 'user-b')];
-assert.equal(resolveStagePin(bob, stage), 'peer-b');
+assert.equal(resolveStagePin(bob, stage, 'call-1'), 'peer-b');
 const rejoined = [tile('local', 'me', true), tile('peer-b2', 'user-b')];
-assert.equal(resolveStagePin(bob, rejoined), 'peer-b2');
+assert.equal(resolveStagePin(bob, rejoined, 'call-1'), 'peer-b2');
 // Yourself resolves to the local tile, and never to your own presence entry.
 const self = pinFor('call-1', tile('local', 'me', true));
-assert.equal(resolveStagePin(self, stage), 'local');
-assert.equal(resolveStagePin(self, [tile('me', 'me')]), null);
+assert.equal(resolveStagePin(self, stage, 'call-1'), 'local');
+assert.equal(resolveStagePin(self, [tile('me', 'me')], 'call-1'), null);
 // Nobody by that key or that user: no hero.
-assert.equal(resolveStagePin(bob, [tile('peer-a', 'user-a')]), null);
-assert.equal(resolveStagePin(null, stage), null);
+assert.equal(resolveStagePin(bob, [tile('peer-a', 'user-a')], 'call-1'), null);
+assert.equal(resolveStagePin(null, stage, 'call-1'), null);
 
 // Straight after a rejoin the stage is still filling: the pin waits for them.
-let watch = watchStagePin({ pin: bob, seen: false }, false, true);
+let watch = watchStagePin({ pin: bob, seen: false }, false, true, 'call-1');
 assert.deepEqual(watch, { pin: bob, seen: false });
 // They arrive, and the pin takes hold.
-watch = watchStagePin(watch, true, true);
+watch = watchStagePin(watch, true, true, 'call-1');
 assert.deepEqual(watch, { pin: bob, seen: true });
 // They leave while this window watches: the pin goes.
-watch = watchStagePin(watch, false, true);
+watch = watchStagePin(watch, false, true, 'call-1');
 assert.deepEqual(watch, { pin: null, seen: false });
 
 // A dropped connection is not them leaving - `seen` resets, the pin stays.
-const dropped = watchStagePin({ pin: bob, seen: true }, false, false);
+const dropped = watchStagePin({ pin: bob, seen: true }, false, false, 'call-1');
 assert.deepEqual(dropped, { pin: bob, seen: false });
 
 // The call ending - its roster going from somebody to nobody - clears it.
@@ -104,5 +104,13 @@ endStagePin(ending, 'call-1', [], []);
 assert.deepEqual(readStagePin(ending, 'call-1'), bob);
 endStagePin(ending, 'call-1', ['user-b'], []);
 assert.equal(readStagePin(ending, 'call-1'), null);
+
+// Somebody with the same user id leaving a *different* call touches nothing:
+// the pin is for call-1, and neither resolving nor watching reads call-2.
+assert.equal(resolveStagePin(bob, [tile('peer-b', 'user-b')], 'call-2'), null);
+const other = watchStagePin({ pin: bob, seen: true }, false, true, 'call-2');
+assert.deepEqual(other, { pin: bob, seen: true });
+const otherIdle = watchStagePin({ pin: bob, seen: true }, false, false, 'call-2');
+assert.deepEqual(otherIdle, { pin: bob, seen: true });
 
 console.log('stage-pin self-check passed');

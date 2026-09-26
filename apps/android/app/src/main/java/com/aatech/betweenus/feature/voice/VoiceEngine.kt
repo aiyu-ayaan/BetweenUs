@@ -1585,6 +1585,7 @@ class VoiceEngine(private val context: Context) {
                 before.firstOrNull { it.peer.peerId == peerId }?.let { gone ->
                     _stagePin.value = StageRules.pinAfterLeft(
                         _stagePin.value,
+                        channelId,
                         gone.seat(),
                         _participants.value.map { it.seat() },
                     )

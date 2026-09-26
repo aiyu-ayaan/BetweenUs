@@ -284,7 +284,7 @@ Stay connected with direct messaging and real-time presence indicators.
 ### Key Capabilities
 - **Friend Management**: Send, accept, or decline friend requests with global user tag search (`username#0000`).
 - **Real-Time Presence**: Show status as *Online*, *Idle*, *Do Not Disturb*, or *Invisible*.
-- **Privacy & Safety Controls**: Block unwanted users, manage quiet hours, and configure notifications. A blocked person's messages in a server you share fold into a quiet "Blocked message · Show" row, and they no longer notify you.
+- **Privacy & Safety Controls**: Block unwanted users, manage quiet hours, and configure notifications. A blocked person's messages in a server you share fold into a quiet "Blocked message · Show" row, (jumping to a message inside a folded run from search, pins or a quote opens that run first), and they no longer notify you.
 
 ---
 

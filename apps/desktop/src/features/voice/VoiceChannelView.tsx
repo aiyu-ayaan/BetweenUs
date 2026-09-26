@@ -145,15 +145,15 @@ export function VoiceChannelView({
   useEffect(() => {
     setPinWatch({ pin: readStagePin(sessionPinStorage(), channel.id), seen: false });
   }, [channel.id, connected]);
-  const pinned = resolveStagePin(pinWatch.pin, stage);
+  const pinned = resolveStagePin(pinWatch.pin, stage, channel.id);
   useEffect(() => {
     setPinWatch((current) => {
-      const next = watchStagePin(current, pinned !== null, connected);
+      const next = watchStagePin(current, pinned !== null, connected, channel.id);
       if (next.pin === current.pin && next.seen === current.seen) return current;
       if (next.pin !== current.pin) writeStagePin(sessionPinStorage(), next.pin);
       return next;
     });
-  }, [pinned, connected]);
+  }, [pinned, connected, channel.id]);
   const togglePin = (key: string): void => {
     const tile = stage.find((item) => item.key === key);
     const next = !tile || pinned === key ? null : pinFor(channel.id, tile);

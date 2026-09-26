@@ -80,20 +80,28 @@ class StageRulesTest {
     fun `a pin on somebody not back yet resolves to nobody, and is kept`() {
         assertNull(StageRules.resolvePin(pinOnBob, "call-1", listOf(alice)))
         // Nothing but their leaving the call drops it.
-        assertEquals(pinOnBob, StageRules.pinAfterLeft(pinOnBob, alice, listOf(bob, carol)))
-        assertNull(StageRules.pinAfterLeft(pinOnBob, bob, listOf(alice, carol)))
+        assertEquals(pinOnBob, StageRules.pinAfterLeft(pinOnBob, "call-1", alice, listOf(bob, carol)))
+        assertNull(StageRules.pinAfterLeft(pinOnBob, "call-1", bob, listOf(alice, carol)))
+    }
+
+    @Test
+    fun `somebody with the same user id leaving another call leaves the pin alone`() {
+        val bobElsewhere = bob.copy(peerId = "p-bob-other-call")
+        assertEquals(pinOnBob, StageRules.pinAfterLeft(pinOnBob, "call-2", bobElsewhere, listOf(alice)))
+        assertEquals(pinOnBob, StageRules.pinAfterLeft(pinOnBob, "call-2", bob, emptyList()))
+        assertEquals(pinOnBob, StageRules.pinAfterLeft(pinOnBob, null, bob, emptyList()))
     }
 
     @Test
     fun `a pin that followed them to a new peer id goes when that one leaves`() {
         val bobAgain = bob.copy(peerId = "p-bob-2")
-        assertNull(StageRules.pinAfterLeft(pinOnBob, bobAgain, listOf(alice)))
+        assertNull(StageRules.pinAfterLeft(pinOnBob, "call-1", bobAgain, listOf(alice)))
         // Unless another of their devices is still in the call.
         val bobPhone = bob.copy(peerId = "p-bob-phone")
-        assertEquals(pinOnBob, StageRules.pinAfterLeft(pinOnBob, bobAgain, listOf(alice, bobPhone)))
+        assertEquals(pinOnBob, StageRules.pinAfterLeft(pinOnBob, "call-1", bobAgain, listOf(alice, bobPhone)))
         // A pin on yourself is not somebody else's to take away.
         val self = StagePin("call-1", StageRules.SELF, null)
-        assertEquals(self, StageRules.pinAfterLeft(self, bob, emptyList()))
+        assertEquals(self, StageRules.pinAfterLeft(self, "call-1", bob, emptyList()))
     }
 
     @Test

@@ -99,8 +99,12 @@ export function pinFor(channelId: string, tile: PinnableTile): StagePin {
  * The key first; then, for yourself, whichever tile is local; then, for anybody
  * else, a tile with the same user id - their peer id is new after a reconnect.
  */
-export function resolveStagePin<T extends PinnableTile>(pin: StagePin | null, tiles: T[]): string | null {
-  if (!pin) return null;
+export function resolveStagePin<T extends PinnableTile>(
+  pin: StagePin | null,
+  tiles: T[],
+  channelId: string,
+): string | null {
+  if (!pin || pin.channelId !== channelId) return null;
   if (tiles.some((tile) => tile.key === pin.key && tile.isLocal === pin.isLocal)) return pin.key;
   if (pin.isLocal) return tiles.find((tile) => tile.isLocal)?.key ?? null;
   if (pin.userId === null) return null;
@@ -121,7 +125,15 @@ export interface PinWatch {
  * dropped then would never survive anything. Not connected resets `seen`,
  * because the stage is the presence roster then, not the call.
  */
-export function watchStagePin(watch: PinWatch, resolved: boolean, connected: boolean): PinWatch {
+export function watchStagePin(
+  watch: PinWatch,
+  resolved: boolean,
+  connected: boolean,
+  channelId: string,
+): PinWatch {
+  // A pin belongs to the call it was set in: somebody with the same user id
+  // leaving another call says nothing about it.
+  if (watch.pin !== null && watch.pin.channelId !== channelId) return watch;
   if (!connected || watch.pin === null) return { pin: watch.pin, seen: false };
   if (resolved) return { pin: watch.pin, seen: true };
   return watch.seen ? { pin: null, seen: false } : watch;
