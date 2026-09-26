@@ -584,7 +584,7 @@ const editedAgain = await json(`${CHAT}/api/v1/messages/${dmMessage.id}`, {
 ok('a second edit makes two', editedAgain.editCount === 2, String(editedAgain.editCount));
 const editHistory = await json(`${CHAT}/api/v1/messages/${dmMessage.id}/edits`, { headers: other });
 ok(
-  'editHistory is newest first and holds the stored envelopes',
+  'history is newest first and holds the stored envelopes',
   editHistory.items.length === 2 &&
     editHistory.items[0].content === 'hello over DM, corrected' &&
     editHistory.items[1].content === 'hello over DM' &&
@@ -593,7 +593,7 @@ ok(
   JSON.stringify(editHistory.items.map((item) => item.content)),
 );
 ok(
-  'editHistory is exactly as private as the message',
+  'history is exactly as private as the message',
   (await statusOf(`${CHAT}/api/v1/messages/${dmMessage.id}/edits`, { headers: rejected })) === 404,
 );
 const untouched = await json(`${CHAT}/api/v1/messages`, {
