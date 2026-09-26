@@ -626,7 +626,6 @@ fun Composer(
                     icon = BetweenUsIcons.Clock,
                     contentDescription = "Send later",
                     onClick = { onSchedule(text.trim()) },
-                    compact = true,
                 )
             }
 
