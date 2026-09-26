@@ -94,6 +94,17 @@ false negatives: a miss is a definitive "available" with no query, and a hit is
 confirmed against the unique index before anybody is told a name is taken. It is
 a cache in front of the constraint and never a substitute for it.
 
+Each instance holds its own bit array, but they all follow the same names:
+`UsernameDirectory` subscribes to `user.created` and `user.updated` on the event
+bus, which already carry the username, so a registration or a rename on one
+instance is in every other instance's filter at once rather than after its next
+restart. This also covers OAuth sign-ups, which create the account without
+going through the registration path. The subscription is made before the
+warm-up query (a name written while the query runs lands in one or the other)
+and is not awaited at boot, so a slow bus never holds the service up; the gap
+it leaves is the one the unique constraint has always closed. A malformed event
+is dropped rather than thrown on.
+
 Usernames are normalised to lower case on write, which is what makes the unique
 index agree with signing in by username.
 
