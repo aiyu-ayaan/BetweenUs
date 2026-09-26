@@ -379,6 +379,13 @@ point at a channel the reader may not be allowed to open.
 The server is not told any of this. A forward reaches it as an ordinary message
 with an ordinary envelope, and there is no endpoint for it.
 
+Three kinds of message cannot be forwarded, on every client: a deleted one (it
+has nothing left to carry), a one-time one (being seen once by the people it
+was sent to is the whole of what it promised), and a **poll**. A poll's ballot
+lives on the original row, held by the server, so a copy would land as a
+question with nothing to vote on. The menu hides Forward on all three, and the
+forwarding function itself refuses them, so no other caller can produce one.
+
 ## Deliberate leaks
 
 - **Reactions are plaintext** (`MessageReaction.emoji`) — the server has to
