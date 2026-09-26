@@ -784,6 +784,14 @@ ok('an already deleted message is not found', secondDelete.status === 404);
 // can see. It stays out of the channel's timeline, is paged under its root, and
 // moves the root's "N replies" summary.
 
+// Earlier the second account was denied SEND_MESSAGE to prove a denial beats a
+// role. It has to speak again before it can reply in a thread.
+await json(`${SERVER}/api/v1/servers/${server.id}/members/${otherId}`, {
+  method: 'PATCH',
+  headers: authed,
+  body: JSON.stringify({ grantedPermissions: ['DELETE_MESSAGE'], deniedPermissions: [] }),
+});
+
 const threadRoot = await json(`${CHAT}/api/v1/messages`, {
   method: 'POST',
   headers: authed,
