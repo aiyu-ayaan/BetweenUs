@@ -316,8 +316,9 @@ class PushService : FirebaseMessagingService() {
         if (channelId in preferences?.mutedChannelIds.orEmpty()) return
         // Somebody this account blocked, in a server both are still in. The
         // server already drops these; this covers one that has not been
-        // redeployed, from whatever block list this process has in hand.
-        if (Workspace.blocked.value.any { it.user.id == authorId }) return
+        // redeployed. A cold process has not hydrated the workspace yet, so the
+        // list falls back to the cached row.
+        if (PushGate.isBlocked(authorId, PushGate.blockedList())) return
         // Quiet hours are minutes on this phone's clock, which is why the
         // server sent the push and left the decision here.
         if (PushGate.quiet(preferences)) return

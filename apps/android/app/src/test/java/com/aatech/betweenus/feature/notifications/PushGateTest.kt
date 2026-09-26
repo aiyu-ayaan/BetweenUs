@@ -1,7 +1,10 @@
 package com.aatech.betweenus.feature.notifications
 
+import com.aatech.betweenus.core.data.BlockedUser
 import com.aatech.betweenus.core.data.NotificationPreferences
 import com.aatech.betweenus.core.data.PublicUser
+import com.aatech.betweenus.core.data.UserSummary
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -141,5 +144,27 @@ class PushGateTest {
             )
         )
     }
-}
 
+    private fun blockedUser(id: String) =
+        BlockedUser(UserSummary(id, "u$id", "User $id", null), "2026-01-01T00:00:00Z")
+
+    @Test
+    fun `a cold process with an empty list checks the cached one`() {
+        val cached = listOf(blockedUser("x"))
+        val list = PushGate.blockedOrCached(emptyList()) { cached }
+        assertTrue(PushGate.isBlocked("x", list))
+        assertFalse(PushGate.isBlocked("y", list))
+    }
+
+    @Test
+    fun `a list in memory wins and the cache is not read`() {
+        val memory = listOf(blockedUser("a"))
+        val list = PushGate.blockedOrCached(memory) { error("cache read") }
+        assertEquals(memory, list)
+    }
+
+    @Test
+    fun `no cache row means nobody is blocked`() {
+        assertFalse(PushGate.isBlocked("x", PushGate.blockedOrCached(emptyList()) { null }))
+    }
+}

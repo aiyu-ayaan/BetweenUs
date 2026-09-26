@@ -2,10 +2,12 @@ package com.aatech.betweenus.feature.notifications
 
 import com.aatech.betweenus.core.data.AuthPhase
 import com.aatech.betweenus.core.data.BetweenUsApi
+import com.aatech.betweenus.core.data.BlockedUser
 import com.aatech.betweenus.core.data.NotificationPreferences
 import com.aatech.betweenus.core.data.PublicUser
 import com.aatech.betweenus.core.data.Session
 import com.aatech.betweenus.core.store.AppForeground
+import com.aatech.betweenus.core.store.Cache
 import com.aatech.betweenus.core.store.Conversation
 import com.aatech.betweenus.core.store.Workspace
 import kotlinx.coroutines.withTimeoutOrNull
@@ -89,6 +91,26 @@ object PushGate {
         preferences = null
         fetchedAt = 0L
     }
+
+    /**
+     * The people this account blocked, for a push in a process that may have
+     * just been woken: [Workspace] fills its list from the cache only when it
+     * is refreshed, which a push does after this check. An empty list in
+     * memory therefore falls back to the cached row rather than showing a
+     * blocked person's message.
+     */
+    suspend fun blockedList(): List<BlockedUser> =
+        blockedOrCached(Workspace.blocked.value) { runCatching { Cache.blocked() }.getOrNull() }
+
+    /** The list in memory when it has anybody in it, else whatever the cache holds. */
+    inline fun blockedOrCached(
+        inMemory: List<BlockedUser>,
+        cached: () -> List<BlockedUser>?,
+    ): List<BlockedUser> = inMemory.ifEmpty { cached().orEmpty() }
+
+    /** Whether a message from [authorId] is one this account asked not to hear. */
+    fun isBlocked(authorId: String, blocked: List<BlockedUser>): Boolean =
+        blocked.any { it.user.id == authorId }
 
     /**
      * Quiet hours, on this phone's clock.
