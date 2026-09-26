@@ -65,3 +65,18 @@ export function blockedRuns(
 export function blockedRunLabel(count: number): string {
   return count === 1 ? 'Blocked message' : `${count} blocked messages`;
 }
+
+/**
+ * The run to open before jumping to `id`, or null when it can be found as it
+ * is. Only a run's first message carries an element while it is folded, so a
+ * jump (search, pins, a reply quote, a reminder, a thread root) to any other
+ * message in it must reveal the run first and scroll once its rows exist.
+ */
+export function runToReveal(
+  runs: ReadonlyMap<string, BlockedRun>,
+  revealed: ReadonlySet<string>,
+  id: string,
+): string | null {
+  const run = runs.get(id);
+  return run && !revealed.has(run.head) ? run.head : null;
+}

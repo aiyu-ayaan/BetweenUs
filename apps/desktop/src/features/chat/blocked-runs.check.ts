@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { blockedRunLabel, blockedRuns, type FoldableMessage } from './blocked-runs';
+import { blockedRunLabel, blockedRuns, runToReveal, type FoldableMessage } from './blocked-runs';
 
 const say = (id: string, author: string, extra: Partial<FoldableMessage> = {}): FoldableMessage => ({
   id,
@@ -46,6 +46,12 @@ assert.deepEqual(mixed.get('d'), { head: 'd', count: 1 });
 // stays revealed as the person keeps talking.
 const grown = blockedRuns([...list, say('6', 'mallory')], blocked);
 assert.deepEqual(grown.get('6'), { head: '5', count: 2 });
+
+// A jump to any message in a folded run opens that run; anything else is left.
+assert.equal(runToReveal(runs, new Set(), '3'), '2');
+assert.equal(runToReveal(runs, new Set(), '2'), '2');
+assert.equal(runToReveal(runs, new Set(['2']), '3'), null);
+assert.equal(runToReveal(runs, new Set(), '1'), null);
 
 assert.equal(blockedRunLabel(1), 'Blocked message');
 assert.equal(blockedRunLabel(3), '3 blocked messages');

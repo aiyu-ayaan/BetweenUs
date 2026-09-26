@@ -73,7 +73,7 @@ import {
 import { emojiQueryAt } from './emoji-names';
 import { mentionQueryAt } from './mention-query';
 import { arrivalLine } from './arrival';
-import { blockedRunLabel, blockedRuns } from './blocked-runs';
+import { blockedRunLabel, blockedRuns, runToReveal } from './blocked-runs';
 import { clockTime, dayLabel, fullDateLabel, sameDay } from './day';
 import { isStaff, roleBadgeLabel } from '../members/MemberList';
 import { nextFollow } from './follow';
@@ -972,13 +972,20 @@ function MessageList({
   // it is findable in a wall of text that otherwise looks the same.
   useEffect(() => {
     if (!jumpTo) return;
+    // Inside a folded blocked run there is no element for it yet: open the
+    // run and let this effect run again once its rows are drawn.
+    const hidden = runToReveal(folded, revealed, jumpTo);
+    if (hidden !== null) {
+      setRevealed((current) => new Set(current).add(hidden));
+      return;
+    }
     const row = document.getElementById(`message-${jumpTo}`);
     row?.scrollIntoView({ behavior: scrollBehavior(), block: 'center' });
     setHighlighted(jumpTo);
     clearJump();
     const timer = window.setTimeout(() => setHighlighted(null), 2000);
     return () => window.clearTimeout(timer);
-  }, [jumpTo, clearJump]);
+  }, [jumpTo, clearJump, folded, revealed]);
 
   if (loading) {
     // Skeleton rows keep the layout from jumping when history arrives.
