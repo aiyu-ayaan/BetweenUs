@@ -79,4 +79,53 @@ class ThreadRulesTest {
         assertEquals("4", ThreadRules.unreadBadge(4))
         assertEquals("99+", ThreadRules.unreadBadge(250))
     }
+
+    @Test
+    fun `the toggle says what tapping it would do`() {
+        assertEquals("Unfollow", ThreadRules.followLabel(true))
+        assertEquals("Follow", ThreadRules.followLabel(false))
+    }
+
+    @Test
+    fun `a root is recognised by its words, then its file, then its file count`() {
+        assertEquals("Original message deleted", ThreadRules.rootPreview(true, "hi", listOf("a.png")))
+        assertEquals("hi", ThreadRules.rootPreview(false, "  hi ", listOf("a.png")))
+        assertEquals("a.png", ThreadRules.rootPreview(false, "", listOf("a.png")))
+        assertEquals("Attachment", ThreadRules.rootPreview(false, " ", listOf("")))
+        assertEquals("2 attachments", ThreadRules.rootPreview(false, "", listOf("a", "b")))
+        assertEquals("Empty message", ThreadRules.rootPreview(false, "", emptyList()))
+    }
+
+    @Test
+    fun `a list is one server's, or the direct messages' at home`() {
+        assertTrue(ThreadRules.inScope("s1", "s1"))
+        assertFalse(ThreadRules.inScope("s2", "s1"))
+        assertTrue(ThreadRules.inScope(null, null))
+        assertFalse(ThreadRules.inScope("s1", null))
+        assertFalse(ThreadRules.inScope(null, "s1"))
+    }
+
+    @Test
+    fun `an unfollowed thread drops out and the order holds`() {
+        assertEquals(
+            listOf("c", "a"),
+            ThreadRules.stillFollowed(listOf("c", "b", "a"), setOf("a", "c")),
+        )
+    }
+
+    @Test
+    fun `a follow state reads off the wire`() {
+        val state = ThreadFollowState.from(
+            org.json.JSONObject()
+                .put("rootId", "r1")
+                .put("channelId", "c1")
+                .put("serverId", org.json.JSONObject.NULL)
+                .put("following", true)
+                .put("unreadCount", 3),
+        )
+        assertEquals("r1", state.rootId)
+        assertNull(state.serverId)
+        assertTrue(state.following)
+        assertEquals(3, state.unreadCount)
+    }
 }

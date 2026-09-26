@@ -13,6 +13,7 @@ import com.aatech.betweenus.core.data.MessageMoment
 import com.aatech.betweenus.core.data.MessageReply
 import com.aatech.betweenus.core.data.BetweenUsApi
 import com.aatech.betweenus.core.data.PollSettings
+import com.aatech.betweenus.core.data.ThreadRules
 import com.aatech.betweenus.core.data.UploadedObject
 import com.aatech.betweenus.core.data.UploadedPart
 import com.aatech.betweenus.core.data.Session
@@ -459,11 +460,77 @@ object Conversation {
         val body = MessageBody(said, emptyList(), null, usedEmoji(channelId, said)).encode()
         val sealed = E2ee.encryptForChannel(channelId, body)
         val message = BetweenUsApi.sendMessage(channelId, sealed, threadRootId = rootId)
-        val readable = read(message)
+        addReply(rootId, read(message))
+    }
+
+    private fun addReply(rootId: String, readable: ReadableMessage) {
         _threads.update { all ->
             val current = all[rootId] ?: return@update all
             if (current.replies.any { it.id == readable.id }) return@update all
             all + (rootId to current.copy(replies = merge(current.replies, listOf(readable))))
+        }
+    }
+
+    /**
+     * Follows or unfollows a thread. The `thread.follow` event carries the same
+     * state back to every device, this one included; applying the answer here
+     * as well means no wait for it.
+     */
+    suspend fun setThreadFollowing(rootId: String, following: Boolean) {
+        val state = BetweenUsApi.setThreadFollowing(rootId, following)
+        applyFollow(state.rootId, state.following, state.unreadCount)
+    }
+
+    private fun applyFollow(rootId: String, following: Boolean, unread: Int) {
+        if (rootId.isEmpty()) return
+        if (following) _threadUnread.update { it + (rootId to unread) }
+        else _threadUnread.update { it - rootId }
+    }
+
+    /** A followed thread as the list draws it: which thread, and its root, opened. */
+    data class FollowedRow(
+        val rootId: String,
+        val channelId: String,
+        val serverId: String?,
+        val root: ReadableMessage,
+    )
+
+    data class FollowedList(
+        val items: List<FollowedRow> = emptyList(),
+        val loading: Boolean = false,
+        val error: String? = null,
+    )
+
+    private val _followedList = MutableStateFlow(FollowedList())
+    val followedList: StateFlow<FollowedList> = _followedList.asStateFlow()
+
+    /**
+     * Loads the followed threads of one server, or - with no server - the
+     * direct messages', which the server cannot filter for. Roots are opened
+     * with their channel's key here, like any message; the server only said
+     * which roots and how many replies are unread.
+     */
+    fun loadFollowedList(serverId: String?) {
+        _followedList.update { it.copy(loading = true, error = null) }
+        scope.launch {
+            runCatching {
+                val all = BetweenUsApi.followedThreads(serverId)
+                val rows = all.filter { ThreadRules.inScope(it.state.serverId, serverId) }
+                // Keys first, per channel, so a root is not a padlock only
+                // because the channel has not been opened this session.
+                rows.map { it.state.channelId }.distinct().forEach {
+                    runCatching { E2ee.syncChannelKeys(it) }
+                }
+                rows.map {
+                    FollowedRow(it.state.rootId, it.state.channelId, it.state.serverId, read(it.root))
+                }
+            }.onSuccess { rows ->
+                _followedList.value = FollowedList(rows)
+            }.onFailure { error ->
+                _followedList.update {
+                    it.copy(loading = false, error = error.message ?: "Could not load threads")
+                }
+            }
         }
     }
 
@@ -565,6 +632,22 @@ object Conversation {
                 _messages.update { all -> all + (channelId to merge(all[channelId], readable)) }
             }
         }
+    }
+
+    /**
+     * Bumped each time the app returns to the front. A thread screen keys its
+     * "mark it read" effect on it: a reply counted while the phone was locked
+     * changes nothing the screen watches once it is back, and the marker was
+     * only moved by the next reply.
+     */
+    private val _resumed = MutableStateFlow(0)
+    val resumed: StateFlow<Int> = _resumed.asStateFlow()
+
+    /** The app came back to the front: open threads and follow counts are stale. */
+    fun resumeThreads() {
+        _resumed.update { it + 1 }
+        _threads.value.keys.forEach { refreshThread(it) }
+        loadThreadUnread()
     }
 
     /**
@@ -695,6 +778,8 @@ object Conversation {
          * pictures exist to keep readable.
          */
         emoji: List<MessageCustomEmoji>? = null,
+        /** Set when this is a reply in a thread: it goes to that thread, not the timeline. */
+        threadRootId: String? = null,
     ) {
         // The pictures for whatever custom emoji the text uses, taken from the
         // server this channel belongs to. They travel inside the envelope, so a
@@ -719,8 +804,9 @@ object Conversation {
             // nothing to open once, and the text is in everybody's history
             // either way.
             viewOnce = viewOnce && attachments.isNotEmpty(),
+            threadRootId = threadRootId,
         )
-        insert(read(message))
+        if (threadRootId != null) addReply(threadRootId, read(message)) else insert(read(message))
     }
 
     /**

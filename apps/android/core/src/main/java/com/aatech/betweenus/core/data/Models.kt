@@ -1094,6 +1094,36 @@ data class ThreadSummary(val replyCount: Int, val lastReplyAt: String?) {
     }
 }
 
+/** This account's place in one thread: what `thread.follow` and the follow calls carry. */
+data class ThreadFollowState(
+    val rootId: String,
+    val channelId: String,
+    /** Null for a direct message. */
+    val serverId: String?,
+    val following: Boolean,
+    val unreadCount: Int,
+) {
+    companion object {
+        fun from(json: JSONObject) = ThreadFollowState(
+            rootId = json.optString("rootId"),
+            channelId = json.optString("channelId"),
+            serverId = json.stringOrNull("serverId"),
+            following = json.optBoolean("following"),
+            unreadCount = json.optInt("unreadCount"),
+        )
+    }
+}
+
+/** A followed thread with its root, as the followed-threads list has it. Still sealed. */
+data class FollowedThread(val state: ThreadFollowState, val root: Message) {
+    companion object {
+        fun from(json: JSONObject) = FollowedThread(
+            state = ThreadFollowState.from(json),
+            root = Message.from(json.getJSONObject("root")),
+        )
+    }
+}
+
 /** One page of history. `nextCursor` is the id to ask `before` for. */
 data class Page<T>(val items: List<T>, val nextCursor: String?)
 

@@ -566,6 +566,22 @@ object BetweenUsApi {
             .associate { it.optString("rootId") to it.optInt("unreadCount") }
     }
 
+    /** The followed threads with their roots, newest activity first; one server's when named. */
+    suspend fun followedThreads(serverId: String? = null): List<FollowedThread> = io {
+        authedArray(
+            "GET",
+            "/api/v1/messages/threads/followed" +
+                (serverId?.let { "?serverId=${enc(it)}" } ?: ""),
+        ).map { FollowedThread.from(it) }
+    }
+
+    /** Follows or stops following a thread, on every device. */
+    suspend fun setThreadFollowing(rootId: String, following: Boolean): ThreadFollowState = io {
+        ThreadFollowState.from(
+            authed(if (following) "PUT" else "DELETE", "/api/v1/messages/${enc(rootId)}/thread/follow"),
+        )
+    }
+
     /**
      * Moves this account's read marker in a thread up to [messageId], on every
      * device. Answers with what is still unread - a reply that landed while

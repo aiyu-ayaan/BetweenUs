@@ -34,6 +34,36 @@ object ThreadRules {
         else -> unread.toString()
     }
 
+    /** The toggle's words. */
+    fun followLabel(following: Boolean): String = if (following) "Unfollow" else "Follow"
+
+    /**
+     * A line to recognise a followed thread's root by: what was said, else the
+     * file, else how many files. Desktop's `preview` in FollowedThreadsPanel.
+     */
+    fun rootPreview(deleted: Boolean, text: String, attachmentNames: List<String>): String = when {
+        deleted -> "Original message deleted"
+        text.isNotBlank() -> text.trim()
+        attachmentNames.size == 1 -> attachmentNames[0].ifBlank { "Attachment" }
+        attachmentNames.size > 1 -> "${attachmentNames.size} attachments"
+        else -> "Empty message"
+    }
+
+    /**
+     * Whether a followed thread belongs to the list on screen: a server's, or -
+     * at home, where the server cannot filter for "no server" - the direct
+     * messages'.
+     */
+    fun inScope(threadServerId: String?, scopeServerId: String?): Boolean =
+        threadServerId == scopeServerId
+
+    /**
+     * The rows still followed, in the order they arrived in. Unfollowed
+     * elsewhere drops out at once; the order is the server's as of the load.
+     */
+    fun stillFollowed(rootIds: List<String>, following: Set<String>): List<String> =
+        rootIds.filter { it in following }
+
     /** "just now", "5m ago", "3h ago", "2d ago" - short, because it sits in a chip. */
     fun age(iso: String, now: Instant = Instant.now()): String {
         val at = runCatching { Instant.parse(iso) }.getOrNull() ?: return ""

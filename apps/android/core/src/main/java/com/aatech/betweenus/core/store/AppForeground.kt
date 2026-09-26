@@ -46,6 +46,7 @@ object AppForeground {
                     // several messages behind. Coming back is the other moment
                     // - besides a reconnect - when it has to be re-read.
                     Conversation.resumeVisible()
+                    if (returning) Conversation.resumeThreads()
                 }
 
                 override fun onActivityPaused(activity: Activity) {
