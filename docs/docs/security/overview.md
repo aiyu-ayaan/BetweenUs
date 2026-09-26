@@ -64,6 +64,7 @@ says who you are, not what you may do, because a role can change mid-token.
   caller can't see answers 404, not 403, so ids can't be probed.
 - **Permissions**: role defaults + custom roles + grants − denials, deny
   applied last so it always wins.
+- **Remote input is validated again on the machine.** The gateway only checks the permission an event type needs; the agent rejects out-of-range coordinates, unknown key codes, absurd wheel deltas, malformed payloads and rates above budget, and counts what it drops without logging key content.
 - **Remote access** is never implied by a server role — every permission is
   granted per user per machine, a session carries the permissions it was
   issued with rather than re-deriving them, and every refusal is audited,

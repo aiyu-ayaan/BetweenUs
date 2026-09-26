@@ -201,15 +201,49 @@ file browser, which is a different feature.
   if nobody answers. A grant is permission to *ask*, not permission to
   start.
 
-## Input injection (Windows)
+## Input injection
 
 Electron's `sendInputEvent` only reaches the app's own window, which is
 useless for controlling the rest of the desktop. Native addons need a
 rebuild per Electron version and a prebuilt binary per platform; spawning a
 process per event is far too slow to drag a window with. Instead: one
-long-lived PowerShell process P/Invokes `user32`, fed one short line per
-event. Windows only today — macOS and Linux report unsupported and a
-session there is view-only.
+long-lived helper process per platform, fed one short line per event, behind
+the same small interface in `apps/desktop/electron/remote-input.ts`.
+
+| Platform | Helper | Status |
+| --- | --- | --- |
+| Windows | PowerShell P/Invoking `user32` | Working |
+| Linux, X11 | Python 3 `ctypes` over libX11/libXtst (XTEST) | Exercised against a nested X server; needs `python3`, libX11 and libXtst |
+| Linux, Wayland | None | **Unsupported.** Wayland gives no program the right to drive other windows; the routes are the RemoteDesktop portal or `/dev/uinput`, and neither works without a native binding or extra privileges. XTEST under XWayland would only reach X11 clients and look like success, so it is refused |
+| macOS | `osascript -l JavaScript` calling `CGEventPost` | Written, **never run**; needs the Accessibility permission. Types physical keys only, so a character with no key is dropped |
+
+Where injection is unavailable the session is view-only and the *viewer is
+told why*: the agent answers a control request, and a session that was granted
+control on paper, with `control.denied` and a reason, which the gateway relays
+as `control.changed` and the viewer already displays. The same reason is in
+Settings, under Remote Access.
+
+### Validation in the agent
+
+The gateway checks which permission an event type needs and forwards the event
+unread, so the agent decides whether a coordinate or key is sane
+(`input-validate.ts`, pure and unit-checked). It rebuilds every event from a
+whitelist of fields and drops, and counts, anything that is:
+
+- not an object, padded with extra fields, or of a type other than the two the
+  wire defines;
+- a coordinate that is not finite or is off the screen by more than 2% (a
+  smaller overshoot is clamped, since 1.0 is a real edge);
+- an unknown action, button or source;
+- a key `code` that is not in the table of keys this design injects, or a key
+  character that is a control code, half a surrogate pair or not a short name;
+- a wheel event without a finite delta (deltas are clamped to +/-2400);
+- above the rate budget: 300 pointer moves/s, 100 key or button presses/s and
+  60 wheel events/s per source, with a burst allowance.
+
+Rejections are counted by reason and shown in the diagnostics; the offending
+value is never logged. Releases (`up`) are never rationed, because dropping one
+would leave a key or button held on the machine.
 
 ## Rules
 

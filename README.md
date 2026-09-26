@@ -237,6 +237,7 @@ to be framed, so no browser tab can ever show it.
 | **Remote desktop** | | | |
 | Offer this machine to be controlled | ✅ | — | — |
 | View and control another machine | ✅ | — | ✅ |
+| Be controlled: mouse and keyboard injected on this machine | ✅ Windows, Linux (X11); macOS untested; not Wayland | — | — |
 | Grants per person and permission, with expiry | ✅ | — | ✅ |
 | Rename, remove, read the audit trail | ✅ | — | ✅ |
 
@@ -796,7 +797,11 @@ the sessions themselves, which a machine's owner can read.
 The owner connecting to their own machine starts immediately; anyone else
 raises a prompt on the machine that refuses itself if nobody answers, and a
 banner stays up for as long as the session does. Mouse and keyboard injection
-is Windows-only for now - elsewhere a session can watch but not touch.
+works on Windows and on Linux under X11; the macOS backend is written but has never
+been run, and a Wayland session is refused (Wayland allows no program to drive other
+windows). Where injection is unavailable a session can watch but not touch, and the
+viewer is told why. The agent also validates every event itself: coordinates, key
+codes, wheel deltas and rate.
 
 ## Public ingress
 
