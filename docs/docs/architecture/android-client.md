@@ -486,6 +486,49 @@ that a voice channel must never become "the channel", live in `goToServer` and
 them, because a second copy of the voice rule is a second place for it to be
 forgotten.
 
+## The channel list, and rearranging it
+
+The drawer draws a server the way the desktop sidebar does: the channels in no
+category first, as a **TEXT CHANNELS** list and a **VOICE CHANNELS** list, each
+with its own create button for a manager (the voice one opens the create sheet
+already on Voice), and then every category. Inside each list and category text
+comes before voice. The sections come from `channelSections` in `Models.kt`,
+the same order the desktop's `buildSections` gives.
+
+Folding a category is kept per account and per server on this phone
+(`store/CollapsedCategories.kt`, a small `SharedPreferences` file) and survives
+a restart; sign-out forgets it. It is never sent anywhere. A folded category
+still shows its unread count and the channel you are in.
+
+Somebody with `MANAGE_CHANNEL` long-presses a channel or a category heading for
+**Move up** / **Move down**, and the same two steps are offered to a screen
+reader as custom actions on the row, so moving never depends on a held gesture.
+There is no drag. A step inside a section swaps with the neighbour of the same
+kind; at the edge of its group a channel crosses into the section above or
+below, so it can be carried into and out of a category one step at a time. The
+rules are a port of the desktop's `sidebar-layout.ts` move helpers and of the
+shared `applyChannelLayout` (`core/data/ChannelLayout.kt`, covered by
+`ChannelLayoutTest`).
+
+A step is drawn at once: `Workspace.arrangeChannels` applies the layout locally
+with the same `applyChannelLayout` the server runs, then sends
+`PUT /servers/:id/channel-layout`. If the server refuses, the list is put back -
+unless a refetch has already replaced it, which is newer than either copy - and
+the reason is shown above the list. Creating, renaming and deleting categories,
+and creating a channel straight into one, are still desktop and web only.
+
+## Creating a poll
+
+The attachment sheet has a **Poll** tile (not while files are waiting in the
+preview or a message is being edited). `PollComposerSheet.kt` takes a question,
+two to ten options, a multi-choice switch and an optional length (an hour, a
+day, three days, a week, or until closed). `Polls.ready` holds the same word
+limits as the desktop's `readyPoll` - the server never sees the words, so it
+cannot check them - and refuses two options that say the same thing.
+`Conversation.sendPoll` seals the question as the message text and the labels
+as `poll.options` inside the envelope, and tells the server only the option
+count, multi-choice and duration.
+
 ## One name, drawn once
 
 Every list of people draws a display name over an `@handle`. An account that
