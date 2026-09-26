@@ -1167,6 +1167,8 @@ model Message {
   poll          MessagePoll?
   /// On a root: who follows its thread, and how far each of them has read.
   threadFollows ThreadFollow[]    @relation("ThreadFollows")
+  /// Prior versions of an edited message, sealed. See MessageEdit.
+  edits         MessageEdit[]
 
   // History paging reads newest-first within a channel.
   @@index([channelId, createdAt])
@@ -1177,6 +1179,32 @@ model Message {
   // A thread's history pages newest-first under its root.
   @@index([threadRootId, createdAt])
   @@map("messages")
+}
+
+/// One superseded version of an edited message.
+///
+/// `content` is the ciphertext envelope the message held before the edit, kept
+/// byte for byte - same channel key and epoch as the message itself, so the
+/// server holds exactly as much about the old text as it does about the new:
+/// nothing readable. `writtenAt` is when that version was written (the message's
+/// creation, or the edit before), so a client can list versions with times.
+///
+/// Cascades with the message, and a delete empties the table for it explicitly:
+/// a tombstone keeps no words, old or new. Disappearing and one-time messages
+/// never get a row, since keeping a copy would outlive what they promise.
+model MessageEdit {
+  id        String   @id @default(uuid())
+  messageId String
+  content   String
+  writtenAt DateTime
+  /// When this version was replaced.
+  createdAt DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  // The history endpoint reads one message's versions newest-first.
+  @@index([messageId, createdAt])
+  @@map("message_edits")
 }
 
 /// One person's one look at a one-time message.
