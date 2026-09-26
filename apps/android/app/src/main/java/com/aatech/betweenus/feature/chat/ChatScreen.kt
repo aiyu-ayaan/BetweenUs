@@ -102,6 +102,7 @@ fun ChatScreen(
     /** Null when the channel list is already on screen beside this one. */
     onOpenMenu: (() -> Unit)?,
     onOpenMembers: () -> Unit,
+    onOpenFollowedThreads: () -> Unit,
     onStartCall: () -> Unit,
     /** Opens a message's thread as its own screen. */
     onOpenThread: (rootId: String) -> Unit = {},
@@ -650,6 +651,7 @@ fun ChatScreen(
                 onOpenPins = { showPins = true },
                 onOpenScheduled = { showScheduled = true },
                 onOpenMembers = onOpenMembers,
+                onOpenFollowedThreads = onOpenFollowedThreads,
                 onOpenSearch = { showSearch = true },
             )
         }

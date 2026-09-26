@@ -63,6 +63,7 @@ fun ChannelMenu(
     onOpenScheduled: () -> Unit,
     onOpenMembers: () -> Unit,
     onOpenSearch: () -> Unit,
+    onOpenFollowedThreads: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     var open by remember { mutableStateOf(false) }
@@ -99,6 +100,15 @@ fun ChannelMenu(
                 onClick = {
                     open = false
                     onOpenPins()
+                },
+            )
+
+            DropdownMenuItem(
+                text = { Text("Followed threads") },
+                leadingIcon = { BetweenUsIcon(BetweenUsIcons.Message) },
+                onClick = {
+                    open = false
+                    onOpenFollowedThreads()
                 },
             )
 

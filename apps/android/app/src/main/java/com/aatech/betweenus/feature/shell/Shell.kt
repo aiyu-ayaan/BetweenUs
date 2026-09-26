@@ -53,6 +53,7 @@ import com.aatech.betweenus.core.store.Workspace
 import com.aatech.betweenus.feature.chat.ChatScreen
 import com.aatech.betweenus.feature.home.AddFriendScreen
 import com.aatech.betweenus.feature.home.FriendsScreen
+import com.aatech.betweenus.feature.chat.FollowedThreadsScreen
 import com.aatech.betweenus.feature.chat.ThreadScreen
 import com.aatech.betweenus.feature.members.MembersScreen
 import com.aatech.betweenus.feature.status.StatusScreen
@@ -232,6 +233,11 @@ fun Shell(user: PublicUser) {
     var channelId by rememberSaveable { mutableStateOf(LastPlace.channelId) }
     /** The root of the thread on screen, when [Route.Thread] is. */
     var threadRootId by rememberSaveable { mutableStateOf<String?>(null) }
+    /**
+     * The channel that thread lives in. Not always the one on screen: a thread
+     * opened from the followed list can be in any channel of the server.
+     */
+    var threadChannelId by rememberSaveable { mutableStateOf<String?>(null) }
 
     /**
      * The voice channel, kept apart from the text one. They are both "the
@@ -594,8 +600,12 @@ fun Shell(user: PublicUser) {
                                 self = user,
                                 onOpenMenu = openMenu,
                                 onOpenMembers = { navigation.navigate(Route.Members) },
+                                onOpenFollowedThreads = {
+                                    navigation.navigate(Route.FollowedThreads)
+                                },
                                 onOpenThread = { rootId ->
                                     threadRootId = rootId
+                                    threadChannelId = id
                                     navigation.navigate(Route.Thread)
                                 },
                                 // The call button in a text channel means the voice
@@ -642,7 +652,7 @@ fun Shell(user: PublicUser) {
                     }
                     composable(Route.Thread) {
                         val root = threadRootId
-                        val channel = channelId
+                        val channel = threadChannelId ?: channelId
                         if (root != null && channel != null) {
                             ThreadScreen(
                                 channelId = channel,
@@ -651,6 +661,18 @@ fun Shell(user: PublicUser) {
                                 onBack = { navigation.popBackStack() },
                             )
                         }
+                    }
+                    composable(Route.FollowedThreads) {
+                        FollowedThreadsScreen(
+                            serverId = serverId,
+                            self = user,
+                            onOpen = { channel, root ->
+                                threadChannelId = channel
+                                threadRootId = root
+                                navigation.navigate(Route.Thread)
+                            },
+                            onBack = { navigation.popBackStack() },
+                        )
                     }
                     composable(Route.Members) {
                         MembersScreen(
@@ -991,6 +1013,7 @@ object Route {
     const val Chat = "chat"
     const val Members = "members"
     const val Thread = "thread"
+    const val FollowedThreads = "followed-threads"
     const val Voice = "voice"
     const val Settings = "settings"
     const val AccountSettings = "account-settings"
