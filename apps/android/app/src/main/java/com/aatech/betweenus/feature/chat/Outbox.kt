@@ -76,6 +76,8 @@ object Outbox {
         val pendingId: Long? = null,
         /** One-time: the files may be opened once, and opening destroys them. */
         val viewOnce: Boolean = false,
+        /** Set when this is a reply in a thread. */
+        val threadRootId: String? = null,
     )
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -176,6 +178,8 @@ object Outbox {
         viewOnce: Boolean = false,
         /** Set when the single item is a recording this app just made. */
         voice: VoiceNote.Recorded? = null,
+        /** Set when the files answer a thread rather than the channel. */
+        threadRootId: String? = null,
     ) {
         init(context)
         _failures.update { it - channelId }
@@ -188,6 +192,7 @@ object Outbox {
                 items = items.map { Item(it.uri, it.name, it.contentType, voice) },
                 replyTo = replyTo,
                 viewOnce = viewOnce,
+                threadRootId = threadRootId,
             ),
         )
     }
@@ -248,6 +253,7 @@ object Outbox {
                 uploaded,
                 send.replyTo,
                 send.viewOnce,
+                threadRootId = send.threadRootId,
             )
         } catch (error: Throwable) {
             _failures.update {
