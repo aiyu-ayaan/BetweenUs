@@ -88,11 +88,13 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import coil.compose.AsyncImage
 import com.aatech.betweenus.core.data.BetweenUsApi
 import com.aatech.betweenus.core.data.ChannelReadReceipt
 import com.aatech.betweenus.core.data.CustomEmoji
+import com.aatech.betweenus.core.data.EditHistoryRules
 import com.aatech.betweenus.core.data.Endpoint
 import com.aatech.betweenus.core.data.LinkPreview
 import com.aatech.betweenus.core.data.Markup
@@ -226,6 +228,7 @@ fun MessageRow(
     justArrived: Boolean = false,
 ) {
     val message = readable.message
+    var showEditHistory by remember(message.id) { mutableStateOf(false) }
     // A webhook posts as the account that opened it, so `author` is a person
     // who did not say this. Everything below reads `hook` first and falls back
     // to the author, which is what keeps a build server's output from being
@@ -834,11 +837,38 @@ fun MessageRow(
                                 )
                             }
                             if (message.editedAt != null) {
-                                Text(
-                                    text = "edited",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = footnote,
-                                )
+                                // With earlier versions behind it, the word is
+                                // a button that opens them; without, it is the
+                                // plain word it always was.
+                                if (EditHistoryRules.hasHistory(message)) {
+                                    val historyLabel = EditHistoryRules.markerLabel(message.editCount)
+                                    Text(
+                                        text = "edited",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = footnote,
+                                        textDecoration = TextDecoration.Underline,
+                                        modifier = Modifier
+                                            .padding(vertical = 4.dp)
+                                            .clickable(
+                                                onClickLabel = historyLabel,
+                                                role = Role.Button,
+                                            ) { showEditHistory = true },
+                                    )
+                                    if (showEditHistory) {
+                                        EditHistorySheet(
+                                            channelId = channelId,
+                                            messageId = message.id,
+                                            editCount = message.editCount,
+                                            onDismiss = { showEditHistory = false },
+                                        )
+                                    }
+                                } else {
+                                    Text(
+                                        text = "edited",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = footnote,
+                                    )
+                                }
                             }
                             Text(
                                 text = clockTime(LocalContext.current, message.createdAt),

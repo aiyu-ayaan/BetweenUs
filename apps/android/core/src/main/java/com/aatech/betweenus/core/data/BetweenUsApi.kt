@@ -600,6 +600,12 @@ object BetweenUsApi {
         Message.from(authed("GET", "/api/v1/messages/${enc(messageId)}"))
     }
 
+    /** Earlier versions of an edited message, newest first, still sealed. */
+    suspend fun messageEdits(messageId: String): List<MessageEditVersion> = io {
+        authed("GET", "/api/v1/messages/${enc(messageId)}/edits")
+            .optJSONArray("items")?.map { MessageEditVersion.from(it) }.orEmpty()
+    }
+
     /**
      * `content` is the sealed envelope; this client never sends a plaintext body.
      *

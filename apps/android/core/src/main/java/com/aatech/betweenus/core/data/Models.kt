@@ -970,6 +970,12 @@ data class Message(
     val threadRootId: String? = null,
     /** On a root: "N replies · last reply X ago". Null when there is no thread. */
     val thread: ThreadSummary? = null,
+    /**
+     * How many earlier versions the server still holds. Zero on a message never
+     * edited, on a disappearing or one-time one, and on a tombstone; absent from
+     * an older server, which reads the same.
+     */
+    val editCount: Int = 0,
 ) {
     val deleted: Boolean get() = deletedAt != null
 
@@ -1037,6 +1043,7 @@ data class Message(
         .put("poll", poll?.toJson())
         .put("threadRootId", threadRootId)
         .put("thread", thread?.toJson())
+        .put("editCount", editCount)
 
     companion object {
         /** A message somebody wrote. What every row was before [kind] existed. */
@@ -1076,6 +1083,25 @@ data class Message(
             poll = json.optJSONObject("poll")?.let { MessagePoll.from(it) },
             threadRootId = json.stringOrNull("threadRootId"),
             thread = json.optJSONObject("thread")?.let { ThreadSummary.from(it) },
+            editCount = json.optInt("editCount", 0),
+        )
+    }
+}
+
+/** One earlier version of an edited message, still sealed. */
+data class MessageEditVersion(
+    val id: String,
+    /** The envelope the message held then, opened with the channel key like its body. */
+    val content: String,
+    val writtenAt: String,
+    val replacedAt: String,
+) {
+    companion object {
+        fun from(json: JSONObject) = MessageEditVersion(
+            id = json.getString("id"),
+            content = json.optString("content"),
+            writtenAt = json.optString("writtenAt"),
+            replacedAt = json.optString("replacedAt"),
         )
     }
 }
