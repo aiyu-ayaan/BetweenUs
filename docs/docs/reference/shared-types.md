@@ -219,8 +219,19 @@ export interface Message {
   threadRootId?: string | null;
   /** On a root: `{ replyCount, lastReplyAt }` for the "N replies" chip. */
   thread?: MessageThreadSummary | null;
+  /** Earlier versions the server holds; 0 when never edited, one-time, disappearing or deleted. */
+  editCount?: number;
   createdAt: string;
   updatedAt: string;
+}
+
+/** `GET /messages/:id/edits` returns `{ items: MessageEditVersion[] }`, newest first. */
+export interface MessageEditVersion {
+  id: string;
+  /** The previous envelope, opened on the device like `Message.content`. */
+  content: string;
+  writtenAt: string;
+  replacedAt: string;
 }
 
 export interface MessageThreadSummary {

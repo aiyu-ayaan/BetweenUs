@@ -345,6 +345,14 @@ never stored. Both foreign keys cascade, so a destroyed root or account takes
 its rows; `@@index([rootId])` serves "who follows this thread". Migration
 `20260926120000_thread_follows`.
 
+`MessageEdit` (`message_edits`) holds one superseded version of an edited
+message: `content` is the previous sealed envelope, `writtenAt` when that
+version was written (the send, or the edit before) and `createdAt` when it was
+replaced. `@@index([messageId, createdAt])` serves the newest-first read, the
+foreign key cascades, and the delete path empties a message's rows explicitly.
+Disappearing and one-time messages never get a row. Migration
+`20260927120000_message_edits`.
+
 `viewOnce` marks a one-time message; `viewedAt` records when the **first**
 recipient opened it, which is what the backstop expiry is measured from. Who
 has looked lives in `MessageView`, one row per person — see below.

@@ -159,6 +159,7 @@ to be framed, so no browser tab can ever show it.
 | One-time photos, video and voice, destroyed once seen | ✅ capture blocked | — opens in the app | ✅ `FLAG_SECURE` |
 | Voice messages, with a waveform, played in place | ✅ | ✅ | ✅ |
 | Replies, edit, delete, reactions | ✅ | ✅ | ✅ |
+| Edit history — tap "(edited)" to see earlier versions, sealed like the message and opened on the device | ✅ popover | ✅ popover | ✅ bottom sheet |
 | Polls, refereed not decrypted (vote, change, retract, close) | ✅ create + vote | ✅ create + vote | ✅ create + vote |
 | Threads — a side conversation under one message, with an "N replies" chip, follow / unfollow, unread badge, followed list and files in a reply | ✅ side panel | ✅ side panel | ✅ own screen |
 | Pinned messages | ✅ | ✅ | ✅ |

@@ -35,6 +35,18 @@ one. `server.updated` goes to the `server:<id>` room.
 See [Events](/system-design/events) for why edits, deletes, pins and
 reactions all arrive as one `message.updated` shape.
 
+## Edit history
+
+An edit keeps the *previous envelope* in `message_edits`, byte for byte: sealed
+with the same channel key and epoch as the message, so the server holds no more
+about the old words than about the new. `Message.editCount` is the only signal
+in the DTO (it rides on `message.updated`, so an "(edited)" marker knows whether
+anything is behind it); the versions themselves are read with
+`GET /messages/:id/edits` and opened on the device. Nothing is kept for a
+disappearing or one-time message, at most 50 versions are held per message (the
+oldest go on write), and deleting a message drops its versions in the same
+transaction as the tombstone. No plaintext or ciphertext is logged.
+
 ## Polls: refereed, not decrypted
 
 A poll is an ordinary `USER` message. Its question and option labels sit inside
@@ -87,7 +99,8 @@ not the process.
 | GET | `/unfurl` | Link preview metadata |
 | GET | `/pins` | A channel's pinned messages |
 | POST | `/` | Send a message; `threadRootId` posts it into that root's thread |
-| PATCH | `/:messageId` | Edit (author only) |
+| GET | `/:messageId/edits` | Earlier versions of an edited message, newest first, capped at 50, still sealed. Same visibility as the message (404 outside its channel or before the caller's clear-chat cut-off); empty for a tombstone |
+| PATCH | `/:messageId` | Edit (author only); the old envelope is kept in `message_edits` in the same transaction |
 | DELETE | `/:messageId` | Delete (author, or `DELETE_MESSAGE`) |
 | POST | `/:messageId/burn` | Report a one-time message opened — destroys it |
 | PUT | `/:messageId/pin` | Pin (`MANAGE_MESSAGE` in a server channel, free in a DM) |
