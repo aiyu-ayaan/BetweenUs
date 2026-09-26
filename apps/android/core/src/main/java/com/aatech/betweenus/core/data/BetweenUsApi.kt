@@ -672,9 +672,27 @@ object BetweenUsApi {
         authed("POST", "/api/v1/messages/$messageId/burn")
     }
 
-    suspend fun pins(channelId: String): List<Message> = io {
-        authedArray("GET", "/api/v1/messages/pins?channelId=${enc(channelId)}")
-            .map { Message.from(it) }
+    /**
+     * One page of pins, newest pin first. Sending a limit opts in to the paged
+     * shape; a server that predates it answers a bare array, which is the whole
+     * list and has no next page.
+     */
+    suspend fun pins(channelId: String, cursor: String? = null): Page<Message> = io {
+        val raw = rawAuthed(
+            "GET",
+            "/api/v1/messages/pins?channelId=${enc(channelId)}&limit=25" +
+                (cursor?.let { "&cursor=${enc(it)}" } ?: ""),
+            null,
+        ).trim()
+        if (raw.startsWith("[")) {
+            Page(JSONArray(raw).map { Message.from(it) }, null)
+        } else {
+            val json = JSONObject(raw.ifEmpty { "{}" })
+            Page(
+                items = json.optJSONArray("items")?.map { Message.from(it) }.orEmpty(),
+                nextCursor = json.stringOrNull("nextCursor"),
+            )
+        }
     }
 
     suspend fun pinMessage(messageId: String, pinned: Boolean): Message = io {

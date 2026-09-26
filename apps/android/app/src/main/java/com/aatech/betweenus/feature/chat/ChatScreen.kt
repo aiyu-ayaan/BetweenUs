@@ -194,6 +194,7 @@ fun ChatScreen(
     }
     /** A quoted message that has just been jumped to, flashed so it is findable. */
     var highlighted by remember { mutableStateOf<String?>(null) }
+    var pendingJump by remember { mutableStateOf<String?>(null) }
     var showPins by remember { mutableStateOf(false) }
     var showScheduled by remember { mutableStateOf(false) }
     // What is waiting on a "when?": a message to send later, or a message to be reminded of.
@@ -1150,9 +1151,21 @@ fun ChatScreen(
         )
     }
 
+    LaunchedEffect(pendingJump, messages.size) {
+        val id = pendingJump ?: return@LaunchedEffect
+        val at = messages.indexOfFirst { it.id == id }
+        if (at >= 0) {
+            pendingJump = null
+            listState.animateScrollToItem(at)
+            highlighted = id
+        }
+    }
+
     if (showSearch) {
         SearchSheet(
+            channelId = channelId,
             messages = messages,
+            onReveal = { older -> Conversation.adoptOlder(channelId, older) },
             // The same move the quoted-message jump makes, for the same reason:
             // the flash is what makes the row findable once the list has moved
             // under it.
@@ -1161,6 +1174,10 @@ fun ChatScreen(
                 if (at >= 0) {
                     scope.launch { listState.animateScrollToItem(at) }
                     highlighted = id
+                } else {
+                    // Older than the window: it lands once the search's pages
+                    // have been folded in and the list has redrawn.
+                    pendingJump = id
                 }
             },
             onDismiss = { showSearch = false },

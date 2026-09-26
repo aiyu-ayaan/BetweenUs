@@ -99,4 +99,23 @@ class ChannelSearchTest {
         val text = "y".repeat(200) + "ship"
         assertTrue(searchSnippet(text, "ship").contains("ship"))
     }
+
+    @Test
+    fun `walked matches merge without repeats, newest first, capped`() {
+        val a = readable("m1", "ship a")
+        val b = readable("m2", "ship b")
+        assertEquals(listOf("m2", "m1"), mergeSearchHits(listOf(a), listOf(a, b)).map { it.id })
+        val many = (1..SEARCH_HIT_CAP + 20).map { readable("n%04d".format(it), "ship") }
+        assertEquals(SEARCH_HIT_CAP, mergeSearchHits(emptyList(), many).size)
+    }
+
+    @Test
+    fun `the status line says how far back the walk got and why it stopped`() {
+        val running = SearchWalkState(true, 40, "2026-01-01T10:00:00.000Z", null)
+        assertTrue(walkStatusLine(running, "3 Jan").contains("back to 3 Jan"))
+        val done = SearchWalkState(false, 40, null, com.aatech.betweenus.core.store.WalkStop.End)
+        assertTrue(walkStatusLine(done, null).contains("whole conversation"))
+        val capped = SearchWalkState(false, 1000, null, com.aatech.betweenus.core.store.WalkStop.Cap)
+        assertTrue(walkStatusLine(capped, "3 Jan").contains("1000"))
+    }
 }

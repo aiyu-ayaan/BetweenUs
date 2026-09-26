@@ -5,6 +5,7 @@ import com.aatech.betweenus.core.data.AuthPhase
 import com.aatech.betweenus.core.data.ChannelReadReceipt
 import com.aatech.betweenus.core.data.ChatSocket
 import com.aatech.betweenus.core.data.Message
+import com.aatech.betweenus.core.data.Page
 import com.aatech.betweenus.core.data.MessageAttachment
 import com.aatech.betweenus.core.data.MessageBody
 import com.aatech.betweenus.core.data.MessageCustomEmoji
@@ -1029,8 +1030,34 @@ object Conversation {
         replace(read(BetweenUsApi.pinMessage(message.id, pinned)))
     }
 
-    suspend fun pins(channelId: String): List<ReadableMessage> =
-        BetweenUsApi.pins(channelId).map { read(it) }
+    suspend fun pins(channelId: String, cursor: String? = null): Page<ReadableMessage> {
+        val page = BetweenUsApi.pins(channelId, cursor)
+        return Page(page.items.map { read(it) }, page.nextCursor)
+    }
+
+    /**
+     * One older page for the search to read, opened on this device. The window
+     * the conversation draws is not touched; see [adoptOlder] for that.
+     */
+    suspend fun searchPage(channelId: String, before: String): Page<ReadableMessage> {
+        val page = BetweenUsApi.messages(channelId, before)
+        Cache.putMessages(page.items)
+        return Page(page.items.map { read(it) }, page.nextCursor)
+    }
+
+    /** The id the search starts walking back from: the oldest message in the window. */
+    fun oldestLoadedId(channelId: String): String? =
+        if (channelId in exhausted) null else _messages.value[channelId]?.firstOrNull()?.message?.id
+
+    /**
+     * Folds pages the search has already read into the window, so a hit older
+     * than the window can be scrolled to. The pages run back contiguously from
+     * the window's oldest message, so no gap opens in the timeline.
+     */
+    fun adoptOlder(channelId: String, older: List<ReadableMessage>) {
+        if (older.isEmpty()) return
+        _messages.update { all -> all + (channelId to merge(all[channelId], older)) }
+    }
 
     /**
      * Seals a file under the channel key and uploads the ciphertext.

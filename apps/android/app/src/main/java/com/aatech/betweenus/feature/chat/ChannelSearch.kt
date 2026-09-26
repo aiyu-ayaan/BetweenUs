@@ -11,8 +11,11 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -20,7 +23,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import com.aatech.betweenus.core.store.Conversation
 import com.aatech.betweenus.core.store.ReadableMessage
+import com.aatech.betweenus.core.store.WalkStop
+import com.aatech.betweenus.core.store.walkOlder
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import com.aatech.betweenus.ui.components.BetweenUsField
 import com.aatech.betweenus.ui.components.BetweenUsIcon
 import com.aatech.betweenus.ui.components.BetweenUsIcons
@@ -90,20 +99,75 @@ fun searchSnippet(text: String, query: String): String {
  * [messages] is the list the conversation is drawing, not the store's own: a
  * channel this device holds no key for hides its unreadable rows on screen, and
  * a search that found them would jump to something that is not there.
+ *
+ * Matches in that window appear at once. Then, after a short pause so typing a
+ * word does not start a decryption per letter, the sheet walks back through
+ * older pages - ciphertext fetched with the ordinary history cursor, opened on
+ * this phone - in a run capped at [WALK_MESSAGE_CAP] messages, with a line
+ * saying how far back it has read and a Stop button. A hit older than the
+ * window folds the pages read so far into it ([onReveal]) so the jump has a row
+ * to land on.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchSheet(
+    channelId: String,
     messages: List<ReadableMessage>,
     onJump: (String) -> Unit,
+    onReveal: (List<ReadableMessage>) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var query by remember { mutableStateOf("") }
-    val results = remember(messages, query) { searchMessages(messages, query) }
+    var older by remember { mutableStateOf<List<ReadableMessage>>(emptyList()) }
+    var walk by remember { mutableStateOf<SearchWalkState?>(null) }
+    val walked = remember { mutableListOf<ReadableMessage>() }
+    var resume by remember { mutableStateOf<String?>(null) }
+    var stopped by remember { mutableStateOf(false) }
+    var job by remember { mutableStateOf<Job?>(null) }
+    val scope = rememberCoroutineScope()
+    val term = query.trim().lowercase().takeIf { it.length >= SEARCH_MIN_TERM }
+
+    val results = remember(messages, older, query) {
+        mergeSearchHits(searchMessages(messages, query), older)
+    }
     val scheme = MaterialTheme.colorScheme
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
+    fun run(from: String, forTerm: String, base: Int) {
+        job?.cancel()
+        stopped = false
+        job = scope.launch {
+            walk = SearchWalkState(running = true, scanned = base, oldestAt = walk?.oldestAt, stop = null)
+            val result = walkOlder(
+                cursor = from,
+                fetchPage = { c -> Conversation.searchPage(channelId, c).also { walked.addAll(it.items) } },
+                matches = { !it.message.deleted && it.text.lowercase().contains(forTerm) },
+                createdAt = { it.message.createdAt },
+                isStopped = { stopped },
+                onProgress = { p ->
+                    older = mergeSearchHits(older, p.hits)
+                    resume = p.cursor
+                    walk = SearchWalkState(true, base + p.scanned, p.oldestAt, null)
+                },
+            )
+            resume = result.cursor
+            walk = SearchWalkState(false, base + result.scanned, result.oldestAt ?: walk?.oldestAt, result.stop)
+        }
+    }
+
+    LaunchedEffect(term, channelId) {
+        job?.cancel()
+        older = emptyList()
+        walked.clear()
+        walk = null
+        resume = null
+        if (term == null) return@LaunchedEffect
+        val from = Conversation.oldestLoadedId(channelId) ?: return@LaunchedEffect
+        delay(400)
+        run(from, term, 0)
+    }
+
+    ModalBottomSheet(onDismissRequest = { job?.cancel(); onDismiss() }, sheetState = sheet) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding()) {
             BetweenUsField(
                 label = "Search",
@@ -115,18 +179,21 @@ fun SearchSheet(
             )
 
             when {
-                query.trim().length < SEARCH_MIN_TERM -> Text(
+                term == null -> Text(
                     text = "Type at least $SEARCH_MIN_TERM characters.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = scheme.onSurfaceVariant,
                     modifier = Modifier.padding(20.dp),
                 )
 
-                results.isEmpty() -> EmptyState(
+                results.isEmpty() && walk?.running != true -> EmptyState(
                     icon = BetweenUsIcons.Search,
                     title = "No matches",
-                    detail = "Nothing in the history this phone has opened matches that. " +
-                        "Scrolling further back widens the search.",
+                    detail = if (walk != null) {
+                        "Nothing in the part of the history searched matches that."
+                    } else {
+                        "Nothing in the history this phone has opened matches that."
+                    },
                 )
 
                 else -> LazyColumn(Modifier.heightIn(max = 420.dp)) {
@@ -143,6 +210,11 @@ fun SearchSheet(
                                 )
                             },
                             onClick = {
+                                if (messages.none { it.id == readable.id }) {
+                                    // Older than the window: fold in what the
+                                    // search read, contiguous with the window.
+                                    onReveal(walked.toList())
+                                }
                                 onJump(readable.id)
                                 onDismiss()
                             },
@@ -151,16 +223,67 @@ fun SearchSheet(
                 }
             }
 
-            // Said rather than implied. The number is the honest answer to "why
-            // is that message not in here" - it is older than what this phone
-            // has opened, and the server cannot be asked to look.
+            // Said rather than implied: how far back this has read, and why it
+            // stopped. The server cannot be asked to look.
+            val state = walk
             Text(
-                text = "Searches the ${messages.size} messages this phone has decrypted. " +
-                    "Messages are encrypted, so the server cannot search them.",
+                text = if (state == null) {
+                    "Searches the ${messages.size} messages this phone has decrypted. " +
+                        "Messages are encrypted, so the server cannot search them."
+                } else {
+                    walkStatusLine(state, state.oldestAt?.let { dayLabel(it) })
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = scheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
             )
+            if (state != null) {
+                if (state.running) {
+                    TextButton(
+                        onClick = { stopped = true },
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                    ) { Text("Stop") }
+                } else if (state.stop != WalkStop.End && resume != null && term != null) {
+                    TextButton(
+                        onClick = { run(resume!!, term, state.scanned) },
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                    ) { Text(if (state.stop == WalkStop.Error) "Try again" else "Search further back") }
+                }
+            }
         }
     }
 }
+
+/** What the sheet knows about the walk, for the status line and its buttons. */
+data class SearchWalkState(
+    val running: Boolean,
+    val scanned: Int,
+    val oldestAt: String?,
+    val stop: WalkStop?,
+)
+
+/** One line under the results: how far back, and why it is not going further. */
+fun walkStatusLine(state: SearchWalkState, oldestLabel: String?): String {
+    val reach = oldestLabel?.let { " back to $it" }.orEmpty()
+    return when {
+        state.running -> "Searching$reach… ${state.scanned} older messages read"
+        state.stop == WalkStop.End -> "Searched the whole conversation" +
+            oldestLabel?.let { " ($it)" }.orEmpty()
+        state.stop == WalkStop.Cap -> "Searched$reach. Stopped after ${state.scanned} older messages"
+        state.stop == WalkStop.Stopped -> "Stopped$reach"
+        else -> "Could not read further$reach"
+    }
+}
+
+/** Adds matches to those shown: no repeats, newest first, capped like the window's. */
+fun mergeSearchHits(current: List<ReadableMessage>, more: List<ReadableMessage>): List<ReadableMessage> {
+    val seen = current.mapTo(HashSet()) { it.id }
+    val added = more.filter { it.id !in seen }
+    if (added.isEmpty()) return current
+    return (current + added).sortedWith(
+        compareByDescending<ReadableMessage> { it.message.createdAt }.thenByDescending { it.id },
+    ).take(SEARCH_HIT_CAP)
+}
+
+/** Most matches drawn across the window and the walk together. */
+const val SEARCH_HIT_CAP = 200

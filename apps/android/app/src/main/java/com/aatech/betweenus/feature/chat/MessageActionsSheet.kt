@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -19,6 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import com.aatech.betweenus.core.data.PublicUser
 import com.aatech.betweenus.core.store.Conversation
 import com.aatech.betweenus.core.store.ReadableMessage
+import com.aatech.betweenus.core.store.appendPinPage
 import com.aatech.betweenus.ui.components.EmptyState
 import com.aatech.betweenus.ui.components.ListRow
 import com.aatech.betweenus.ui.components.BetweenUsIcon
@@ -167,15 +170,48 @@ fun MessageActionsSheet(
     }
 }
 
-/** The pinned list, which on the desktop is a right-hand panel. */
+/**
+ * The pinned list, which on the desktop is a right-hand panel. Pages in as the
+ * list is scrolled: the server hands out 25 at a time with a cursor, so a
+ * channel with hundreds of pins is not fetched up front.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PinnedSheet(channelId: String, self: PublicUser, onDismiss: () -> Unit) {
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var pins by remember { mutableStateOf<List<ReadableMessage>?>(null) }
+    var cursor by remember { mutableStateOf<String?>(null) }
+    var loadingMore by remember { mutableStateOf(false) }
+    val listState = rememberLazyListState()
 
     LaunchedEffect(channelId) {
-        pins = runCatching { Conversation.pins(channelId) }.getOrDefault(emptyList())
+        val page = runCatching { Conversation.pins(channelId) }.getOrNull()
+        pins = page?.items ?: emptyList()
+        cursor = page?.nextCursor
+    }
+
+    // The same call from the scroll and from the button; the flag keeps a fast
+    // fling from asking for one page twice.
+    suspend fun loadMore() {
+        val next = cursor ?: return
+        if (loadingMore) return
+        loadingMore = true
+        runCatching { Conversation.pins(channelId, next) }.onSuccess { page ->
+            pins = appendPinPage(pins.orEmpty(), page.items) { it.id }
+            cursor = page.nextCursor
+        }
+        loadingMore = false
+    }
+
+    val nearEnd by remember {
+        derivedStateOf {
+            val info = listState.layoutInfo
+            val last = info.visibleItemsInfo.lastOrNull()?.index ?: -1
+            last >= info.totalItemsCount - 3
+        }
+    }
+    LaunchedEffect(nearEnd, cursor, pins?.size) {
+        if (nearEnd && cursor != null && !pins.isNullOrEmpty()) loadMore()
     }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
@@ -201,13 +237,23 @@ fun PinnedSheet(channelId: String, self: PublicUser, onDismiss: () -> Unit) {
                     detail = "Long-press a message to pin it here.",
                 )
 
-                else -> LazyColumn(Modifier.padding(bottom = 16.dp)) {
+                else -> LazyColumn(Modifier.padding(bottom = 16.dp), state = listState) {
                     items(list, key = { it.id }) { readable ->
                         ListRow(
                             title = readable.message.author.label,
                             subtitle = readable.text.take(120),
                             leading = { BetweenUsIcon(BetweenUsIcons.Pin, tint = Surface700) },
                         )
+                    }
+                    if (cursor != null) {
+                        item(key = "more") {
+                            Text(
+                                text = if (loadingMore) "Loading more pins…" else "Loading more…",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Slate500,
+                                modifier = Modifier.padding(20.dp),
+                            )
+                        }
                     }
                 }
             }
