@@ -148,7 +148,7 @@ to be framed, so no browser tab can ever show it.
 | Per-member permission overrides | ✅ | ✅ | ✅ |
 | Add a friend to a server, kick, change role | ✅ | ✅ | ✅ |
 | Text and voice channels, private channel allowlists | ✅ | ✅ | ✅ |
-| Channel categories: collapse, drag or keyboard to reorder | ✅ | ✅ | 👁️ Grouped and collapsible; reordering on desktop and web |
+| Channel categories: collapse, drag or keyboard to reorder | ✅ | ✅ | ✅ long-press Move up / down; categories are made on desktop and web |
 | Custom emoji: add and remove | ✅ | ✅ | ✅ |
 | **Messaging** | | | |
 | End-to-end encrypted messages, realtime, history paging | ✅ | ✅ | ✅ |
@@ -159,7 +159,7 @@ to be framed, so no browser tab can ever show it.
 | One-time photos, video and voice, destroyed once seen | ✅ capture blocked | — opens in the app | ✅ `FLAG_SECURE` |
 | Voice messages, with a waveform, played in place | ✅ | ✅ | ✅ |
 | Replies, edit, delete, reactions | ✅ | ✅ | ✅ |
-| Polls, refereed not decrypted (vote, change, retract, close) | ✅ create + vote | ✅ create + vote | ✅ vote and close (creating is trailing) |
+| Polls, refereed not decrypted (vote, change, retract, close) | ✅ create + vote | ✅ create + vote | ✅ create + vote |
 | Threads — a side conversation under one message, with an "N replies" chip | ✅ side panel | ✅ side panel | ✅ own screen |
 | Pinned messages | ✅ | ✅ | ✅ |
 | Scheduled send and remind-me (kept on the device, never on the server) | ✅ | ✅ | ✅ |
