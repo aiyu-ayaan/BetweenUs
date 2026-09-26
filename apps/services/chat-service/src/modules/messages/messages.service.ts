@@ -10,15 +10,18 @@ import { PERMISSIONS, type Permission } from '@betweenus/permissions';
 import {
   isDisappearingWindow,
   MAX_MESSAGE_CONTENT_LENGTH,
+  MESSAGE_EDITS_LIMIT,
   type ClearChatsResponse,
   type CreatePollSettings,
   type Message,
+  type MessageEditsResponse,
   type MessageKind,
   type MessageReactionSummary,
   type Paginated,
 } from '@betweenus/shared-types';
 import { purgeMessageAttachments } from '../uploads/attachment-sweeper';
 import { judgePollSettings, toPoll, type PollRow } from './poll-rules';
+import { keepsEditHistory, toEditVersion, writtenAtOf } from './edit-history';
 import { threadRootProblem, threadSummaryOf } from './threads';
 import { publishThreadFollows, recordThreadReply } from './thread-follows';
 
@@ -97,6 +100,9 @@ export const MESSAGE_INCLUDE = {
   // the row also carries the token hash and every history page would otherwise
   // read it out of the database for no reason.
   webhook: { select: { id: true, name: true, avatarUrl: true } },
+  // How many earlier versions an edit left behind; the rows themselves are
+  // read only by the history endpoint.
+  _count: { select: { edits: true } },
   // The refereed half of a poll: counts and indexes, never words. Oldest vote
   // first, so the names under a bar do not reshuffle every time somebody votes.
   poll: {
@@ -462,9 +468,11 @@ export class MessagesService {
    * never put different words in somebody's mouth - and `editedAt` is stamped
    * so every client can say so.
    *
-   * The new body replaces the old ciphertext, so an edit is not recoverable
-   * from the database. There is no edit history and this build does not pretend
-   * to keep one.
+   * The old envelope is kept in `message_edits` in the same transaction as the
+   * replacement, still sealed with the channel key it was written under, so
+   * the server holds no more about the old words than about the new. A message
+   * that disappears or is one-time keeps none: a copy would outlive the
+   * promise. See `keepsEditHistory`.
    */
   async edit(userId: string, messageId: string, content: string): Promise<Message> {
     const existing = await this.require(messageId);
@@ -500,15 +508,81 @@ export class MessagesService {
       });
     }
 
-    const row = await prisma.message.update({
+    const previous = await prisma.message.findUnique({
       where: { id: existing.id },
-      data: { content: trimmed, editedAt: new Date() },
-      include: MESSAGE_INCLUDE,
+      select: { content: true, createdAt: true, editedAt: true, expiresAt: true, viewOnce: true },
+    });
+    if (!previous) {
+      throw new NotFoundException({ code: 'MESSAGE_NOT_FOUND', message: 'Message not found' });
+    }
+
+    const now = new Date();
+    const keep = keepsEditHistory(previous);
+    // One transaction, so a message is never edited without its old words
+    // being kept, nor kept without having been edited.
+    const row = await prisma.$transaction(async (tx) => {
+      if (keep) {
+        await tx.messageEdit.create({
+          data: {
+            messageId: existing.id,
+            content: previous.content,
+            writtenAt: writtenAtOf(previous),
+            createdAt: now,
+          },
+        });
+        // Beyond the cap the oldest go, so a message edited a thousand times
+        // does not grow without bound.
+        const stale = await tx.messageEdit.findMany({
+          where: { messageId: existing.id },
+          orderBy: { createdAt: 'desc' },
+          skip: MESSAGE_EDITS_LIMIT,
+          select: { id: true },
+        });
+        if (stale.length > 0) {
+          await tx.messageEdit.deleteMany({ where: { id: { in: stale.map((edit) => edit.id) } } });
+        }
+      }
+      return tx.message.update({
+        where: { id: existing.id },
+        data: { content: trimmed, editedAt: now },
+        include: MESSAGE_INCLUDE,
+      });
     });
 
     const message = toMessage(row);
     await this.events.publish(EVENTS.MESSAGE_UPDATED, { message });
     return message;
+  }
+
+  /**
+   * Earlier versions of a message, newest first, capped. Visible to exactly
+   * whoever can see the message - channel access and the account's own
+   * clear-chat cut-off, else the same 404 - and sealed: the caller opens each
+   * one with the channel key like the message body.
+   *
+   * A tombstone has no history: it is emptied when the message is deleted.
+   */
+  async edits(userId: string, messageId: string): Promise<MessageEditsResponse> {
+    const row = await prisma.message.findUnique({
+      where: { id: messageId },
+      select: { id: true, channelId: true, createdAt: true, deletedAt: true },
+    });
+    const access = row ? await resolveChannelAccess(userId, row.channelId) : null;
+    if (!row || !access || !access.permissions.includes(PERMISSIONS.VIEW_CHANNEL)) {
+      throw new NotFoundException({ code: 'MESSAGE_NOT_FOUND', message: 'Message not found' });
+    }
+    const floor = await this.historyFloor(userId, row.channelId);
+    if (floor && row.createdAt.getTime() <= floor.getTime()) {
+      throw new NotFoundException({ code: 'MESSAGE_NOT_FOUND', message: 'Message not found' });
+    }
+    if (row.deletedAt) return { items: [] };
+
+    const edits = await prisma.messageEdit.findMany({
+      where: { messageId: row.id },
+      orderBy: { createdAt: 'desc' },
+      take: MESSAGE_EDITS_LIMIT,
+    });
+    return { items: edits.map(toEditVersion) };
   }
 
   /**
@@ -545,8 +619,10 @@ export class MessagesService {
 
     // A tombstone asks nothing, so its poll and every vote on it go too. In the
     // same transaction as the tombstone, so a failed delete keeps the votes.
-    const [, row] = await prisma.$transaction([
+    const [, , row] = await prisma.$transaction([
       prisma.messagePoll.deleteMany({ where: { messageId: existing.id } }),
+      // A tombstone keeps no words, and that includes the earlier versions.
+      prisma.messageEdit.deleteMany({ where: { messageId: existing.id } }),
       prisma.message.update({
         where: { id: existing.id },
         data: {
@@ -842,6 +918,8 @@ interface MessageRow {
   threadRootId?: string | null;
   threadReplyCount?: number;
   threadLastReplyAt?: Date | null;
+  /** Present when the row was read with `MESSAGE_INCLUDE`. */
+  _count?: { edits: number };
 }
 
 export function toMessage(row: MessageRow): Message {
@@ -874,6 +952,7 @@ export function toMessage(row: MessageRow): Message {
     viewedBy: (row.views ?? []).map((view) => view.userId),
     threadRootId: row.threadRootId ?? null,
     thread: threadSummaryOf(row),
+    editCount: row.deletedAt ? 0 : (row._count?.edits ?? 0),
     ...(row.kind === 'WEBHOOK'
       ? {
           webhook: {

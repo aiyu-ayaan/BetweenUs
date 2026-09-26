@@ -1862,7 +1862,37 @@ export interface Message {
    * deleted or expires.
    */
   thread?: MessageThreadSummary | null;
+  /**
+   * How many earlier versions of this message the server still holds - what
+   * makes an "(edited)" marker worth opening. Zero on a message never edited,
+   * on a disappearing or one-time message (which keep no history) and on a
+   * tombstone. Optional so a message from an older build still fits; read
+   * absent as zero.
+   */
+  editCount?: number;
 }
+
+/** One earlier version of an edited message, still sealed. */
+export interface MessageEditVersion {
+  id: string;
+  /**
+   * The envelope the message held then: same channel key and epoch as any
+   * other body, opened on the device exactly like `Message.content`.
+   */
+  content: string;
+  /** When this version was written (the send, or the edit before it). */
+  writtenAt: string;
+  /** When it was replaced by the next one. */
+  replacedAt: string;
+}
+
+/** `GET /messages/:id/edits`: newest first, capped at `MESSAGE_EDITS_LIMIT`. */
+export interface MessageEditsResponse {
+  items: MessageEditVersion[];
+}
+
+/** The most versions the history endpoint returns; older ones are dropped on write. */
+export const MESSAGE_EDITS_LIMIT = 50;
 
 /** What a root message says about the thread hanging off it. */
 export interface MessageThreadSummary {

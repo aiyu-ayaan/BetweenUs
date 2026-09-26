@@ -18,6 +18,7 @@ import type {
   FollowedThread,
   LinkPreview,
   Message,
+  MessageEditsResponse,
   Paginated,
   ThreadFollowState,
 } from '@betweenus/shared-types';
@@ -121,6 +122,15 @@ export class MessagesController {
     @Param('messageId', ParseUUIDPipe) messageId: string,
   ): Promise<Message> {
     return this.messages.one(user.id, messageId);
+  }
+
+  /** Earlier versions of an edited message, newest first, still sealed. */
+  @Get(':messageId/edits')
+  edits(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('messageId', ParseUUIDPipe) messageId: string,
+  ): Promise<MessageEditsResponse> {
+    return this.messages.edits(user.id, messageId);
   }
 
   @Patch(':messageId')
