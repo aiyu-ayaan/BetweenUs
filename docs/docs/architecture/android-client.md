@@ -673,6 +673,15 @@ what a reset costs before it happens: the identity backup is sealed with the old
 password, so a phone signing in fresh afterwards reads what arrives from then
 on, not what came before.
 
+## Following a thread
+
+A thread is its own screen (`ThreadScreen`), and the state behind it is `Conversation.threads`, kept apart from the channel timeline.
+
+- **Follow / Unfollow** sits in the thread screen's header. It calls `PUT`/`DELETE /api/v1/messages/:rootId/thread/follow` and shows the server's word: a thread is followed exactly when `Conversation.threadUnread` holds a count for it, and the `thread.follow` socket event (sent to this account alone) sets or removes that entry, so a follow made on another device flips the button live.
+- **Followed threads** is a screen (`FollowedThreadsScreen`) opened from the channel menu. It shows the server on screen, or - at home - the direct messages, most recent first, from `GET /api/v1/messages/threads/followed`. Each root is decrypted on the device with its channel's key (`Conversation.loadFollowedList`); the row shows the root's preview, the reply count and an unread badge, and opens the thread. `ThreadRules` holds the pure parts (preview line, scope filter, unread badge).
+- **Files in a reply** use the channel composer's `AttachmentSheet` and `SendPreviewDialog`, then `Outbox.enqueue(..., threadRootId = ...)`, so the files are sealed and uploaded under the channel key exactly like a channel message and the message is sent with `threadRootId`. A reply's files are drawn with the channel's own attachment cards.
+- **Read on return**: the thread screen marks the newest reply read whenever it is on screen and the app is in the foreground. `AppForeground` calls `Conversation.resumeThreads()` when the app returns to the front, which bumps a counter the screen's effect is keyed on, refreshes open threads and reloads the follow counts, so a reply that arrived while the phone was locked is read on return rather than at the next reply.
+
 ## Messages that stop existing
 
 Three of the four mechanisms are the server's and the phone only reflects them;
