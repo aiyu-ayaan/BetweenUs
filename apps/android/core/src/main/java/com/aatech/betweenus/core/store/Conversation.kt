@@ -115,6 +115,18 @@ object Conversation {
     private val _threads = MutableStateFlow<Map<String, ThreadState>>(emptyMap())
     val threads: StateFlow<Map<String, ThreadState>> = _threads.asStateFlow()
 
+    /**
+     * rootId -> unread replies, for every thread this account follows. What the
+     * "N replies" chip draws its badge from. Loaded on start and on every
+     * reconnect, and kept current by `thread.follow`, which the server sends to
+     * this account alone with the count already worked out.
+     */
+    private val _threadUnread = MutableStateFlow<Map<String, Int>>(emptyMap())
+    val threadUnread: StateFlow<Map<String, Int>> = _threadUnread.asStateFlow()
+
+    /** Threads whose read marker is being written, so a recomposition asks once. */
+    private val threadReads = ConcurrentHashMap.newKeySet<String>()
+
     /** The oldest id fetched per channel, which is what "load more" asks before. */
     private val cursors = ConcurrentHashMap<String, String>()
     private val exhausted = ConcurrentHashMap.newKeySet<String>()
@@ -135,19 +147,64 @@ object Conversation {
         // happens next, not what happened. A phone is down constantly (a lift,
         // a lock screen, an OS that dropped the connection while the app was in
         // the background), so coming back has to re-read rather than assume.
-        ChatSocket.onReconnect = { resumeVisible() }
+        ChatSocket.onReconnect = {
+            resumeVisible()
+            loadThreadUnread()
+        }
+        loadThreadUnread()
+    }
+
+    /** Every followed thread's unread count, replacing what was held. */
+    fun loadThreadUnread() {
+        scope.launch {
+            runCatching { BetweenUsApi.followedThreadUnread() }
+                .onSuccess { _threadUnread.value = it }
+        }
+    }
+
+    /**
+     * The thread screen has [replyId] - its newest reply - on screen. Clears
+     * the badge at once and moves the marker on the server, which tells every
+     * other device. Nothing is written for a thread with nothing unread.
+     */
+    fun markThreadSeen(rootId: String, replyId: String) {
+        if ((_threadUnread.value[rootId] ?: 0) <= 0) return
+        // A thread left open behind the lock screen is not being read.
+        if (!AppForeground.visible) return
+        if (!threadReads.add(rootId)) return
+        _threadUnread.update { it + (rootId to 0) }
+        scope.launch {
+            runCatching { BetweenUsApi.readThread(rootId, replyId) }.onSuccess { left ->
+                _threadUnread.update { if (rootId in it) it + (rootId to left) else it }
+            }
+            threadReads.remove(rootId)
+        }
     }
 
     fun stop() {
         _messages.value = emptyMap()
         _receipts.value = emptyMap()
         _threads.value = emptyMap()
+        _threadUnread.value = emptyMap()
         cursors.clear()
         exhausted.clear()
         visibleChannelId = null
     }
 
     private suspend fun onEvent(event: JSONObject) {
+        // This account's place in one thread moved: a reply, a read on another
+        // device, or a follow change. Only this account's sockets receive it.
+        if (event.optString("type") == "thread.follow") {
+            val thread = event.optJSONObject("thread") ?: return
+            val rootId = thread.optString("rootId")
+            if (rootId.isEmpty()) return
+            if (thread.optBoolean("following")) {
+                _threadUnread.update { it + (rootId to thread.optInt("unreadCount")) }
+            } else {
+                _threadUnread.update { it - rootId }
+            }
+            return
+        }
         // Somebody read a channel this client is subscribed to. It carries no
         // message, so it is answered before the message is even looked for.
         if (event.optString("type") == "channel.read") {

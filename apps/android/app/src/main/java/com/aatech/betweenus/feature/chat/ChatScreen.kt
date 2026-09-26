@@ -116,6 +116,7 @@ fun ChatScreen(
     val statuses by Presence.statuses.collectAsState()
     val lastSeen by Presence.lastSeen.collectAsState()
     val receiptsByChannel by Conversation.receipts.collectAsState()
+    val threadUnread by Conversation.threadUnread.collectAsState()
 
     val received = everything[channelId].orEmpty()
 
@@ -753,6 +754,7 @@ fun ChatScreen(
                         onReply = { replyingTo = readable.quote() },
                         onOpenSeenBy = { seenFor = readable },
                         onOpenThread = { onOpenThread(readable.id) },
+                        threadUnread = threadUnread[readable.id] ?: 0,
                         onOpenQuoted = { quotedId ->
                             val at = messages.indexOfFirst { it.id == quotedId }
                             // Not on this device yet: the quote carries enough

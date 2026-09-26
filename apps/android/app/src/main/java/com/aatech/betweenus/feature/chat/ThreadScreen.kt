@@ -87,6 +87,16 @@ fun ThreadScreen(
         if (replies.isNotEmpty()) listState.animateScrollToItem(replies.size)
     }
 
+    // The newest reply is on screen once the first page is in: that is read,
+    // on every device. Keyed on the count too, so a reply counted before it
+    // arrived here is read once it does.
+    val unread by Conversation.threadUnread.collectAsState()
+    val newestId = replies.lastOrNull()?.id
+    val loaded = thread?.loading == false
+    LaunchedEffect(newestId, loaded, unread[rootId]) {
+        if (newestId != null && loaded) Conversation.markThreadSeen(rootId, newestId)
+    }
+
     fun submit() {
         val text = draft.trim()
         if (text.isEmpty() || sending) return

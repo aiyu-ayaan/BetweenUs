@@ -206,6 +206,8 @@ fun MessageRow(
     onOpenSeenBy: () -> Unit = {},
     /** Opens this message's thread, from the "N replies" chip under it. */
     onOpenThread: () -> Unit = {},
+    /** Unread replies in this message's thread, when this account follows it. */
+    threadUnread: Int = 0,
     onOpenQuoted: (String) -> Unit = {},
     onReact: (String) -> Unit,
     /** Replaces this account's whole ballot on a poll. Empty takes it back. */
@@ -905,15 +907,34 @@ fun MessageRow(
                 // thread outlives the message it hangs off, and this is the only
                 // way back into it.
                 ThreadRules.chipLabel(message.thread)?.let { label ->
-                    Text(
-                        text = label,
-                        style = MaterialTheme.typography.labelMediumEmphasized,
-                        color = Accent,
+                    // A followed thread with replies not yet seen says how
+                    // many; opening it clears the badge on every device.
+                    val badge = ThreadRules.unreadBadge(threadUnread)
+                    Row(
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
                             .clickable(onClick = onOpenThread)
                             .padding(horizontal = 8.dp, vertical = 4.dp),
-                    )
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.labelMediumEmphasized,
+                            color = Accent,
+                        )
+                        if (badge != null) {
+                            Text(
+                                text = badge,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(50))
+                                    .background(Accent)
+                                    .padding(horizontal = 6.dp),
+                            )
+                        }
+                    }
                 }
 
                 // Only ever under your own message, and only once each reader

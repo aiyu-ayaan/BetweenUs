@@ -530,6 +530,30 @@ object BetweenUsApi {
         )
     }
 
+    /**
+     * rootId -> unread replies, for every thread this account follows. Only
+     * the counts: the roots come along too, but the chip needs none of them.
+     */
+    suspend fun followedThreadUnread(): Map<String, Int> = io {
+        authedArray("GET", "/api/v1/messages/threads/followed")
+            .map { it }
+            .filter { it.optBoolean("following") }
+            .associate { it.optString("rootId") to it.optInt("unreadCount") }
+    }
+
+    /**
+     * Moves this account's read marker in a thread up to [messageId], on every
+     * device. Answers with what is still unread - a reply that landed while
+     * the request was out.
+     */
+    suspend fun readThread(rootId: String, messageId: String): Int = io {
+        authed(
+            "PUT",
+            "/api/v1/messages/${enc(rootId)}/thread/read",
+            obj("messageId" to messageId),
+        ).optInt("unreadCount")
+    }
+
     /** One message by id, tombstone included - a thread's root, usually. */
     suspend fun message(messageId: String): Message = io {
         Message.from(authed("GET", "/api/v1/messages/${enc(messageId)}"))

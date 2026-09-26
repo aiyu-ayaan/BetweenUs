@@ -24,6 +24,16 @@ object ThreadRules {
         return if (age.isEmpty()) count else "$count · last reply $age"
     }
 
+    /**
+     * What the chip's unread badge says for a followed thread, or null for no
+     * badge. Capped, because it sits in a chip. Desktop's `threadUnreadBadge`.
+     */
+    fun unreadBadge(unread: Int?): String? = when {
+        unread == null || unread <= 0 -> null
+        unread > 99 -> "99+"
+        else -> unread.toString()
+    }
+
     /** "just now", "5m ago", "3h ago", "2d ago" - short, because it sits in a chip. */
     fun age(iso: String, now: Instant = Instant.now()): String {
         val at = runCatching { Instant.parse(iso) }.getOrNull() ?: return ""

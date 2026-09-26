@@ -71,4 +71,12 @@ class ThreadRulesTest {
         assertFalse(old.isThreadReply)
         assertNull(old.thread)
     }
+
+    @Test
+    fun `the unread badge is for a followed thread with something new`() {
+        assertNull(ThreadRules.unreadBadge(null))
+        assertNull(ThreadRules.unreadBadge(0))
+        assertEquals("4", ThreadRules.unreadBadge(4))
+        assertEquals("99+", ThreadRules.unreadBadge(250))
+    }
 }
