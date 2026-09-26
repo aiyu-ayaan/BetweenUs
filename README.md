@@ -1048,7 +1048,12 @@ administrator when they have not - who can then open a reset window on the
 account from the panel, which is how a self-hosted deployment with no SMTP
 server still has a way back in. And a **username is checked while you type**,
 against a Bloom filter in front of the unique index, and is now normalised to
-lower case so the constraint and the username login finally agree.
+lower case so the constraint and the username login finally agree. Every
+auth-service instance feeds its filter from the event bus, so a name taken on
+one is refused by the others at once. A blocked person you still share a
+server with is **folded**: each run of their messages becomes one quiet
+"Blocked message · Show" row, and they no longer wake your phone or raise a
+toast. A poll cannot be forwarded, since its ballot belongs to the original.
 
 All three clients have all of it.
 
