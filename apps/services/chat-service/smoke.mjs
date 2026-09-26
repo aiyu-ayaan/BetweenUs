@@ -632,6 +632,43 @@ const pinList = await json(`${CHAT}/api/v1/messages/pins?channelId=${direct.chan
 });
 ok('pin list', pinList.some((item) => item.id === dmMessage.id));
 
+// Paged pins: the bare array stays for older clients, a limit opts in to pages.
+ok('pins without paging stay a bare array', Array.isArray(pinList));
+const extraPins = [];
+for (const text of ['pin two', 'pin three']) {
+  const made = await json(`${CHAT}/api/v1/messages`, {
+    method: 'POST',
+    headers: authed,
+    body: JSON.stringify({ channelId: direct.channelId, content: text }),
+  });
+  await json(`${CHAT}/api/v1/messages/${made.id}/pin`, { method: 'PUT', headers: other });
+  extraPins.push(made.id);
+}
+const pinPage1 = await json(
+  `${CHAT}/api/v1/messages/pins?channelId=${direct.channelId}&limit=2`,
+  { headers: authed },
+);
+ok('pin page one has two items and a cursor', pinPage1.items.length === 2 && !!pinPage1.nextCursor);
+ok('newest pin first', pinPage1.items[0].id === extraPins[1]);
+// Unpinning something already seen must not shift the next page.
+await json(`${CHAT}/api/v1/messages/${extraPins[1]}/pin`, { method: 'DELETE', headers: authed });
+const pinPage2 = await json(
+  `${CHAT}/api/v1/messages/pins?channelId=${direct.channelId}&limit=2&cursor=${encodeURIComponent(pinPage1.nextCursor)}`,
+  { headers: authed },
+);
+ok(
+  'pin page two continues after the cursor with no repeat',
+  pinPage2.items.length === 1 &&
+    pinPage2.items[0].id === dmMessage.id &&
+    pinPage2.nextCursor === null,
+);
+const badPinCursor = await fetch(
+  `${CHAT}/api/v1/messages/pins?channelId=${direct.channelId}&cursor=garbage`,
+  { headers: authed },
+);
+ok('a forged pin cursor is a 400', badPinCursor.status === 400);
+await json(`${CHAT}/api/v1/messages/${extraPins[0]}/pin`, { method: 'DELETE', headers: authed });
+
 const unpinned = await json(`${CHAT}/api/v1/messages/${dmMessage.id}/pin`, {
   method: 'DELETE',
   headers: authed,

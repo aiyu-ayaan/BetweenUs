@@ -23,6 +23,7 @@ import { purgeMessageAttachments } from '../uploads/attachment-sweeper';
 import { judgePollSettings, toPoll, type PollRow } from './poll-rules';
 import { keepsEditHistory, toEditVersion, writtenAtOf } from './edit-history';
 import { threadRootProblem, threadSummaryOf } from './threads';
+import { PIN_PAGE_MAX, decodePinCursor, pinPage, pinPageSize } from './pin-cursor';
 import { publishThreadFollows, recordThreadReply } from './thread-follows';
 
 const PAGE_SIZE = 50;
@@ -212,23 +213,55 @@ export class MessagesService {
     return toMessage(row);
   }
 
-  /** Pinned messages of one channel, most recently pinned first. */
-  async pins(userId: string, channelId: string): Promise<Message[]> {
+  /**
+   * Pinned messages of one channel, most recently pinned first.
+   *
+   * Without `paging` this is the list older clients read: one array, capped at
+   * 100. With it, a keyset page (`pinnedAt` then id, both descending) and a
+   * `nextCursor`, stable while pins come and go.
+   */
+  async pins(userId: string, channelId: string): Promise<Message[]>;
+  async pins(
+    userId: string,
+    channelId: string,
+    paging: { cursor?: string; limit?: number },
+  ): Promise<Paginated<Message>>;
+  async pins(
+    userId: string,
+    channelId: string,
+    paging?: { cursor?: string; limit?: number },
+  ): Promise<Message[] | Paginated<Message>> {
     await this.requireChannelAccess(userId, channelId, PERMISSIONS.VIEW_CHANNEL);
+
+    const cursor = paging?.cursor ? decodePinCursor(paging.cursor) : null;
+    if (paging?.cursor && !cursor) {
+      throw new BadRequestException({ code: 'INVALID_CURSOR', message: 'Invalid cursor' });
+    }
+    const size = paging ? pinPageSize(paging.limit) : PIN_PAGE_MAX;
 
     const clearedAt = await this.historyFloor(userId, channelId);
     const rows = await prisma.message.findMany({
       where: {
         channelId,
-        pinnedAt: { not: null },
         deletedAt: null,
         ...(clearedAt ? { createdAt: { gt: clearedAt } } : {}),
+        ...(cursor
+          ? {
+              OR: [
+                { pinnedAt: { lt: cursor.pinnedAt } },
+                { pinnedAt: cursor.pinnedAt, id: { lt: cursor.id } },
+              ],
+            }
+          : { pinnedAt: { not: null } }),
       },
       include: MESSAGE_INCLUDE,
-      orderBy: { pinnedAt: 'desc' },
-      take: 100,
+      orderBy: [{ pinnedAt: 'desc' }, { id: 'desc' }],
+      take: size + 1,
     });
-    return rows.map(toMessage);
+
+    if (!paging) return rows.slice(0, size).map(toMessage);
+    const page = pinPage(rows, size);
+    return { items: page.items.map(toMessage), nextCursor: page.nextCursor };
   }
 
   /**

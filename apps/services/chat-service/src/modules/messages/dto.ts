@@ -150,6 +150,23 @@ export class MessageQueryDto {
 export class PinQueryDto {
   @IsUUID()
   channelId!: string;
+
+  /** Opaque, from a previous page's `nextCursor`. */
+  @IsOptional()
+  @IsString()
+  @Length(1, 200)
+  cursor?: string;
+
+  /**
+   * Asking for a page size (or a cursor) opts in to the `{ items, nextCursor }`
+   * shape; without either the answer is the bare array older clients read.
+   */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
 }
 
 /**

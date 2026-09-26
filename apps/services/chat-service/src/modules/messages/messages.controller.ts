@@ -68,8 +68,14 @@ export class MessagesController {
   pins(
     @CurrentUser() user: AuthenticatedUser,
     @Query() query: PinQueryDto,
-  ): Promise<Message[]> {
-    return this.messages.pins(user.id, query.channelId);
+  ): Promise<Message[] | Paginated<Message>> {
+    if (query.cursor === undefined && query.limit === undefined) {
+      return this.messages.pins(user.id, query.channelId);
+    }
+    return this.messages.pins(user.id, query.channelId, {
+      cursor: query.cursor,
+      limit: query.limit,
+    });
   }
 
   /**
