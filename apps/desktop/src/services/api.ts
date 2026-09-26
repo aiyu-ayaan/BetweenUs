@@ -45,6 +45,7 @@ import type {
   VaultGrantsResponse,
   LinkPreview,
   Message,
+  MessageEditsResponse,
   NotificationPreferences,
   OAuthProviderSummary,
   Paginated,
@@ -627,6 +628,10 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify({ content }),
     }),
+
+  /** Earlier versions of an edited message, newest first, still sealed. */
+  messageEdits: (messageId: string): Promise<MessageEditsResponse> =>
+    request(`/api/v1/messages/${messageId}/edits`),
 
   pins: (channelId: string): Promise<Message[]> =>
     request(`/api/v1/messages/pins?channelId=${encodeURIComponent(channelId)}`),

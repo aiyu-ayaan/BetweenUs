@@ -36,6 +36,7 @@ import { presenceLine } from '../../services/last-seen';
 import { useIsMobile } from '../../services/responsive';
 import { Avatar, PersonAvatar } from '../../components/Avatar';
 import { ProfileHover } from '../../components/ProfileCard';
+import { EditedMarker } from './EditedMarker';
 import { AttachmentList } from './Attachments';
 import { EmojiPicker } from './EmojiPicker';
 import { ChannelMenu } from './ChannelMenu';
@@ -1391,7 +1392,7 @@ function MessageList({
                             them in. */}
                         <div className="mt-0.5 flex items-center justify-end gap-1 text-[10px] text-slate-400/70">
                           {message.pinnedAt && <PinIcon className="h-2.5 w-2.5" aria-label="Pinned" />}
-                          {message.editedAt && <span>edited</span>}
+                          {message.editedAt && <EditedMarker message={message} />}
                           <time dateTime={message.createdAt}>{clockTime(message.createdAt)}</time>
                         </div>
                       </>

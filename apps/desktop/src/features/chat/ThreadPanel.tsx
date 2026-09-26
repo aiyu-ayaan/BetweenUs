@@ -16,6 +16,7 @@ import { formatBytes, uploadAttachment } from '../../services/attachments';
 import { windowIsFocused } from '../../services/notifications';
 import { MessageText, Tombstone } from './ChatView';
 import { AttachmentList } from './Attachments';
+import { EditedMarker } from './EditedMarker';
 import { clockTime } from './day';
 
 export interface ThreadPanelProps {
@@ -373,7 +374,7 @@ function ThreadMessage({
                   mine={message.author.id === me}
                 />
               ))}
-            {message.editedAt && <span className="text-[10px] text-slate-500">edited</span>}
+            {message.editedAt && <EditedMarker message={message} className="text-[10px] text-slate-500" />}
           </>
         )}
       </div>
