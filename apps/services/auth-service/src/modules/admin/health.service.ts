@@ -678,35 +678,43 @@ export class AdminHealthService {
    * Presence and the voice rosters are the only live state shared between
    * services, so they are the only live state a *different* service can report
    * on. The keys are `presence-service`'s own - `presence:online`,
-   * `presence:voice:channels` and `presence:voice:<channelId>` - and this is a
+   * `presence:sockets`, `presence:voice:channels` and `presence:voice:<channelId>` - and this is a
    * second reader of them; if they ever change, this changes with them.
    */
   private async live(): Promise<Omit<AdminLiveConnections, 'endpoints'>> {
     const [presence, remote] = await Promise.all([
-      this.presenceCounts().catch(() => ({ online: 0, calls: 0, participants: 0 })),
+      this.presenceCounts().catch(() => ({ online: 0, sockets: 0, calls: 0, participants: 0 })),
       prisma.remoteSession.count({ where: { endedAt: null } }).catch(() => 0),
     ]);
 
     return {
       onlineUsers: presence.online,
-      // Presence is keyed per account, not per socket - two windows of the same
-      // account are one entry in `presence:online`, and nothing anywhere keeps
-      // a per-device count. So this is connected *accounts* and will never
-      // exceed `onlineUsers`. Making it a true socket count would mean presence
-      // keying by device, which is a change to presence-service, not to this.
-      totalSockets: presence.online,
+      // Presence keys every socket (`presence:sockets`), so this is a real
+      // socket count and exceeds `onlineUsers` whenever an account has two
+      // clients open. Kept under its old name; `presenceSockets` says the same
+      // thing explicitly and `presenceAccounts` is the distinct-account side.
+      totalSockets: presence.sockets,
+      presenceSockets: presence.sockets,
+      presenceAccounts: presence.online,
       activeCalls: presence.calls,
       activeCallParticipants: presence.participants,
       activeRemoteSessions: remote,
     };
   }
 
-  private async presenceCounts(): Promise<{ online: number; calls: number; participants: number }> {
+  private async presenceCounts(): Promise<{ online: number; sockets: number; calls: number; participants: number }> {
     // The same cutoff `PresenceStore` applies when it reads: an entry nobody
     // has refreshed is a client that died, not somebody who is online.
     const cutoff = Date.now() - PRESENCE_STALE_MS;
     const online = await withTimeout(
       this.redis.zcount('presence:online', cutoff, '+inf'),
+      PROBE_TIMEOUT_MS,
+    );
+
+    // Sockets, not accounts: one member per device, aged out by heartbeat so
+    // an instance that died takes its sockets with it.
+    const sockets = await withTimeout(
+      this.redis.zcount('presence:sockets', cutoff, '+inf'),
       PROBE_TIMEOUT_MS,
     );
 
@@ -721,6 +729,7 @@ export class AdminHealthService {
 
     return {
       online,
+      sockets,
       calls: live.length,
       participants: live.reduce((total, size) => total + size, 0),
     };
@@ -759,7 +768,7 @@ export class AdminHealthService {
         id: 'presence',
         label: 'Presence',
         url: `${base}/ws/presence`,
-        connections: live.onlineUsers,
+        connections: live.presenceSockets,
         state: stateOf('presence-service'),
       },
       {

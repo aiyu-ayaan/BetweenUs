@@ -675,8 +675,16 @@ export interface AdminLiveEndpoint {
 export interface AdminLiveConnections {
   /** Distinct users presence believes are online. */
   onlineUsers: number;
-  /** Sockets, which exceeds users whenever somebody has two clients open. */
+  /**
+   * Live sockets - one per device or window - which exceeds users whenever
+   * somebody has two clients open. Today this is the presence sockets, the only
+   * ones tracked; `/ws/chat` is still reported as 0.
+   */
   totalSockets: number;
+  /** Presence sockets (`presence:sockets`), one per device. */
+  presenceSockets: number;
+  /** Distinct accounts holding at least one presence socket. */
+  presenceAccounts: number;
   /** Voice/video calls with at least one participant. */
   activeCalls: number;
   activeCallParticipants: number;

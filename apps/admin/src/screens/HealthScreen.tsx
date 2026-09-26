@@ -815,7 +815,7 @@ function Live({ live }: { live: AdminServerHealth['live'] }): JSX.Element {
         <Stat
           label="Sockets"
           value={formatCount(live.totalSockets)}
-          hint="More than users when somebody has two clients open"
+          hint="One per device or window, so more than users when somebody has two clients open"
         />
         <Stat label="Active calls" value={formatCount(live.activeCalls)} />
         <Stat label="In calls" value={formatCount(live.activeCallParticipants)} />

@@ -107,6 +107,8 @@ const local: AdminServerHealth = {
   live: {
     onlineUsers: 42,
     totalSockets: 61,
+    presenceSockets: 61,
+    presenceAccounts: 42,
     activeCalls: 3,
     activeCallParticipants: 7,
     activeRemoteSessions: 1,
