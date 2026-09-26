@@ -114,12 +114,18 @@ interface Window {
     /** 48 kHz stereo 16-bit PCM, interleaved. Returns an unsubscribe function. */
     onShareAudio?: (handler: (pcm: Uint8Array) => void) => () => void;
     startOAuth: (startUrl: string) => Promise<string | null>;
-    /** Remote desktop, agent side. Input injection is Windows-only for now. */
+    /** Remote desktop, agent side. Input injection: Windows, Linux (X11) and macOS (unverified); see `remote-input.ts`. */
     remoteInputSupported: () => Promise<boolean>;
     remoteInputDiagnostics: () => Promise<{
       supported: boolean;
       running: boolean;
       error: string | null;
+      /** Why control is unavailable on this machine, when it is. */
+      reason: string | null;
+      platform: string;
+      accepted: number;
+      /** Events the validator refused, by reason. Counts only. */
+      rejected: Record<string, number>;
     }>;
     /**
      * Seconds since the last input anywhere on this machine, which is a

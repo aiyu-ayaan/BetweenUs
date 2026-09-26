@@ -2496,7 +2496,7 @@ function RemoteSection(): JSX.Element {
   // Control failing silently was the worst part of the first version: the
   // session looked fine and the mouse simply did not move.
   useEffect(() => {
-    void window.betweenus?.remoteInputDiagnostics().then((report) => setInputError(report.error));
+    void window.betweenus?.remoteInputDiagnostics().then((report) => setInputError(report.error ?? report.reason));
   }, [session]);
 
   const disable = useAgentStore((state) => state.disable);

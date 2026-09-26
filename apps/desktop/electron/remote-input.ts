@@ -5,71 +5,51 @@
  * already has: `webContents.sendInputEvent` reaches the app's own window, and
  * the point of a remote session is everything *outside* it.
  *
- * ponytail: Windows only, through one long-lived PowerShell process that
- * P/Invokes user32. No native module, no node-gyp, no prebuilt binary per
- * Electron version - and the process is spawned once and fed lines, not spawned
- * per event, which is what makes it fast enough to drag a window with.
+ * ponytail: one long-lived helper process per platform, fed one line per event,
+ * with no native module, no node-gyp and no prebuilt binary per Electron
+ * version. The process is spawned once and fed lines, not spawned per event,
+ * which is what makes it fast enough to drag a window with.
  *
- * The helper is written to a file and run with `-File`, not piped into
- * `-Command -`: with `-Command -` PowerShell consumes stdin as the script
- * itself, so the event stream and the program would be the same pipe and
- * nothing after the first read would arrive. That is what made control appear
- * to do nothing at all.
+ * - Windows: PowerShell P/Invoking user32 (`mouse_event`/`keybd_event`, not
+ *   `SendInput`: flat arguments instead of a union struct, and the difference
+ *   only shows for elevated windows, which this cannot reach anyway). The
+ *   helper is run with `-File`, not piped into `-Command -`: with `-Command -`
+ *   PowerShell consumes stdin as the script itself, so the event stream and the
+ *   program would be the same pipe and nothing after the first read would
+ *   arrive.
+ * - Linux, X11: Python's ctypes over libX11/libXtst (XTEST). Wayland is refused
+ *   with a reason: see `detectLinuxSession`.
+ * - macOS: CGEventPost from JavaScript for Automation. Written but never run.
  *
- * `mouse_event`/`keybd_event` rather than `SendInput`: the legacy calls take
- * flat arguments instead of a union struct, they still work, and the difference
- * only shows up for injecting into elevated windows, which this cannot do
- * anyway without running elevated itself.
- *
- * macOS and Linux report unsupported, and a session there is view-only. The
- * upgrade is a per-platform backend behind this same interface - CGEventPost on
- * macOS, XTEST or uinput on Linux.
+ * Every event is validated first (`input-validate.ts`) and a rejected one is
+ * dropped and counted, never thrown. Key tables, scaling and the wire protocol
+ * to the helpers are pure and live in `input-keymap.ts`.
  */
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { app, screen } from 'electron';
+import { LINUX_SCRIPT, MACOS_SCRIPT } from './input-helpers';
 import {
-  MODIFIER_VIRTUAL_KEYS,
-  modifierOf,
-  planModifiers,
-  readModifiers,
-  type Modifier,
-} from './modifiers';
+  detectLinuxSession,
+  encodeOp,
+  fractionToPoint,
+  type InputOp,
+  type InputPlatform,
+} from './input-keymap';
+import {
+  InputBudget,
+  emptyCounts,
+  rateClassOfMouse,
+  validateKey,
+  validateMouse,
+  type Counts,
+  type Rejection,
+} from './input-validate';
+import { modifierOf, planModifiers, readModifiers, type Modifier } from './modifiers';
+import type { InputSource, KeyInput, MouseInput } from './remote-input-types';
 
-/**
- * Which of the two ways somebody can be driving this machine an event came
- * from. They are independent: a machine can be in a remote session and handing
- * control out in a call at the same time, watching a different monitor in each,
- * and a single target meant whichever was set last captured both.
- */
-export type InputSource = 'session' | 'call';
-
-export interface MouseInput {
-  action: 'move' | 'down' | 'up' | 'wheel';
-  /** Fraction of the shared screen, 0..1, so the two sides need no shared DPI. */
-  x: number;
-  y: number;
-  button?: 'left' | 'right' | 'middle';
-  deltaY?: number;
-  /** Defaults to a remote session, which is the older of the two paths. */
-  source?: InputSource;
-}
-
-export interface KeyInput {
-  action: 'down' | 'up';
-  /** The character where there is one - `a`, `A`, `?`. */
-  key: string;
-  /** The physical key - `KeyA`, `Enter`, `ArrowLeft`. */
-  code: string;
-  /**
-   * Which modifiers the controller was holding when this happened. Sent with
-   * every event, because a chord cannot be reconstructed from the order three
-   * separate events happened to arrive in - see `modifiers.ts`.
-   */
-  modifiers?: string[];
-  source?: InputSource;
-}
+export type { InputSource, KeyInput, MouseInput };
 
 /**
  * The helper. One line in, one call to user32 out.
@@ -77,7 +57,7 @@ export interface KeyInput {
  * The casting lives in C# rather than in PowerShell on purpose: `[uint32]-120`
  * throws in PowerShell, and a scroll upwards is exactly that number.
  */
-const SCRIPT = `
+const WINDOWS_SCRIPT = `
 $ErrorActionPreference = 'Stop'
 Add-Type @"
 using System;
@@ -146,102 +126,163 @@ while ($true) {
 }
 `;
 
-/** Browser `code` values that are not a character, mapped to a virtual key. */
-const VIRTUAL_KEYS: Record<string, number> = {
-  Backspace: 0x08,
-  Tab: 0x09,
-  Enter: 0x0d,
-  NumpadEnter: 0x0d,
-  ShiftLeft: 0x10,
-  ShiftRight: 0x10,
-  ControlLeft: 0x11,
-  ControlRight: 0x11,
-  AltLeft: 0x12,
-  AltRight: 0x12,
-  Pause: 0x13,
-  CapsLock: 0x14,
-  Escape: 0x1b,
-  Space: 0x20,
-  PageUp: 0x21,
-  PageDown: 0x22,
-  End: 0x23,
-  Home: 0x24,
-  ArrowLeft: 0x25,
-  ArrowUp: 0x26,
-  ArrowRight: 0x27,
-  ArrowDown: 0x28,
-  PrintScreen: 0x2c,
-  Insert: 0x2d,
-  Delete: 0x2e,
-  MetaLeft: 0x5b,
-  MetaRight: 0x5c,
-  F1: 0x70,
-  F2: 0x71,
-  F3: 0x72,
-  F4: 0x73,
-  F5: 0x74,
-  F6: 0x75,
-  F7: 0x76,
-  F8: 0x77,
-  F9: 0x78,
-  F10: 0x79,
-  F11: 0x7a,
-  F12: 0x7b,
-};
+type Availability = { ok: true } | { ok: false; reason: string };
 
+let availability: Availability | null = null;
 let backend: ChildProcessWithoutNullStreams | null = null;
 /** Last error the helper printed, surfaced through `inputDiagnostics`. */
 let lastError: string | null = null;
 
-export function inputSupported(): boolean {
-  return process.platform === 'win32';
+const budget = new InputBudget();
+let accepted = 0;
+const rejected: Counts = emptyCounts();
+
+function platform(): InputPlatform | null {
+  const current = process.platform;
+  return current === 'win32' || current === 'linux' || current === 'darwin' ? current : null;
 }
 
-/** What the settings panel shows when control is not working. */
-export function inputDiagnostics(): { supported: boolean; running: boolean; error: string | null } {
+/** Where a helper's source is written, rewritten every start: an old copy from a previous version would be worse than no copy at all. */
+function writeHelper(name: string, source: string): string {
+  const file = path.join(app.getPath('userData'), name);
+  fs.writeFileSync(file, source, { encoding: 'utf8', mode: 0o600 });
+  return file;
+}
+
+/**
+ * Whether this machine can take input at all, and if not, why in words a
+ * person can act on. Decided once: on Linux it runs the helper's `--probe`,
+ * which opens the display and checks for XTEST but injects nothing.
+ */
+function probe(): Availability {
+  const current = platform();
+  if (current === 'win32') return { ok: true };
+  if (current === 'darwin') {
+    // Whether Accessibility permission was granted is only known to the helper
+    // once it runs; it reports that on stderr, which reaches `lastError`.
+    return { ok: true };
+  }
+  if (current !== 'linux') {
+    return { ok: false, reason: `Remote control is not available on ${process.platform}.` };
+  }
+
+  const session = detectLinuxSession(process.env);
+  if (!session.ok) return session;
+
+  try {
+    const file = writeHelper('betweenus-remote-input.py', LINUX_SCRIPT);
+    const result = spawnSync('python3', [file, '--probe'], { encoding: 'utf8', timeout: 5000 });
+    if (result.error) {
+      return {
+        ok: false,
+        reason: 'Remote control on Linux needs python3 and it could not be started.',
+      };
+    }
+    if (result.status !== 0) {
+      const said = result.stderr.trim().split('\n')[0];
+      return { ok: false, reason: said || 'The X server refused the input helper.' };
+    }
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, reason: error instanceof Error ? error.message : 'Probe failed.' };
+  }
+}
+
+function currentAvailability(): Availability {
+  availability ??= probe();
+  return availability;
+}
+
+export function inputSupported(): boolean {
+  return currentAvailability().ok;
+}
+
+/** What the settings panel shows when control is not working, and what a viewer is told. */
+export function inputDiagnostics(): {
+  supported: boolean;
+  running: boolean;
+  error: string | null;
+  /** Why control is unavailable, when it is. */
+  reason: string | null;
+  platform: string;
+  accepted: number;
+  /** Events refused by the validator, by reason - counts only, never content. */
+  rejected: Counts;
+} {
+  const state = currentAvailability();
   return {
-    supported: inputSupported(),
+    supported: state.ok,
     running: backend !== null && !backend.killed,
     error: lastError,
+    reason: state.ok ? null : state.reason,
+    platform: process.platform,
+    accepted,
+    rejected: { ...rejected },
   };
 }
 
-function scriptPath(): string {
-  const file = path.join(app.getPath('userData'), 'betweenus-remote-input.ps1');
-  // Rewritten every start: an old copy from a previous version would be worse
-  // than no copy at all.
-  fs.writeFileSync(file, SCRIPT, 'utf8');
-  return file;
+function spawnHelper(current: InputPlatform): ChildProcessWithoutNullStreams {
+  switch (current) {
+    case 'win32':
+      return spawn(
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-NonInteractive',
+          '-ExecutionPolicy',
+          'Bypass',
+          '-File',
+          writeHelper('betweenus-remote-input.ps1', WINDOWS_SCRIPT),
+        ],
+        { windowsHide: true },
+      );
+    case 'linux':
+      return spawn('python3', ['-u', writeHelper('betweenus-remote-input.py', LINUX_SCRIPT)]);
+    case 'darwin':
+      return spawn('osascript', [
+        '-l',
+        'JavaScript',
+        writeHelper('betweenus-remote-input.js', MACOS_SCRIPT),
+      ]);
+  }
 }
 
 /** Starts the helper on first use and reuses it for the rest of the session. */
 function ensureBackend(): ChildProcessWithoutNullStreams | null {
-  if (!inputSupported()) return null;
+  const current = platform();
+  if (!current || !inputSupported()) return null;
   if (backend && !backend.killed) return backend;
 
+  let child: ChildProcessWithoutNullStreams;
   try {
-    backend = spawn(
-      'powershell.exe',
-      ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', scriptPath()],
-      { windowsHide: true },
-    );
+    child = spawnHelper(current);
   } catch (error) {
-    lastError = error instanceof Error ? error.message : 'PowerShell could not be started';
+    lastError = error instanceof Error ? error.message : 'The input helper could not be started';
     backend = null;
     return null;
   }
+  backend = child;
 
-  backend.on('exit', () => {
-    backend = null;
+  child.on('exit', () => {
+    if (backend === child) backend = null;
   });
-  // A helper that fails to compile its own P/Invoke says so once, on stderr.
+  // A spawn that fails asynchronously (no python3 after all) arrives here, and
+  // without a listener it would be an uncaught exception in the main process.
+  child.on('error', (error) => {
+    lastError = error.message;
+    if (backend === child) backend = null;
+  });
+  // A helper that fails to start its own P/Invoke says so once, on stderr.
   // Swallowing it is what made this silent the first time round.
-  backend.stderr.on('data', (chunk: Buffer) => {
+  child.stderr.on('data', (chunk: Buffer) => {
     lastError = chunk.toString().trim().split('\n')[0] ?? null;
     console.error('[remote-input]', lastError);
   });
+  child.stdin.on('error', () => {
+    // A helper that exited between two writes: handled by the respawn above.
+  });
   lastError = null;
-  return backend;
+  return child;
 }
 
 /** Ends the helper. Called when the last session closes and on quit. */
@@ -253,9 +294,14 @@ export function stopInputBackend(): void {
   backend?.stdin.end();
   backend?.kill();
   backend = null;
+  budget.reset();
 }
 
-function write(line: string): void {
+function write(op: InputOp): void {
+  const current = platform();
+  if (!current) return;
+  const line = encodeOp(current, op);
+  if (line === null) return;
   const child = ensureBackend();
   if (!child) return;
   try {
@@ -265,6 +311,10 @@ function write(line: string): void {
     // one after; dropping a mouse move is not worth throwing over.
     backend = null;
   }
+}
+
+function reject(reason: Rejection): void {
+  rejected[reason] += 1;
 }
 
 /**
@@ -286,48 +336,50 @@ export function setInputDisplay(displayId: string | null, source: InputSource = 
 /**
  * Fraction of the shared screen -> a physical pixel on that screen.
  *
- * `bounds` is in device-independent pixels and `SetCursorPos` wants real ones,
- * so on a display running at anything other than 100% scaling the two differ by
- * the scale factor - which is why a click at the bottom right of a 150% screen
- * landed two thirds of the way across it. `dipToScreenPoint` is Electron's own
- * conversion, so this stays right for a display that is scaled *and* offset -
- * and a second monitor is always offset.
+ * `bounds` is in device-independent pixels and the injection calls want real
+ * ones, so on a display running at anything other than 100% scaling the two
+ * differ by the scale factor - which is why a click at the bottom right of a
+ * 150% screen landed two thirds of the way across it. `dipToScreenPoint` is
+ * Electron's own conversion, so this stays right for a display that is scaled
+ * *and* offset - and a second monitor is always offset.
  */
 function toScreenPoint(x: number, y: number, source: InputSource): { x: number; y: number } {
   const wanted = targetDisplays.get(source) ?? null;
   const target =
     screen.getAllDisplays().find((display) => String(display.id) === wanted) ??
     screen.getPrimaryDisplay();
-  const bounds = target.bounds;
-  const clamp = (value: number): number => Math.min(1, Math.max(0, value));
-  return screen.dipToScreenPoint({
-    x: bounds.x + clamp(x) * bounds.width,
-    y: bounds.y + clamp(y) * bounds.height,
-  });
+  return screen.dipToScreenPoint(fractionToPoint(x, y, target.bounds));
 }
 
-export function applyMouse(input: MouseInput): void {
-  const point = toScreenPoint(input.x, input.y, input.source ?? 'session');
+/**
+ * Applies one mouse event from a controller. Takes `unknown` on purpose: the
+ * gateway only checked that the sender may send this *type* of event.
+ */
+export function applyMouse(raw: unknown): void {
+  const verdict = validateMouse(raw);
+  if (!verdict.ok) return reject(verdict.reason);
+  const input = verdict.value;
+  const source = input.source ?? 'session';
+  const { kind, release } = rateClassOfMouse(input);
+  if (!budget.allow(source, kind, Date.now(), release)) return reject('rate');
+  accepted += 1;
+
+  const point = toScreenPoint(input.x, input.y, source);
   const button = input.button ?? 'left';
 
   switch (input.action) {
     case 'move':
-      write(`m ${point.x} ${point.y}`);
+      write({ t: 'move', x: point.x, y: point.y });
       return;
     case 'down':
-      // Position and press in one line: a click that lands where the pointer
-      // used to be is the classic remote-desktop bug.
-      write(`d ${button} ${point.x} ${point.y}`);
+      write({ t: 'down', button, x: point.x, y: point.y });
       return;
     case 'up':
-      write(`u ${button}`);
+      write({ t: 'up', button });
       return;
-    case 'wheel': {
-      // A browser's deltaY grows downward, a Windows wheel notch upward.
-      const notches = Math.round(-(input.deltaY ?? 0));
-      if (notches !== 0) write(`w ${notches}`);
+    case 'wheel':
+      write({ t: 'wheel', deltaY: input.deltaY ?? 0 });
       return;
-    }
   }
 }
 
@@ -359,7 +411,7 @@ function reconcileModifiers(input: KeyInput): boolean {
   }
 
   for (const step of planModifiers(heldModifiers.get(source) ?? [], wanted)) {
-    write(`k ${step.action} ${MODIFIER_VIRTUAL_KEYS[step.modifier]}`);
+    write({ t: 'modifier', modifier: step.modifier, down: step.action === 'down' });
   }
   heldModifiers.set(source, [...wanted]);
   return own !== null;
@@ -370,22 +422,21 @@ export function releaseModifiers(source?: InputSource): void {
   for (const [held, modifiers] of heldModifiers) {
     if (source && held !== source) continue;
     for (const step of planModifiers(modifiers, [])) {
-      write(`k ${step.action} ${MODIFIER_VIRTUAL_KEYS[step.modifier]}`);
+      write({ t: 'modifier', modifier: step.modifier, down: step.action === 'down' });
     }
     heldModifiers.set(held, []);
   }
 }
 
-export function applyKey(input: KeyInput): void {
-  if (reconcileModifiers(input)) return;
-
-  const virtualKey = VIRTUAL_KEYS[input.code];
-  if (virtualKey !== undefined) {
-    write(`k ${input.action} ${virtualKey}`);
-    return;
+export function applyKey(raw: unknown): void {
+  const verdict = validateKey(raw);
+  if (!verdict.ok) return reject(verdict.reason);
+  const input = verdict.value;
+  if (!budget.allow(input.source ?? 'session', 'key', Date.now(), input.action === 'up')) {
+    return reject('rate');
   }
+  accepted += 1;
 
-  const character = input.key.length === 1 ? input.key : '';
-  if (!character) return;
-  write(`c ${input.action} ${character.codePointAt(0) ?? 0}`);
+  if (reconcileModifiers(input)) return;
+  write({ t: 'key', code: input.code, key: input.key, down: input.action === 'down' });
 }

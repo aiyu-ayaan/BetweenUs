@@ -1344,28 +1344,11 @@ ipcMain.handle('remote:machine-name', (): string => {
   }
 });
 
-ipcMain.on('remote:mouse', (_event, input: unknown) => {
-  const payload = input as { action?: string; x?: number; y?: number };
-  if (typeof payload?.x !== 'number' || typeof payload.y !== 'number') return;
-  if (!['move', 'down', 'up', 'wheel'].includes(String(payload.action))) return;
-  applyMouse(input as Parameters<typeof applyMouse>[0]);
-});
+// Shape, range, key allowlist and rate are all judged in `applyMouse` and
+// `applyKey` (see `input-validate.ts`); what arrives here is untrusted.
+ipcMain.on('remote:mouse', (_event, input: unknown) => applyMouse(input));
 
-ipcMain.on('remote:key', (_event, input: unknown) => {
-  const payload = input as { action?: string; key?: string; code?: string; modifiers?: unknown };
-  if (payload?.action !== 'down' && payload?.action !== 'up') return;
-  if (typeof payload.key !== 'string' || typeof payload.code !== 'string') return;
-  // Anything unrecognised in here is dropped further down; this only refuses a
-  // shape that is not a list of strings at all.
-  if (
-    payload.modifiers !== undefined &&
-    (!Array.isArray(payload.modifiers) ||
-      payload.modifiers.some((entry) => typeof entry !== 'string'))
-  ) {
-    return;
-  }
-  applyKey(input as Parameters<typeof applyKey>[0]);
-});
+ipcMain.on('remote:key', (_event, input: unknown) => applyKey(input));
 
 // Which display the fractions in an input event are fractions *of*. Set when a
 // session starts, when the controller switches monitor, and when control of a

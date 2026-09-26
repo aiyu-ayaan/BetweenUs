@@ -178,6 +178,20 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 }));
 
 /**
+ * Tells the controller why this machine cannot be driven. The gateway relays a
+ * `control.denied` reason to the viewer as `control.changed`, which the viewer
+ * already shows, so no new message is needed.
+ */
+async function refuseControl(sessionId: string): Promise<void> {
+  const report = await window.betweenus?.remoteInputDiagnostics();
+  send({
+    type: 'control.denied',
+    sessionId,
+    reason: report?.reason ?? 'Remote control is not available on this machine',
+  });
+}
+
+/**
  * Enrols if this machine has never enrolled, then opens the outbound socket.
  *
  * Enrolment needs the signed-in account, because the person enrolling is the
@@ -304,6 +318,12 @@ async function onEvent(event: ServerRemoteEvent): Promise<void> {
       return;
 
     case 'control.requested':
+      // A machine that cannot inject input must say so rather than put a prompt
+      // in front of somebody for something that would then do nothing.
+      if (!useAgentStore.getState().controlSupported) {
+        await refuseControl(event.sessionId);
+        return;
+      }
       useAgentStore.setState({
         controlRequest: {
           sessionId: event.sessionId,
@@ -426,6 +446,14 @@ async function startPublishing(pending: PendingSession): Promise<void> {
       },
     });
     send({ type: 'session.accepted', sessionId: pending.sessionId });
+    // The controller was granted control on paper; if this machine cannot act
+    // on it, the viewer is told now rather than left with a dead mouse.
+    if (
+      pending.permissions.includes('REMOTE_CONTROL') &&
+      !useAgentStore.getState().controlSupported
+    ) {
+      void refuseControl(pending.sessionId);
+    }
     sendScreens(pending.sessionId);
     watchDisplays(pending.sessionId);
     startClipboardSync(pending.sessionId);

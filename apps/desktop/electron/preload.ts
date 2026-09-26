@@ -170,6 +170,10 @@ const api = {
     supported: boolean;
     running: boolean;
     error: string | null;
+    reason: string | null;
+    platform: string;
+    accepted: number;
+    rejected: Record<string, number>;
   }> => ipcRenderer.invoke('remote:diagnostics'),
   /**
    * Seconds since the last input anywhere on this machine. A browser tab can
