@@ -12,7 +12,7 @@
  */
 import { Inject, Injectable, Optional, type OnModuleInit } from '@nestjs/common';
 import { envOr } from '@betweenus/config';
-import { EVENTS, EventBus } from '@betweenus/events';
+import { EVENTS, EventBus, type EventPayloads } from '@betweenus/events';
 import { createLogger, type LogLevel } from '@betweenus/logger';
 import { BloomFilter } from './bloom';
 import { AuthDatabase, type AuthDb } from './auth.db';
@@ -86,11 +86,16 @@ export class UsernameDirectory implements OnModuleInit {
   /** Follows registrations and renames made by every instance, this one included. */
   async listen(): Promise<void> {
     if (!this.feed) return;
+    // Read defensively: these run inside the Redis client's message listener,
+    // where a payload from a producer on a different version must be dropped,
+    // never thrown on.
     await this.feed.subscribe(EVENTS.USER_CREATED, (envelope) => {
-      this.remember(envelope.payload.username);
+      const payload: Partial<EventPayloads[typeof EVENTS.USER_CREATED]> | undefined = envelope.payload;
+      this.remember(payload?.username ?? '');
     });
     await this.feed.subscribe(EVENTS.USER_UPDATED, (envelope) => {
-      this.remember(envelope.payload.user.username);
+      const payload: Partial<EventPayloads[typeof EVENTS.USER_UPDATED]> | undefined = envelope.payload;
+      this.remember(payload?.user?.username ?? '');
     });
   }
 
