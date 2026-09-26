@@ -11,6 +11,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -41,6 +42,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -76,6 +78,9 @@ import org.webrtc.VideoTrack
  * Both read the engine directly rather than being handed state, because the one
  * thing they must not do is disappear when the screen underneath them changes.
  */
+/** A share offered in the dock. See [CallDockState.offer]. */
+data class ShareOffer(val peerId: String, val sharerName: String)
+
 data class CallDockState(
     val channelId: String,
     /** Still joining. There is no duration yet and nothing to float. */
@@ -88,6 +93,12 @@ data class CallDockState(
      * picture in it - which is what makes an audio call a bar and nothing else.
      */
     val video: VideoTrack?,
+    /**
+     * Somebody else's share this phone has not joined, offered in the floating
+     * window as a placeholder rather than drawn: its owner encodes only for the
+     * people who joined, and showing it would be joining without being asked.
+     */
+    val offer: ShareOffer? = null,
 ) {
     val label: String
         get() = Workspace.channel(channelId)?.name
@@ -119,6 +130,7 @@ fun rememberCallDock(onCallScreen: Boolean): CallDockState? {
     val localVideo by engine.localVideo.collectAsState()
     val cameraOn by engine.cameraOn.collectAsState()
     val sharing by engine.sharing.collectAsState()
+    val watching by engine.watching.collectAsState()
 
     if (onCallScreen) return null
     val channelId = when (val now = state) {
@@ -129,14 +141,19 @@ fun rememberCallDock(onCallScreen: Boolean): CallDockState? {
 
     // Somebody else's picture first, and your own only when there is no other:
     // your own camera is the one face in the call you are not there to watch,
-    // and a share you started is worth keeping an eye on.
+    // and a share you started is worth keeping an eye on. A share counts only
+    // if it is the one joined here - see [CallDockState.offer] for the rest.
     //
     // ponytail: first with a picture rather than the sticky last-speaker rule
     // the full stage uses. This is a thumbnail somebody glances at on the way
     // past, and a second copy of that bookkeeping to run it is not worth the
     // one call in ten that has two cameras on.
-    val video = participants.firstOrNull { it.anyPicture != null }?.anyPicture
+    val video = participants.firstOrNull { it.peer.peerId == watching }?.pictureFor(watching)
+        ?: participants.firstOrNull { it.pictureFor(watching) != null }?.pictureFor(watching)
         ?: localVideo?.takeIf { cameraOn || sharing }
+    val offer = participants
+        .firstOrNull { it.offersShare(watching) && it.peer.peerId != engine.selfPeerId() }
+        ?.let { ShareOffer(it.peer.peerId, it.peer.username) }
 
     return CallDockState(
         channelId = channelId,
@@ -144,6 +161,7 @@ fun rememberCallDock(onCallScreen: Boolean): CallDockState? {
         liveSince = liveSince,
         muted = muted,
         video = video,
+        offer = offer,
     )
 }
 
@@ -263,8 +281,12 @@ fun FloatingCall(
     onReturn: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val track = dock?.video ?: return
+    if (dock == null) return
+    val offer = dock.offer
+    val track = dock.video
+    if (offer == null && track == null) return
     val scheme = MaterialTheme.colorScheme
+    val context = LocalContext.current
     val density = LocalDensity.current
 
     BoxWithConstraints(modifier.fillMaxSize()) {
@@ -303,9 +325,15 @@ fun FloatingCall(
                         )
                     }
                 }
-                .clickable(onClick = onReturn),
+                // On an offer, the tap is the Join: back to the call, on the share.
+                .clickable {
+                    offer?.let { VoiceEngine.of(context).watchShare(it.peerId) }
+                    onReturn()
+                },
         ) {
-            VideoSurface(
+            if (offer != null) {
+                ShareOfferCard(offer.sharerName, Modifier.fillMaxSize())
+            } else if (track != null) VideoSurface(
                 track = track,
                 eglContext = eglContext,
                 modifier = Modifier.fillMaxSize(),
@@ -356,5 +384,34 @@ fun formatElapsed(seconds: Long): String {
         "$hours:${minutes.toString().padStart(2, '0')}:${rest.toString().padStart(2, '0')}"
     } else {
         "$minutes:${rest.toString().padStart(2, '0')}"
+    }
+}
+
+/**
+ * A share offered in the floating window: who is sharing, and that a tap
+ * watches it. Drawn instead of a picture - see [CallDockState.offer].
+ */
+@Composable
+private fun ShareOfferCard(sharerName: String, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier.padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterVertically),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        BetweenUsIcon(BetweenUsIcons.ScreenShare, tint = MaterialTheme.colorScheme.primary, size = 22.dp)
+        Text(
+            text = "$sharerName is sharing",
+            style = MaterialTheme.typography.labelMedium,
+            color = Color.White,
+            maxLines = 3,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+        )
+        Text(
+            text = "Tap to watch",
+            style = MaterialTheme.typography.labelSmall,
+            color = Color.White.copy(alpha = 0.7f),
+            maxLines = 1,
+        )
     }
 }

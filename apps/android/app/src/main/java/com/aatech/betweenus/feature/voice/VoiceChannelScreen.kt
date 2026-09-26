@@ -150,7 +150,7 @@ private const val CHROME_IDLE_MS = 4_000L
  * The local tile has no peer id - it is not a peer - so it needs a name of its
  * own to be pinnable by the same one piece of state as everybody else.
  */
-private const val SELF_PIN = "self"
+private const val SELF_PIN = StageRules.SELF
 
 /**
  * How much room the floating dock takes at the bottom of the stage.
@@ -224,6 +224,8 @@ fun VoiceChannelScreen(
     val signalling by engine.signalling.collectAsState()
     val problem by engine.problem.collectAsState()
     val interruption by engine.interruption.collectAsState()
+    val watching by engine.watching.collectAsState()
+    val stagePin by engine.stagePin.collectAsState()
 
     val channel = channelId?.let { Workspace.channel(it) }
 
@@ -283,33 +285,46 @@ fun VoiceChannelScreen(
     val inPip = rememberInPictureInPicture()
     val leaveScreen = onBack
 
-    // Who the little window shows: whoever spoke last, and never yourself.
+    // Who the stage and the little window show, decided once for both - see
+    // `StageRules.hero`, which is the same rule the web client uses.
     //
-    // A picture-in-picture window is one tile's worth of room, and the one tile
-    // worth giving it is the person talking - your own camera is the one face
-    // in the call you are not there to watch. Sticky, because a call is mostly
-    // gaps: falling back to somebody else between two sentences would make the
-    // window flick between faces for the whole conversation.
+    // Pinned by hand: "keep showing me that one". One viewer's decision -
+    // nobody else's stage moves - held on the engine rather than here, so it
+    // survives backing out to the conversation and coming back, and leaving
+    // the call and joining it again, for as long as the app runs. Dropped when
+    // they leave or the call ends; see `VoiceEngine.stagePin`.
+    //
+    // Otherwise whoever spoke last, and never yourself: your own camera is the
+    // one face in the call you are not there to watch. Sticky, because a call
+    // is mostly gaps: falling back to somebody else between two sentences
+    // would make the stage flick between faces for the whole conversation.
     var lastSpeaker by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(participants) {
         participants.firstOrNull { it.speaking }?.let { lastSpeaker = it.peer.peerId }
     }
-    val pipTile = participants.firstOrNull { it.peer.peerId == lastSpeaker }
-        // `anyPicture`, not `video`: picture-in-picture is a glance with no room
-        // to offer a choice, so a share counts as something to show there.
-        ?: participants.firstOrNull { it.anyPicture != null }
-        ?: participants.firstOrNull()
-
-    // Pinned by hand: "keep showing me that one". One viewer's decision -
-    // nobody else's stage moves - and it is dropped the moment they leave,
-    // because a pin on somebody who hung up would hold an empty stage.
-    var pinned by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(participants) {
-        val stillHere = pinned == SELF_PIN || participants.any { it.peer.peerId == pinned }
-        if (pinned != null && !stillHere) pinned = null
+    val callChannel = when (val now = state) {
+        is VoiceEngine.CallState.Live -> now.channelId
+        is VoiceEngine.CallState.Connecting -> now.channelId
+        else -> null
     }
+    // `pictureFor`, not `video`: the little window is a glance, so a share
+    // counts as something to show there - but only the one joined here.
+    val seats = participants.map { it.seat(watching) }
+    val pinned = StageRules.resolvePin(stagePin, callChannel, seats)
     val pinnedPeer = participants.firstOrNull { it.peer.peerId == pinned }
     val selfPinned = pinned == SELF_PIN
+    /** Pins a tile for this call, or unpins it with null. */
+    fun pinTo(peerId: String?) {
+        val channelOfCall = callChannel ?: return
+        engine.setStagePin(
+            peerId?.let { id ->
+                StagePin(channelOfCall, id, participants.firstOrNull { it.peer.peerId == id }?.peer?.userId)
+            },
+        )
+    }
+    val heroId = StageRules.hero(seats, pinned, lastSpeaker)
+    /** The stage's face, and the little window's: null is your own. */
+    val pipTile = participants.firstOrNull { it.peer.peerId == heroId }
 
     // A share never takes the screen on its own.
     //
@@ -320,9 +335,12 @@ fun VoiceChannelScreen(
     // bargain: a line at the bottom of the call saying who is presenting, with
     // a way in, and nothing moves until it is pressed.
     val sharer = participants.firstOrNull { it.visibleScreen != null }
-    var watchingShare by remember { mutableStateOf<String?>(null) }
-    /** The share this person actually asked to watch, or null - see above. */
-    val watched = sharer?.takeIf { it.peer.peerId == watchingShare }
+    /**
+     * The share this person actually asked to watch, or null - see above.
+     * Held on the engine, which says it to the sharer as `watching`: they
+     * encode only for the people who joined.
+     */
+    val watched = participants.firstOrNull { it.peer.peerId == watching && it.visibleScreen != null }
     var pickingDevices by remember { mutableStateOf(false) }
     var showingConnection by remember { mutableStateOf(false) }
     // "Who else should be here" is a thought somebody has while looking at a
@@ -344,10 +362,8 @@ fun VoiceChannelScreen(
     val linkHealth = CallStats.healthWarning(linkStats)
 
     // A share that stops, or a sharer who leaves, puts the call back on screen
-    // rather than leaving a stage with nothing on it.
-    LaunchedEffect(sharer?.peer?.peerId) {
-        if (sharer == null || sharer.peer.peerId != watchingShare) watchingShare = null
-    }
+    // rather than leaving a stage with nothing on it - the engine lets go of
+    // it, see `StageRules.watchingAfter`.
 
     // Anything the user might be reading or reaching for pins the chrome open:
     // a sheet on top of it, a problem to explain, or a control they have just
@@ -426,7 +442,7 @@ fun VoiceChannelScreen(
             onLeave = { engine.leave(); onBack() },
             // Back to the call, not "never show me this again". The banner is
             // still there and the share can be rejoined.
-            onClose = { watchingShare = null },
+            onClose = { engine.watchShare(null) },
         )
         if (pickingDevices) {
             CallDeviceSheet(
@@ -580,8 +596,8 @@ fun VoiceChannelScreen(
                                     modifier = Modifier.fillMaxSize(),
                                 )
                             } else {
-                                // Alone in the call, so your own camera is the
-                                // only thing there is to show.
+                                // Alone in the call, or you pinned yourself,
+                                // so your own camera is what there is to show.
                                 CallTile(
                                     label = self.label,
                                     id = self.id,
@@ -594,6 +610,19 @@ fun VoiceChannelScreen(
                                     modifier = Modifier.fillMaxSize(),
                                 )
                             }
+                            // A share nobody here has joined is a line, not a
+                            // picture: its owner is not encoding it for this
+                            // phone, and the window has no room for a button.
+                            // Opening the app is the way to the Join.
+                            sharer?.takeIf { it.offersShare(watching) && it.peer.peerId != engine.selfPeerId() }
+                                ?.let { presenter ->
+                                    PipShareOffer(
+                                        sharerName = presenter.peer.username,
+                                        modifier = Modifier
+                                            .align(Alignment.TopCenter)
+                                            .padding(6.dp),
+                                    )
+                                }
                         }
 
                         // Nobody in this call has a camera or a screen on.
@@ -681,7 +710,7 @@ fun VoiceChannelScreen(
                                 speaking = remote.speaking,
                                 connected = remote.connected,
                                 status = statusOf(remote),
-                                onPin = { pinned = remote.peer.peerId },
+                                onPin = { pinTo(remote.peer.peerId) },
                                 // Clear of the floating dock, which is drawn
                                 // over the bottom of this tile - but only while
                                 // the dock is there. Held up against nothing,
@@ -707,7 +736,7 @@ fun VoiceChannelScreen(
                                 onFlipCamera = {
                                     if (cameraOn) engine.switchCamera()
                                 },
-                                onPin = { pinned = SELF_PIN },
+                                onPin = { pinTo(SELF_PIN) },
                                 modifier = Modifier
                                     .align(Alignment.TopEnd)
                                     .padding(top = 68.dp, end = 14.dp),
@@ -746,7 +775,7 @@ fun VoiceChannelScreen(
                                     speaking = participant.speaking,
                                     connected = participant.connected,
                                     status = statusOf(participant),
-                                    onPin = { pinned = participant.peer.peerId },
+                                    onPin = { pinTo(participant.peer.peerId) },
                                     modifier = tileModifier,
                                 )
                             }
@@ -762,7 +791,7 @@ fun VoiceChannelScreen(
                                 onFlipCamera = {
                                     if (cameraOn) engine.switchCamera()
                                 },
-                                onPin = { pinned = SELF_PIN },
+                                onPin = { pinTo(SELF_PIN) },
                                 modifier = Modifier
                                     .align(Alignment.BottomEnd)
                                     .padding(bottom = if (chrome) 84.dp else 16.dp, end = 14.dp),
@@ -781,7 +810,7 @@ fun VoiceChannelScreen(
                         // conversation, which is what this screen was being
                         // told off for.
                         else -> {
-                            val hero = if (selfPinned) null else pinnedPeer ?: pipTile
+                            val hero = pipTile
                             val others = participants.filterNot { it.peer.peerId == hero?.peer?.peerId }
 
                             Box(modifier = Modifier.fillMaxSize()) {
@@ -799,7 +828,7 @@ fun VoiceChannelScreen(
                                         fit = RendererCommon.ScalingType.SCALE_ASPECT_FILL,
                                         labelBottomPadding = if (chrome) DOCK_CLEARANCE else 12.dp,
                                         pinned = selfPinned,
-                                        onPin = { pinned = if (selfPinned) null else SELF_PIN },
+                                        onPin = { pinTo(if (selfPinned) null else SELF_PIN) },
                                         modifier = Modifier.fillMaxSize(),
                                     )
                                 } else {
@@ -815,7 +844,7 @@ fun VoiceChannelScreen(
                                         labelBottomPadding = if (chrome) DOCK_CLEARANCE else 12.dp,
                                         pinned = pinnedPeer != null,
                                         onPin = {
-                                            pinned = if (pinnedPeer != null) null else hero.peer.peerId
+                                            pinTo(if (pinnedPeer != null) null else hero.peer.peerId)
                                         },
                                         modifier = Modifier.fillMaxSize(),
                                     )
@@ -848,7 +877,7 @@ fun VoiceChannelScreen(
                                                 status = statusOf(participant),
                                                 isCompact = true,
                                                 fit = RendererCommon.ScalingType.SCALE_ASPECT_FILL,
-                                                onPin = { pinned = participant.peer.peerId },
+                                                onPin = { pinTo(participant.peer.peerId) },
                                                 modifier = Modifier.fillMaxSize(),
                                             )
                                         }
@@ -870,7 +899,7 @@ fun VoiceChannelScreen(
                                         onFlipCamera = {
                                             if (cameraOn) engine.switchCamera()
                                         },
-                                        onPin = { pinned = SELF_PIN },
+                                        onPin = { pinTo(SELF_PIN) },
                                         modifier = Modifier
                                             .align(Alignment.TopEnd)
                                             .padding(top = 68.dp, end = 14.dp),
@@ -1023,7 +1052,7 @@ fun VoiceChannelScreen(
                 sharer?.takeIf { it.peer.peerId != engine.selfPeerId() }?.let { presenter ->
                     ShareInvite(
                         sharerName = presenter.peer.username,
-                        onJoin = { watchingShare = presenter.peer.peerId },
+                        onJoin = { engine.watchShare(presenter.peer.peerId) },
                     )
                 }
                 ListenStage()
@@ -2057,6 +2086,31 @@ private fun ShareInvite(
                 maxLines = 1,
             )
         }
+    }
+}
+
+/**
+ * The picture-in-picture window's version of [ShareInvite]: who is sharing,
+ * and nothing to press, because a window that size takes no taps of its own.
+ */
+@Composable
+private fun PipShareOffer(sharerName: String, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .clip(MaterialTheme.shapes.small)
+            .background(Color.Black.copy(alpha = 0.65f))
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        BetweenUsIcon(BetweenUsIcons.ScreenShare, tint = Accent, size = 12.dp)
+        Text(
+            text = "$sharerName is sharing",
+            style = MaterialTheme.typography.labelSmall,
+            color = Color.White,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 

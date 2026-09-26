@@ -13,6 +13,7 @@ import com.aatech.betweenus.core.data.PresenceSocket
 import com.aatech.betweenus.core.data.Session
 import com.aatech.betweenus.core.store.Listen
 import com.aatech.betweenus.core.store.Play
+import com.aatech.betweenus.core.store.Presence
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -157,6 +158,16 @@ class VoiceEngine(private val context: Context) {
          */
         val cameraDeclared: Boolean? = null,
         val screenDeclared: Boolean? = null,
+        /**
+         * The track their share will arrive on, whether or not a frame has.
+         *
+         * [screen] only appears once something has been decoded, and a share
+         * this phone has not joined decodes nothing: its owner encodes only
+         * for the people watching it. A declared share is shown on this - as
+         * an invitation - and joining it is what starts the picture. The
+         * desktop's `receiverTrack`.
+         */
+        val screenPending: VideoTrack? = null,
         val speaking: Boolean = false,
         val connected: Boolean = false,
         /**
@@ -191,17 +202,37 @@ class VoiceEngine(private val context: Context) {
         val video: VideoTrack? get() = visibleCamera
 
         /**
-         * Any picture at all from this person, share included.
+         * What the floating dock and the picture-in-picture window may draw for
+         * this person: their share only if it is the one this phone joined
+         * ([watching]), and otherwise their camera.
          *
-         * For the floating dock and the picture-in-picture tile, which are a
-         * glance at "is anything happening" rather than a stage somebody opted
-         * into - and which have no room to offer a choice even if they wanted
-         * to. Never used for a tile in the call grid; that is [video].
+         * Those two are a glance rather than a stage, and they used to take
+         * anybody's share. Now that a sharer encodes only for the people who
+         * joined, any other share is a track with no frames - a black window -
+         * and showing it would also be joining it without asking.
          */
-        val anyPicture: VideoTrack? get() = visibleScreen ?: visibleCamera
+        fun pictureFor(watching: String?): VideoTrack? =
+            if (peer.peerId == watching) visibleScreen ?: visibleCamera else visibleCamera
 
-        /** The share, unless they have said they stopped sharing. */
-        val visibleScreen: VideoTrack? get() = if (screenDeclared == false) null else screen
+        /** This person as the stage rules see them. See [StageRules.Seat]. */
+        fun seat(watching: String? = null): StageRules.Seat =
+            StageRules.Seat(peer.peerId, peer.userId, hasPicture = pictureFor(watching) != null)
+
+        /** Sharing, and not joined here: an invitation rather than a picture. */
+        fun offersShare(watching: String?): Boolean =
+            visibleScreen != null && peer.peerId != watching
+
+        /**
+         * The share, unless they have said they stopped sharing - and, once
+         * they have said they are sharing, the track it will arrive on before
+         * a frame has (see [screenPending]).
+         */
+        val visibleScreen: VideoTrack?
+            get() = when (screenDeclared) {
+                false -> null
+                true -> screen ?: screenPending
+                null -> screen
+            }
 
         /** The camera, unless they have said they turned it off. */
         val visibleCamera: VideoTrack? get() = if (cameraDeclared == false) null else camera
@@ -215,6 +246,21 @@ class VoiceEngine(private val context: Context) {
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
+    /**
+     * Joins a share, or leaves it with null. The sharer encodes for whoever
+     * has joined, so joining has to be said.
+     */
+    fun watchShare(peerId: String?) {
+        if (_watching.value == peerId) return
+        _watching.value = peerId
+        publishMediaState()
+    }
+
+    /** Pins a tile to the stage for this call, or unpins with null. */
+    fun setStagePin(pin: StagePin?) {
+        _stagePin.value = pin
+    }
 
     val eglBase: EglBase = EglBase.create()
 
@@ -346,6 +392,67 @@ class VoiceEngine(private val context: Context) {
 
     private val _participants = MutableStateFlow<List<Participant>>(emptyList())
     val participants: StateFlow<List<Participant>> = _participants.asStateFlow()
+
+    /**
+     * The peer id of the share this phone has joined, or null for none.
+     *
+     * A share is offered, never imposed: it is a line at the bottom of the
+     * call until somebody presses Join. What they pressed is said on the data
+     * channel as `watching`, exactly as the desktop says it, because the
+     * sharer encodes only for the people who joined - a mesh runs one encoder
+     * per link, and one per person who never looked was a core of somebody's
+     * CPU spent on nothing. Held here rather than on the call screen so the
+     * dock and picture-in-picture agree with it after the screen has gone.
+     */
+    private val _watching = MutableStateFlow<String?>(null)
+    val watching: StateFlow<String?> = _watching.asStateFlow()
+
+    /**
+     * The tile pinned to the stage, kept for the call rather than the screen.
+     *
+     * Survives backing out of the call screen, and leaving the call and
+     * joining the same one again, for as long as this process runs. Dropped
+     * when the pinned person leaves, when the call ends (its roster empties -
+     * see [StageRules.pinAfterRoster]), and by unpinning. Never sent anywhere.
+     */
+    private val _stagePin = MutableStateFlow<StagePin?>(null)
+    val stagePin: StateFlow<StagePin?> = _stagePin.asStateFlow()
+
+    /**
+     * Peers who have said they are not watching this phone's share. Kept here
+     * rather than on the link, so a rebuilt link starts from what they said.
+     */
+    private val unwatched = HashSet<String>()
+
+    init {
+        // A joined share that stops, or whose sharer leaves, is let go of -
+        // and said, so nobody goes on encoding for a stage that has closed.
+        scope.launch {
+            _participants.collect { list ->
+                val sharers = list.filter { it.visibleScreen != null }.map { it.peer.peerId }
+                val next = StageRules.watchingAfter(_watching.value, sharers)
+                if (next != _watching.value) {
+                    _watching.value = next
+                    publishMediaState()
+                }
+            }
+        }
+        // The call a pin was made in ending takes the pin with it.
+        scope.launch {
+            var before = Presence.voice.value
+            Presence.voice.collect { now ->
+                _stagePin.value?.let { pin ->
+                    _stagePin.value = StageRules.pinAfterRoster(
+                        pin,
+                        pin.channelId,
+                        before[pin.channelId].orEmpty(),
+                        now[pin.channelId].orEmpty(),
+                    )
+                }
+                before = now
+            }
+        }
+    }
 
     private val _muted = MutableStateFlow(false)
     val muted: StateFlow<Boolean> = _muted.asStateFlow()
@@ -816,6 +923,10 @@ class VoiceEngine(private val context: Context) {
         audioTrack?.dispose()
         audioTrack = null
         _participants.value = emptyList()
+        // Nothing to watch outside a call. Not said: the links are gone. The
+        // stage pin stays, for a rejoin of the same call - see [stagePin].
+        _watching.value = null
+        unwatched.clear()
         _localVideo.value = null
         _sharing.value = false
         // The microphone has stopped being read, so no buffer is coming to
@@ -1088,7 +1199,8 @@ class VoiceEngine(private val context: Context) {
      * asked twice.
      */
     fun hasPicture(): Boolean =
-        _participants.value.any { it.anyPicture != null } ||
+        // A share not joined here counts: the dock and the window offer it.
+        _participants.value.any { it.visibleCamera != null || it.visibleScreen != null } ||
             (_localVideo.value != null && (_cameraOn.value || _sharing.value))
 
     private fun inCall(): Boolean =
@@ -1372,6 +1484,11 @@ class VoiceEngine(private val context: Context) {
             // client that has never heard of the key reads the microphone as
             // off, which is what it was before this.
             .put(HOLD_WIRE, _interruption.value == Interruption.HOLD)
+            // The share this phone has joined, or null for none - never left
+            // out, because a missing key is how an older client says nothing,
+            // and that is read as watching. `JSONObject.NULL`, not `null`:
+            // `put(key, null)` removes the key.
+            .put(WATCHING_WIRE, _watching.value ?: JSONObject.NULL)
         val envelope = JSONObject().put("topic", VOICE_STATE_TOPIC).put("media", media)
         connections.values.forEach { it.sendData(envelope) }
     }
@@ -1462,7 +1579,16 @@ class VoiceEngine(private val context: Context) {
                     link.usage()?.let(retiredLinks::add)
                     link.close()
                 }
+                val before = _participants.value
                 _participants.update { list -> list.filterNot { it.peer.peerId == peerId } }
+                unwatched.remove(peerId)
+                before.firstOrNull { it.peer.peerId == peerId }?.let { gone ->
+                    _stagePin.value = StageRules.pinAfterLeft(
+                        _stagePin.value,
+                        gone.seat(),
+                        _participants.value.map { it.seat() },
+                    )
+                }
                 CallTones.play(CallTones.Tone.LEAVE)
             }
 
@@ -1880,6 +2006,8 @@ class VoiceEngine(private val context: Context) {
                     // A share is the call's primary visual media, not
                     // background video.
                     if (screen) encoding.networkPriority = 3
+                    // Nobody on the far end has joined the share: no encoder.
+                    if (screen) encoding.active = shareWatched
                 }
 
                 // Resolution has exactly one owner on a share, and it is
@@ -1997,6 +2125,33 @@ class VoiceEngine(private val context: Context) {
                     },
                 )
             }
+            // Read like the desktop reads it: each media state replaces the
+            // last, so a state without the key is a client that never says.
+            // `declaredWatching` in the desktop's voice store: null is nobody,
+            // any string is a peer id, and anything else was not said.
+            val declared = when (val raw = media.opt(WATCHING_WIRE)) {
+                JSONObject.NULL -> StageRules.Declared.Nobody
+                is String -> StageRules.Declared.Peer(raw)
+                else -> StageRules.Declared.Unsaid
+            }
+            val joined = StageRules.joinedShare(declared, selfPeerId)
+            if (joined) unwatched.remove(peer.peerId) else unwatched.add(peer.peerId)
+            setShareWatched(joined)
+        }
+
+        /**
+         * Whether this peer has joined this phone's share, so it is worth
+         * encoding for them. True until they say otherwise - a client that
+         * never says shows every share it receives. Off rather than removed:
+         * the track stays on the sender, so joining is a parameter change and
+         * a keyframe, not a renegotiation. The desktop's `shareWatched`.
+         */
+        private var shareWatched = peer.peerId !in unwatched
+
+        fun setShareWatched(watched: Boolean) {
+            if (shareWatched == watched) return
+            shareWatched = watched
+            if (screenTrack != null) tune(Slot.SCREEN)
         }
 
         /**
@@ -2515,6 +2670,7 @@ class VoiceEngine(private val context: Context) {
 
                 val camera = liveVideo(Slot.CAMERA, decoded)
                 val screen = liveVideo(Slot.SCREEN, decoded)
+                val screenPending = transceivers[Slot.SCREEN]?.receiver?.track() as? VideoTrack
                 val speaking = (levels[transceivers[Slot.MIC]?.mid] ?: 0.0) >= SPEAKING_LEVEL
 
                 val pair = CallStats.selectedPair(pairs, selectedPairId)
@@ -2566,7 +2722,12 @@ class VoiceEngine(private val context: Context) {
 
                 scope.launch {
                     update(peer.peerId) {
-                        it.copy(camera = camera, screen = screen, speaking = speaking)
+                        it.copy(
+                            camera = camera,
+                            screen = screen,
+                            screenPending = screenPending,
+                            speaking = speaking,
+                        )
                     }
                     publishStats(peer.peerId, link)
                 }
@@ -2678,6 +2839,13 @@ class VoiceEngine(private val context: Context) {
 
         /** The media-state key that says somebody has been pulled off the call. */
         private const val HOLD_WIRE = "hold"
+
+        /**
+         * The media-state key naming the share this client has joined: a peer
+         * id, `null` for none, absent from a client too old to say. The
+         * desktop's `MediaState.watching`.
+         */
+        private const val WATCHING_WIRE = "watching"
 
         private const val POLL_MS = 1_000L
 
