@@ -192,7 +192,7 @@ to be framed, so no browser tab can ever show it.
 | Connection panel: bitrate, loss, round trip, frame size | ✅ | ✅ | ✅ |
 | Reconnects a dropped link, and ends a call it cannot recover | ✅ | ✅ | ✅ |
 | Push to talk | ✅ a held key | ✅ a held key | ✅ a held button |
-| Picture-in-picture while minimised | ✅ kept out of your own share on Windows and macOS | — | ✅ the system window, on backing out of a call |
+| Picture-in-picture while minimised | ✅ kept out of your own share on Windows and macOS | — | ✅ the system window, on leaving the app in a call with video |
 | Join and leave tones | ✅ | ✅ | ✅ |
 | **Listen together** | | | |
 | Shared queue in a call, in step, video on screen | ✅ | ✅ | ✅ |
