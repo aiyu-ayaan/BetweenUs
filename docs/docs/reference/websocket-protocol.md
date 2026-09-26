@@ -75,6 +75,7 @@ export interface WebSocketMessage<T = unknown> {
 | :--- | :--- | :--- |
 | `chat.message_created` | `Message` | Broadcasts a newly posted message (plaintext or encrypted). A thread reply is the same event with `threadRootId` set; clients keep it out of the channel timeline. |
 | `chat.message_updated` | `Message` | Broadcasts an edited message or content modification. Also how a thread root's `thread` summary (`replyCount`, `lastReplyAt`) changes when a reply is sent, deleted or expires. A vote, a retraction and a close on a poll arrive as this event too, carrying the whole `Message` with its refreshed `poll.tallies` - who chose what, by user id, the way `reactions` carries who reacted. |
+| `thread.follow` | `{ thread: ThreadFollowState }` | This account's follow or unread state in one thread moved: it followed or unfollowed, read it on some device, or a reply was sent, deleted or expired. Sent to that account's own sockets only, with the count already worked out. |
 | `chat.message_deleted` | `{ channelId: string; messageId: string }` | Broadcasts message deletion / tombstone render. |
 | `chat.reaction_added` | `{ messageId: string; emoji: string; userId: string }` | Real-time emoji reaction addition. |
 | `chat.reaction_removed`| `{ messageId: string; emoji: string; userId: string }` | Real-time emoji reaction removal. |

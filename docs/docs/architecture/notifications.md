@@ -217,7 +217,7 @@ shape WhatsApp uses, for the same reason.
 | Channel on screen on *another* device | Server | Only the server sees every device — see below |
 | Quiet hours | Client | Minutes on *this* device's clock; the server never learns a timezone |
 | Mentions-only | Client | The mention is inside the ciphertext |
-| Thread reply, and am I in the thread | Server (participants) + client (mention) | Root author and earlier repliers are in the thread and are pushed normally; every other member is pushed flagged mentions-only, so only an @mention reaches them |
+| Thread reply, and am I in the thread | Server (participants + follows) + client (mention) | Root author, earlier repliers and anybody who followed are in the thread and are pushed normally, less anybody who explicitly unfollowed; every other member is pushed flagged mentions-only, so only an @mention reaches them |
 | Was it *my* role that was mentioned | Client | Same reason, plus the roster: only a client knows which roles this account holds |
 
 Rule of thumb: if answering it needs the plaintext, it's a client decision

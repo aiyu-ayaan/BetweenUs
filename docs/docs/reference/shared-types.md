@@ -228,6 +228,29 @@ export interface MessageThreadSummary {
   lastReplyAt: string | null;
 }
 
+/** One account's place in one thread. Counts rows, never reads bodies. */
+export interface ThreadFollowState {
+  rootId: string;
+  channelId: string;
+  /** Null for a direct message. */
+  serverId: string | null;
+  following: boolean;
+  /** `createdAt` of the newest reply this account has seen, or null. */
+  lastReadAt: string | null;
+  /** Live replies from other people after `lastReadAt`. Zero when not following. */
+  unreadCount: number;
+}
+
+/** A followed thread with its (sealed) root, as the followed-threads view lists it. */
+export interface FollowedThread extends ThreadFollowState {
+  root: Message;
+}
+
+/** Body of `PUT /messages/:rootId/thread/read`. Never moves the marker back. */
+export interface MarkThreadReadRequest {
+  messageId: string;
+}
+
 export interface MessageAttachment {
   id: string;
   messageId: string;

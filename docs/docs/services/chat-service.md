@@ -80,6 +80,10 @@ not the process.
 | --- | --- | --- |
 | GET | `/` | Page a channel's history; `?threadRootId=` pages that root's thread instead |
 | GET | `/:messageId` | One message by id, tombstone included (after the literal `/pins`, `/unfurl` routes) |
+| GET | `/threads/followed` | Threads the caller follows, with roots and unread counts, most recently active first; `?serverId=` narrows to one server |
+| PUT | `/:messageId/thread/follow` | Follow the thread under this root (idempotent) |
+| DELETE | `/:messageId/thread/follow` | Stop following it; remembered until the caller replies there |
+| PUT | `/:messageId/thread/read` | Move the caller's read marker in the thread up to `{ messageId }`, a reply in it |
 | GET | `/unfurl` | Link preview metadata |
 | GET | `/pins` | A channel's pinned messages |
 | POST | `/` | Send a message; `threadRootId` posts it into that root's thread |
@@ -141,7 +145,42 @@ envelope of a message that stays in the timeline.
   A root destroyed outright (disappearing window) takes its thread with it via
   the foreign key's cascade; the sweeper announces each reply's removal too.
 - **Unread.** Replies are excluded from the channel unread counts, because
-  they are not in the timeline a badge would open onto.
+  they are not in the timeline a badge would open onto. A thread has its own
+  count instead, for the people who follow it (below).
+- **Attachments.** A reply carries files exactly as a channel message does:
+  each is encrypted under the channel key and uploaded first, the manifest
+  naming them rides inside the sealed envelope, and `attachmentKeys` travel
+  beside it so deleting the reply sweeps its blobs.
+
+#### Followed threads and the per-thread read marker
+
+`ThreadFollow` (`thread-follows.ts`, `thread-follows.service.ts`) is one row
+per (account, root): whether it follows, and `lastReadAt`, the `createdAt` of
+the newest reply it has seen. The server learns nothing it did not already
+hold - it stores every reply's author and `threadRootId` anyway - and the
+unread count is a count of *rows*, never of anything sealed inside them.
+
+- **Who follows.** Replying follows the replier (whatever they chose before)
+  and moves their marker to their own reply. The root's author follows the
+  first time anybody replies, unless they explicitly unfollowed - an unfollow
+  row is remembered. Anybody can follow or unfollow any thread they can see.
+- **Unread** is the live replies from somebody else after `lastReadAt`; zero
+  when not following. `PUT /thread/read` only moves the marker forward (a
+  device that is behind cannot re-open what another read) and only accepts a
+  reply in that thread (`NOT_A_THREAD_REPLY`, 400).
+- **Access.** Every route goes through `resolveChannelAccess` and wants
+  `VIEW_CHANNEL`; a root the caller cannot see, or a reply named as a root, is
+  `MESSAGE_NOT_FOUND` (404). The list drops threads whose channel the caller
+  lost, and roots behind the caller's clear-history floor. At most 100.
+- **Realtime.** `thread.follow` carries one `ThreadFollowState` to that
+  account's own sockets only (bus event `thread.follow.changed`). It is sent on
+  a follow change, a read, and whenever a thread's replies change (send,
+  delete, expiry) to every follower who can still see the channel.
+- **Clients.** Desktop and web badge the "N replies" chip with a followed
+  thread's unread count, clear it once the thread panel shows the newest reply
+  in a focused window, and list followed threads (for the server on screen, or
+  the direct messages at home) in a side panel that opens the thread. Android
+  badges the chip and clears it from the thread screen.
 
 ### How a message stops existing
 

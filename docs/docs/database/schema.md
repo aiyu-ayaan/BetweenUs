@@ -337,6 +337,14 @@ summary a root carries, recomputed from its live replies and never incremented.
 in the clear: the reply's body is sealed with the channel key like any other.
 Migration `20260922120000_threads`.
 
+`ThreadFollow` (`thread_follows`) is one row per `(userId, rootId)`: whether
+that account follows the thread (`following`, false being a remembered
+unfollow) and `lastReadAt`, the `createdAt` of the newest reply it has seen.
+The unread count is derived - live replies from others after the marker - and
+never stored. Both foreign keys cascade, so a destroyed root or account takes
+its rows; `@@index([rootId])` serves "who follows this thread". Migration
+`20260926120000_thread_follows`.
+
 `viewOnce` marks a one-time message; `viewedAt` records when the **first**
 recipient opened it, which is what the backstop expiry is measured from. Who
 has looked lives in `MessageView`, one row per person — see below.
