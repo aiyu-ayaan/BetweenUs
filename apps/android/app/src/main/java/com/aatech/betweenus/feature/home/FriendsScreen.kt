@@ -44,6 +44,7 @@ import com.aatech.betweenus.feature.settings.NotificationPermissionBanner
 import com.aatech.betweenus.ui.components.AvatarWithStatus
 import com.aatech.betweenus.ui.components.BetweenUsButton
 import com.aatech.betweenus.ui.components.BetweenUsField
+import com.aatech.betweenus.feature.chat.FollowedThreadsButton
 import com.aatech.betweenus.ui.components.BetweenUsIcons
 import com.aatech.betweenus.ui.components.Chip
 import com.aatech.betweenus.ui.components.EmptyState
@@ -72,6 +73,7 @@ fun FriendsScreen(
     onOpenMenu: (() -> Unit)?,
     onOpenChannel: (String) -> Unit,
     onAddFriend: () -> Unit,
+    onOpenFollowedThreads: () -> Unit,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -153,6 +155,7 @@ fun FriendsScreen(
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f).padding(start = 8.dp),
             )
+            FollowedThreadsButton(serverId = null, onClick = onOpenFollowedThreads)
             IconAction(BetweenUsIcons.UserPlus, "Add a friend", onAddFriend)
         }
 

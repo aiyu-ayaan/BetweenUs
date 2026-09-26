@@ -68,6 +68,7 @@ import com.aatech.betweenus.feature.servers.CategoryNameSheet
 import com.aatech.betweenus.feature.servers.CreateChannelSheet
 import com.aatech.betweenus.feature.servers.JoinOrCreateServerSheet
 import com.aatech.betweenus.ui.components.AvatarWithStatus
+import com.aatech.betweenus.feature.chat.FollowedThreadsButton
 import com.aatech.betweenus.ui.components.Badge
 import com.aatech.betweenus.ui.components.IconAction
 import com.aatech.betweenus.ui.components.Avatar
@@ -96,6 +97,7 @@ fun WorkspaceDrawer(
     onStatus: () -> Unit,
     onRemote: () -> Unit,
     onActivities: () -> Unit,
+    onFollowedThreads: () -> Unit,
 ) {
     var addingServer by remember { mutableStateOf(false) }
     /** The create-channel sheet: null closed, false starting on Text, true on Voice. */
@@ -284,6 +286,9 @@ fun WorkspaceDrawer(
                     contentDescription = "Go to a conversation, channel or server",
                     onClick = onOpenSwitcher,
                 )
+                // Threads followed in what the list below is showing, with a
+                // badge when replies wait in them.
+                FollowedThreadsButton(serverId = selectedServerId, onClick = onFollowedThreads)
                 // Invites used to live two screens away - the drawer, then
                 // account settings, then server settings - which is a long way
                 // to walk to answer "how do I add somebody". It is one tap from

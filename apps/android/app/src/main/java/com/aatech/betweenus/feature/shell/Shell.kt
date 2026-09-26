@@ -460,6 +460,10 @@ fun Shell(user: PublicUser) {
                 scope.launch { drawer.close() }
                 navigation.navigate(Route.CallUsage)
             },
+            onFollowedThreads = {
+                scope.launch { drawer.close() }
+                navigation.navigate(Route.FollowedThreads) { launchSingleTop = true }
+            },
         )
     }
 
@@ -581,6 +585,11 @@ fun Shell(user: PublicUser) {
                             onOpenMenu = openMenu,
                             onOpenChannel = { openChannel(it, null) },
                             onAddFriend = { navigation.navigate(Route.AddFriend) },
+                            onOpenFollowedThreads = {
+                                // Home is the direct messages' scope.
+                                serverId = null
+                                navigation.navigate(Route.FollowedThreads)
+                            },
                         )
                     }
                     composable(Route.AddFriend) {
@@ -593,6 +602,11 @@ fun Shell(user: PublicUser) {
                                 onOpenMenu = openMenu,
                                 onOpenChannel = { openChannel(it, null) },
                                 onAddFriend = { navigation.navigate(Route.AddFriend) },
+                            onOpenFollowedThreads = {
+                                // Home is the direct messages' scope.
+                                serverId = null
+                                navigation.navigate(Route.FollowedThreads)
+                            },
                             )
                         } else {
                             ChatScreen(
