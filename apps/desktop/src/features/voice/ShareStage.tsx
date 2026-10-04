@@ -35,7 +35,14 @@ export function ShareStage({ share }: { share: VoiceShare }): JSX.Element {
 
   const controlling = driving === share.identity;
 
-  useEffect(() => attachTrack(videoRef.current, share.track), [share.track]);
+  // Your own share is drawn only while somebody can see it. The capture is
+  // live the whole call and this element would put every frame of it through
+  // the compositor - 60 times a second at full size - with the window
+  // minimised or hidden in the tray, where nobody is looking. Detaching it
+  // stops nothing else: the senders hold their own reference to the track.
+  const visible = useDocumentVisible();
+  const shown = share.isLocal && !visible ? null : share.track;
+  useEffect(() => attachTrack(videoRef.current, shown), [shown]);
 
   // Where the picture is inside the element. Recomputed when the window
   // changes and when the far end changes what it is sending - switching monitor
@@ -158,6 +165,17 @@ export function ShareStage({ share }: { share: VoiceShare }): JSX.Element {
       ))}
     </div>
   );
+}
+
+/** Whether the window is on screen, as the page lifecycle reports it. */
+function useDocumentVisible(): boolean {
+  const [visible, setVisible] = useState(() => document.visibilityState !== 'hidden');
+  useEffect(() => {
+    const update = (): void => setVisible(document.visibilityState !== 'hidden');
+    document.addEventListener('visibilitychange', update);
+    return () => document.removeEventListener('visibilitychange', update);
+  }, []);
+  return visible;
 }
 
 /** Puts a track on an element and takes it off again. */
