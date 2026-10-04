@@ -1136,6 +1136,9 @@ jobs:
           printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
+      # The commit the images were built from, for the deployment folder.
+      - uses: actions/checkout@v4
+
       - name: Deploy
         env:
           VERSION: ${{ needs.merged.outputs.version }}
@@ -1143,13 +1146,15 @@ jobs:
           USER_NAME: ${{ vars.DEPLOY_USER || 'betweenus' }}
           DIR: ${{ vars.DEPLOY_DIR || '~/betweenus' }}
         run: |
-          # `git pull` first, because deploy.sh, the compose file and nginx.conf
-          # are read from the checkout on the host - a release whose compose
+          # The host holds no checkout, only `.env` and the deployment folder,
+          # so this release's folder is shipped first: a release whose compose
           # shape changed and whose host still has the old one deploys the new
           # images into the old topology, which is worse than not deploying.
-          ssh -i ~/.ssh/id_deploy -o BatchMode=yes "${USER_NAME}@${HOST}" \
-            "cd ${DIR} && git fetch --tags --quiet && git checkout --quiet v${VERSION} \
-             && sh infrastructure/docker/deploy.sh ${VERSION}"
+          # Built here and streamed over the same SSH connection rather than
+          # downloaded by the host, so the host never has to reach GitHub.
+          sh infrastructure/docker/bundle.sh bundle "$VERSION"
+          tar -C bundle -cf - . | ssh -i ~/.ssh/id_deploy -o BatchMode=yes "${USER_NAME}@${HOST}" \
+            "mkdir -p ${DIR} && tar -C ${DIR} -xf - && cd ${DIR} && sh ./deploy.sh ${VERSION}"
 
       # The deploy script has already checked the gateway from inside the host.
       # This checks it from outside, which is the only place a Cloudflare tunnel
@@ -1242,15 +1247,7 @@ jobs:
         env:
           VERSION: ${{ needs.merged.outputs.version }}
         run: |
-          mkdir -p bundle
-          sed -e "s|\.\./nginx/nginx\.conf|./nginx.conf|" \
-              -e "s|\${BETWEENUS_VERSION:-latest}|\${BETWEENUS_VERSION:-${VERSION}}|g" \
-              infrastructure/docker/docker-compose.yml > bundle/docker-compose.yml
-          cp infrastructure/docker/backup.sh bundle/backup.sh
-          cp infrastructure/docker/deploy.sh bundle/deploy.sh
-          cp infrastructure/docker/docker-compose.secrets.yml bundle/docker-compose.secrets.yml
-          cp infrastructure/nginx/nginx.conf bundle/nginx.conf
-          chmod +x bundle/deploy.sh
+          sh infrastructure/docker/bundle.sh bundle "$VERSION"
           grep -n 'image:' bundle/docker-compose.yml
 
       # The notes were written and reviewed in the release PR. Reading them back
@@ -1308,8 +1305,8 @@ jobs:
             old or an emulator), or `universal` if you would rather not choose. The
             `.aab` is for Play, not for sideloading.
 
-            **Server** — `docker-compose.yml`, `nginx.conf` and `backup.sh` below are a
-            deployment folder. Put them beside your existing `.env` and:
+            **Server** — `docker-compose.yml`, `nginx.conf`, `backup.sh` and `deploy.sh`
+            below are a deployment folder. Put them beside your existing `.env` and:
 
             ```bash
             docker compose --env-file .env pull
@@ -1334,6 +1331,8 @@ jobs:
             bundle/docker-compose.yml
             bundle/nginx.conf
             bundle/backup.sh
+            bundle/deploy.sh
+            bundle/docker-compose.secrets.yml
 
   # The docs site, for every release. It is the same build and the same deploy
   # as docs.yml, from the commit that was released, and it shares that

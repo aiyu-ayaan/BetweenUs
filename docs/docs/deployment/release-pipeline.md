@@ -182,7 +182,7 @@ this rather than fail on a missing key.
 | --- | --- | --- |
 | `DEPLOY_HOST` | variable | The host. Setting it is what turns the job on |
 | `DEPLOY_USER` | variable | Defaults to `betweenus` |
-| `DEPLOY_DIR` | variable | The checkout on the host, defaults to `~/betweenus` |
+| `DEPLOY_DIR` | variable | The deployment folder on the host (holds `.env`), defaults to `~/betweenus` |
 | `BETWEENUS_API_URL` | variable | Checked from outside afterwards, if set |
 | `DEPLOY_SSH_KEY` | secret | Private key for that user |
 | `DEPLOY_KNOWN_HOSTS` | secret | The host's public key, so the connection is pinned |
@@ -190,8 +190,10 @@ this rather than fail on a missing key.
 The host key is pinned on purpose: `StrictHostKeyChecking=no` on a deploy
 job hands the deployment's SSH session to whoever answers on that address.
 
-The job checks out the release tag on the host and runs
-[`deploy.sh`](/deployment/docker-compose#deploysh), then checks the public
+The host holds no checkout of the repository — only `.env` and the
+deployment folder `infrastructure/docker/bundle.sh` builds. The job builds
+that folder for the release, streams it into `DEPLOY_DIR` over SSH (`.env` is
+left alone) and runs [`deploy.sh`](/deployment/docker-compose#deploysh), then checks the public
 URL from outside — the only place a Cloudflare tunnel that did not come back
 up is visible.
 

@@ -2,7 +2,10 @@
 # be tested without cutting a release to find out.
 #
 #   Run workflow -> mode: check     connects and reports, changes nothing
-#   Run workflow -> mode: deploy    checks out the version and runs deploy.sh
+#   Run workflow -> mode: deploy    ships the version's deployment folder and runs deploy.sh
+#
+# The host holds no checkout: `DEPLOY_DIR` is a flat deployment folder (the one
+# infrastructure/docker/bundle.sh builds) with the host's `.env` beside it.
 #
 # `check` is the one to run first, and the one to run when something is wrong.
 # It joins the tailnet, prints what it can see, and prints the host's SSH keys
@@ -162,29 +165,47 @@ jobs:
               echo \"docker:  \$(docker version --format '{{.Server.Version}}' 2>&1 || echo 'not reachable as this user')\"
               echo \"dir:     ${DIR}\"
               cd ${DIR}
-              git log --oneline -1
+              ls
               echo \"version: \$(grep -E '^BETWEENUS_VERSION=' .env 2>/dev/null || echo 'unset - follows latest')\"
-              docker compose --env-file .env -f infrastructure/docker/docker-compose.yml ps --format '{{.Service}} {{.State}}' 2>/dev/null || true
+              docker compose --env-file .env -f docker-compose.yml ps --format '{{.Service}} {{.State}}' 2>/dev/null || true
             "
+
+      # The deployment folder comes from the version being deployed, or from
+      # the newest release when none was named - never from the tip of master,
+      # whose compose file may describe services no published image has yet.
+      - uses: actions/checkout@v4
+        if: env.MODE == 'deploy'
+        with:
+          fetch-depth: 0
+
+      - name: Pick the release
+        if: env.MODE == 'deploy'
+        env:
+          VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${VERSION:+v$VERSION}"
+          tag="${tag:-$(gh release view --json tagName -q .tagName)}"
+          # Only the deployment files, and over this checkout rather than in
+          # place of it: a tag cut before bundle.sh existed has none, and this
+          # run's copy then assembles that tag's files.
+          git checkout --quiet "$tag" -- infrastructure/docker infrastructure/nginx
+          echo "deployment folder from $tag"
 
       # Everything above is read-only. Only this changes the host, and only when
       # it was asked for - the whole point of `check` being the default.
-      # DEPLOY_ENV_FILE pins deploy.sh to the repo's own .env at the deployment
-      # root. Left unset, deploy.sh prefers a `.env` sitting next to the script
-      # itself (infrastructure/docker/.env) when one exists - a leftover from an
-      # older bundled layout - and a stray copy there silently wins over the one
-      # everybody actually edits, so a fix to the root .env (e.g. PUBLIC_API_URL)
-      # never reaches the containers. Pinning it here is the fix: one .env, always
-      # ${DIR}/.env, whatever else happens to exist beside the compose file.
+      # The folder is streamed over the same SSH connection rather than
+      # downloaded by the host, so the host never has to reach GitHub. `.env`
+      # is not part of it and is never touched: it sits beside deploy.sh, which
+      # is where deploy.sh looks first.
       - name: Deploy
         if: env.MODE == 'deploy'
         env:
           VERSION: ${{ inputs.version }}
         run: |
-          ssh -i ~/.ssh/id_deploy -o BatchMode=yes "${USER_NAME}@${HOST}" \
-            "cd ${DIR} && git fetch --tags --quiet \
-             && { [ -z '${VERSION}' ] || git checkout --quiet 'v${VERSION}'; } \
-             && DEPLOY_ENV_FILE=${DIR}/.env sh infrastructure/docker/deploy.sh ${VERSION}"
+          sh infrastructure/docker/bundle.sh bundle "$VERSION"
+          tar -C bundle -cf - . | ssh -i ~/.ssh/id_deploy -o BatchMode=yes "${USER_NAME}@${HOST}" \
+            "mkdir -p ${DIR} && tar -C ${DIR} -xf - && cd ${DIR} && sh ./deploy.sh ${VERSION}"
 
       # From outside the tailnet, which is the only place a Cloudflare tunnel
       # that did not come back up is visible.
