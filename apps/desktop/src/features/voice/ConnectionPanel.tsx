@@ -6,6 +6,7 @@
  * which is not something to ask of somebody mid-meeting. One row per person,
  * the four numbers that decide how a call feels, and nothing else.
  */
+import type { RefObject } from 'react';
 import { useVoiceStore } from '../../stores/voice';
 import {
   echoAdvice,
@@ -15,6 +16,7 @@ import {
   type QualityLimit,
 } from '../../services/call-stats';
 import { useAudioSettings } from '../../stores/audioSettings';
+import { CallPopover } from './CallPopover';
 
 /** `qualityLimitationReason`, said the way somebody in a call would say it. */
 const LIMIT_REASON: Record<QualityLimit, string> = {
@@ -23,7 +25,13 @@ const LIMIT_REASON: Record<QualityLimit, string> = {
   other: 'the encoder',
 };
 
-export function ConnectionPanel({ onClose }: { onClose: () => void }): JSX.Element {
+export function ConnectionPanel({
+  anchor,
+  onClose,
+}: {
+  anchor: RefObject<HTMLElement | null>;
+  onClose: () => void;
+}): JSX.Element {
   const stats = useVoiceStore((state) => state.stats);
   const echoErleDb = useVoiceStore((state) => state.echoErleDb);
   const settings = useAudioSettings((state) => state.settings);
@@ -39,7 +47,7 @@ export function ConnectionPanel({ onClose }: { onClose: () => void }): JSX.Eleme
   );
 
   return (
-    <div className="absolute bottom-full left-1/2 z-40 mb-2 w-[320px] -translate-x-1/2 animate-pop rounded-xl border border-edge bg-surface-900/90 p-3 shadow-pop backdrop-blur-md">
+    <CallPopover anchor={anchor} width={320} className="p-3">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold text-slate-100">Connection</h2>
         <button
@@ -75,7 +83,7 @@ export function ConnectionPanel({ onClose }: { onClose: () => void }): JSX.Eleme
         Media goes straight between the two machines, so these are the two of you and whatever is
         between - no server is in this path to blame.
       </p>
-    </div>
+    </CallPopover>
   );
 }
 

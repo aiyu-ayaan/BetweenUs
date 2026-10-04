@@ -317,8 +317,8 @@ export function VoiceChannelView({
       </div>
 
       {connected && (
-        <footer className="flex shrink-0 justify-center px-4 py-3 z-20">
-          <div className="rounded-2xl border border-white/10 bg-surface-950/90 px-4 py-2 backdrop-blur-xl shadow-2xl">
+        <footer className="z-20 flex min-w-0 shrink-0 justify-center px-2 py-3 sm:px-4">
+          <div className="min-w-0 max-w-full rounded-2xl border border-white/10 bg-surface-950/90 px-2 py-2 backdrop-blur-xl shadow-2xl sm:px-4">
             <VoiceControls size="lg" />
           </div>
         </footer>

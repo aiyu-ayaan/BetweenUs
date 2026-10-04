@@ -4,7 +4,7 @@
  * It lives in both the sidebar panel and the voice channel screen, so it is its
  * own component: the two places must never disagree about what is on.
  */
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { useVoiceStore } from '../../stores/voice';
 import { useAppsStore } from '../../stores/apps';
 import { useGameStore } from '../../stores/game';
@@ -56,6 +56,10 @@ export function VoiceControls({ size = 'sm' }: { size?: 'sm' | 'lg' }): JSX.Elem
   // late is exactly when somebody goes looking for this.
   const [choosingDevices, setChoosingDevices] = useState(false);
   const [showingStats, setShowingStats] = useState(false);
+  // What the two popovers are placed against. They draw into the body, so
+  // they need the button's position rather than its box to sit in.
+  const devicesAnchor = useRef<HTMLDivElement>(null);
+  const statsAnchor = useRef<HTMLDivElement>(null);
   // Ringing somebody in belongs where the call is, not only in the member list:
   // the full-screen voice view has no member list on it to reach for.
   const [inviting, setInviting] = useState(false);
@@ -76,7 +80,14 @@ export function VoiceControls({ size = 'sm' }: { size?: 'sm' | 'lg' }): JSX.Elem
   const pad = size === 'lg' ? 'p-3 min-h-[44px] min-w-[44px]' : 'p-2 min-h-[36px] min-w-[36px]';
 
   return (
-    <div className={`flex items-center ${size === 'lg' ? 'gap-2' : 'gap-1'}`}>
+    // Wraps rather than overflowing: centred in a column narrower than itself,
+    // a row spills off both edges and the first buttons - the microphone and
+    // the camera - are the ones the sidebar covers.
+    <div
+      className={`flex min-w-0 max-w-full flex-wrap items-center justify-center ${
+        size === 'lg' ? 'gap-2' : 'gap-1'
+      }`}
+    >
       {/* Under push to talk the button still means "am I in this call at all",
           and the key means "right now". A muted microphone stays muted however
           long the key is held, so the label has to say which of the two is
@@ -192,7 +203,7 @@ export function VoiceControls({ size = 'sm' }: { size?: 'sm' | 'lg' }): JSX.Elem
 
       {/* Amber when something is measurably wrong, so the numbers are worth
           opening before anybody has thought to ask for them. */}
-      <div className="relative">
+      <div ref={statsAnchor} className="relative">
         <ControlButton
           active={showingStats}
           pad={pad}
@@ -202,10 +213,12 @@ export function VoiceControls({ size = 'sm' }: { size?: 'sm' | 'lg' }): JSX.Elem
         >
           <ActivityIcon className={`${icon} ${warning ? 'text-amber-300' : ''}`} />
         </ControlButton>
-        {showingStats && <ConnectionPanel onClose={() => setShowingStats(false)} />}
+        {showingStats && (
+          <ConnectionPanel anchor={statsAnchor} onClose={() => setShowingStats(false)} />
+        )}
       </div>
 
-      <div className="relative">
+      <div ref={devicesAnchor} className="relative">
         <ControlButton
           active={choosingDevices}
           pad={pad}
@@ -214,7 +227,9 @@ export function VoiceControls({ size = 'sm' }: { size?: 'sm' | 'lg' }): JSX.Elem
         >
           <SettingsIcon className={icon} />
         </ControlButton>
-        {choosingDevices && <DevicePicker onClose={() => setChoosingDevices(false)} />}
+        {choosingDevices && (
+          <DevicePicker anchor={devicesAnchor} onClose={() => setChoosingDevices(false)} />
+        )}
       </div>
 
       <button

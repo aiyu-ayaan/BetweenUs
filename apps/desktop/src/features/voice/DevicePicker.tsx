@@ -9,11 +9,19 @@
  * It writes to the same store the settings screen does, so a change here is
  * remembered and applied to the running call by the voice store.
  */
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type RefObject } from 'react';
 import { DeviceSelect, useDevices } from '../../components/DeviceSelect';
 import { useAudioSettings } from '../../stores/audioSettings';
+import { CallPopover } from './CallPopover';
 
-export function DevicePicker({ onClose }: { onClose: () => void }): JSX.Element {
+export function DevicePicker({
+  anchor,
+  onClose,
+}: {
+  /** The button that opened it: placed against, and left to close it itself. */
+  anchor: RefObject<HTMLElement | null>;
+  onClose: () => void;
+}): JSX.Element {
   const [devices] = useDevices();
   const settings = useAudioSettings((state) => state.settings);
   const update = useAudioSettings((state) => state.update);
@@ -23,7 +31,11 @@ export function DevicePicker({ onClose }: { onClose: () => void }): JSX.Element 
   // pointerdown rather than a click, so a drag that starts outside counts.
   useEffect(() => {
     const away = (event: PointerEvent): void => {
-      if (!panel.current?.contains(event.target as Node)) onClose();
+      const target = event.target as Node;
+      // The button toggles it on its own click; closing here as well would
+      // reopen it on that same click.
+      if (panel.current?.contains(target) || anchor.current?.contains(target)) return;
+      onClose();
     };
     const key = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') onClose();
@@ -34,13 +46,10 @@ export function DevicePicker({ onClose }: { onClose: () => void }): JSX.Element 
       document.removeEventListener('pointerdown', away);
       document.removeEventListener('keydown', key);
     };
-  }, [onClose]);
+  }, [anchor, onClose]);
 
   return (
-    <div
-      ref={panel}
-      className="absolute bottom-full start-0 z-30 mb-2 w-72 animate-pop space-y-4 rounded-xl border border-edge bg-surface-900/90 p-4 shadow-pop backdrop-blur-md"
-    >
+    <CallPopover anchor={anchor} panel={panel} width={288} className="space-y-4 p-4">
       <DeviceSelect
         label="Input device"
         kind="audioinput"
@@ -65,6 +74,6 @@ export function DevicePicker({ onClose }: { onClose: () => void }): JSX.Element 
       <p className="text-xs text-slate-400">
         Sensitivity, processing and camera quality are in Settings → Voice &amp; Video.
       </p>
-    </div>
+    </CallPopover>
   );
 }
