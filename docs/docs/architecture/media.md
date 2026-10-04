@@ -509,8 +509,11 @@ inside a budget (`shareBudget` in `share-quality.ts`):
 | Encoder | Frame rate | Resolution |
 | --- | --- | --- |
 | Hardware, or not known | The profile's (60) | As captured |
-| Software, one viewer | `SOFTWARE_FRAME_RATE` (30) | As captured |
-| Software, two or more viewers | 30 | Scaled to `SOFTWARE_SHARED_HEIGHT` (720p) |
+| Software, one encoder | `SOFTWARE_FRAME_RATE` (30) | As captured |
+| Software, two or more encoders | 30 | Scaled to `SOFTWARE_SHARED_HEIGHT` (720p) |
+
+Encoders, not viewers: everybody on the shared encoder below counts as one, so
+a pooled share keeps its full size however many people watch it.
 
 The encoder is found out twice. Before the capture, `probeShareEncoder`
 (`encoder-probe.ts`) *measures* it rather than taking the platform's word: a
@@ -548,6 +551,44 @@ measured and are not: 24 fps instead of 30 for three 720p viewers cost slightly
 made OpenH264 skip a third of its frames. VP8 (libvpx) instead of OpenH264
 kept its cadence better but cost more CPU at every size measured, so the codec
 is not switched for CPU.
+
+**One encoder for every viewer** (`share-pool.ts`, `share-pool.worker.ts`). A
+mesh sends the share over one connection per viewer, and a WebRTC sender
+encodes for itself, so five viewers were five encoders. Discord avoids this by
+encoding once and having a media server copy the stream; nothing here relays
+media through a server, so the copy is made on the sharer's machine, after
+encoding:
+
+- **The producer** is one sender on a loopback `RTCPeerConnection` inside the
+  renderer. It encodes the capture; an encoded transform copies each frame out
+  and drops it, so the loopback carries nothing. Its rate is set by `tunePool`
+  (the share's ceiling and the software budget for one encoder) and it is
+  switched off while nobody is pooled.
+- **Each pooled link's** screen sender encodes a 16×16 carrier canvas that
+  changes one pixel per frame and is ticked once per shared frame. Its transform
+  sends each carrier frame with the next shared frame in its place. RTP, pacing,
+  congestion control, retransmission and DTLS-SRTP stay per link.
+
+| Rule | Why |
+| --- | --- |
+| The transform is attached to every screen sender as the link is created (offer side) or in `adopt` (answer side), and passes the link's own frames through until it is pooled | Chromium honours a transform only if it is set before the sender first negotiates, and a sender goes silent when one is removed |
+| Pooling starts at two eligible viewers and stays on while any remain | One viewer is one encoder either way; switching in and out is a keyframe for everybody |
+| Eligible: watching, a direct (not relayed) pair, and an H.264 `packetization-mode=1` with the producer's profile byte (`canCarry`) | The H.264 packetiser finds frame boundaries in the bitstream, so a carried frame survives under another frame's metadata; VP8's descriptor is built from that metadata. A relayed link is held to its own lower ceiling |
+| A link joins on a keyframe; a carrier keyframe after its first is the viewer asking for one | Deltas without their reference are a broken picture |
+| Keyframes come from switching the producer's encoding off and on, at most one per 250 ms, through one `setParameters` queue | Chromium has no keyframe request on the sending side; two overlapping `setParameters` refuse each other |
+| A link six frames behind twice within 5 s is evicted to its own encoder for the rest of the share | One slow viewer never lowers everybody else's picture; the ladder fits it to its own connection |
+| Chromium only (`createEncodedStreams` present) | Every rule above was measured on Chromium's WebRTC |
+
+Pooled links skip the ladder and their own encoder reading (both would describe
+the carrier); the connection panel shows the producer's size, rate and encoder
+for them.
+
+Measured on the hybrid laptop (OpenH264 only), with the real `Mesh`: a sharer
+and its viewers in one Electron page over a local signalling relay, all
+viewers decoding in the same process. Four viewers: 1.99 cores and 720p before,
+0.99 cores and 1080p pooled. Two viewers: 0.81 cores at 720p before, 0.72 at
+1080p. With decoding left out, three and five viewers cost 1.70 and 3.89 cores
+encoding separately against 0.69 and 0.73 pooled.
 
 **Your own preview is not drawn while hidden.** `ShareStage` detaches the
 sharer's own track from its `<video>` while `document.visibilityState` is
