@@ -19,6 +19,7 @@ import {
   INestApplication,
 } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import Redis, { type Redis as RedisClient } from 'ioredis';
 import type { NextFunction, Request, Response } from 'express';
 import { envOr, envNumber, loadEnv } from '@betweenus/config';
@@ -82,6 +83,19 @@ const STATUS_CODES: Record<number, string> = {
   500: 'INTERNAL_ERROR',
 };
 
+/**
+ * Prisma's unique-constraint failure (P2002), recognised by shape so this
+ * package does not depend on the database client. A race past a service's own
+ * "already taken" check is the caller's conflict, not the server's fault.
+ */
+function isUniqueViolation(exception: unknown): boolean {
+  return (
+    exception instanceof Error &&
+    exception.name === 'PrismaClientKnownRequestError' &&
+    (exception as Error & { code?: unknown }).code === 'P2002'
+  );
+}
+
 @Catch()
 export class ApiExceptionFilter implements ExceptionFilter {
   constructor(
@@ -95,15 +109,21 @@ export class ApiExceptionFilter implements ExceptionFilter {
     const response = context.getResponse<Response>();
     const requestId = request.requestId ?? 'unknown';
 
+    const conflict = isUniqueViolation(exception);
     const status =
       exception instanceof HttpException
         ? exception.getStatus()
-        : HttpStatus.INTERNAL_SERVER_ERROR;
+        : conflict
+          ? HttpStatus.CONFLICT
+          : HttpStatus.INTERNAL_SERVER_ERROR;
 
     let code = STATUS_CODES[status] ?? 'INTERNAL_ERROR';
     let message = 'Internal server error';
 
-    if (exception instanceof HttpException) {
+    if (conflict) {
+      code = 'ALREADY_EXISTS';
+      message = 'Something with that name already exists here';
+    } else if (exception instanceof HttpException) {
       const payload = exception.getResponse();
       if (typeof payload === 'string') {
         message = payload;
@@ -468,6 +488,8 @@ export interface BootstrapOptions {
   defaultPort: number;
   /** REST prefix. WebSocket gateways opt out by passing an empty string. */
   globalPrefix?: string;
+  /** JSON body limit, in body-parser's notation. Express's own default is 100kb. */
+  jsonBodyLimit?: string;
 }
 
 export async function bootstrapService(options: BootstrapOptions): Promise<INestApplication> {
@@ -476,7 +498,10 @@ export async function bootstrapService(options: BootstrapOptions): Promise<INest
   const logger = createLogger(options.service, envOr('LOG_LEVEL', 'info') as LogLevel);
   const isProduction = envOr('NODE_ENV', 'development') === 'production';
 
-  const app = await NestFactory.create(options.module as never, { logger: false });
+  const app = await NestFactory.create<NestExpressApplication>(options.module as never, {
+    logger: false,
+  });
+  if (options.jsonBodyLimit) app.useBodyParser('json', { limit: options.jsonBodyLimit });
 
   app.use(requestContextMiddleware(logger));
 

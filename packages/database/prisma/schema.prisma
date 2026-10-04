@@ -880,7 +880,9 @@ model Channel {
   reads    ChannelRead[]
   webhooks Webhook[]
 
-  @@unique([serverId, name])
+  /// Names are not unique: two categories may each hold a `#dev`, the same as
+  /// Discord, and a server holds as many channels as anyone cares to make.
+  @@index([serverId])
   @@index([categoryId])
   @@map("channels")
 }

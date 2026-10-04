@@ -142,6 +142,10 @@ export class UpdateChannelCategoryDto implements UpdateChannelCategoryRequest {
   name!: string;
 }
 
+/** About 90 bytes of JSON each, so a full layout stays inside the 2 MB body. */
+export const MAX_LAYOUT_CATEGORIES = 2_000;
+export const MAX_LAYOUT_CHANNELS = 10_000;
+
 export class ChannelLayoutEntryDto implements ChannelLayoutEntry {
   @IsUUID()
   id!: string;
@@ -152,20 +156,22 @@ export class ChannelLayoutEntryDto implements ChannelLayoutEntry {
 }
 
 /**
- * Bounded so a body cannot be arbitrarily large; the ids themselves are
- * checked against the server in the service, which is the only place that
- * knows which of them the caller may see.
+ * Bounded so a body cannot be arbitrarily large, but far past any real server:
+ * the layout is sent whole, so a cap a server can outgrow is a server that can
+ * no longer be rearranged. The ids themselves are checked against the server
+ * in the service, which is the only place that knows which of them the caller
+ * may see.
  */
 export class ChannelLayoutDto implements ChannelLayoutRequest {
   @IsOptional()
   @IsArray()
   @IsUUID('all', { each: true })
-  @ArrayMaxSize(200)
+  @ArrayMaxSize(MAX_LAYOUT_CATEGORIES)
   categoryIds?: string[];
 
   @IsOptional()
   @IsArray()
-  @ArrayMaxSize(500)
+  @ArrayMaxSize(MAX_LAYOUT_CHANNELS)
   @ValidateNested({ each: true })
   @Type(() => ChannelLayoutEntryDto)
   channels?: ChannelLayoutEntryDto[];

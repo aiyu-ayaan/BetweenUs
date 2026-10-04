@@ -33,11 +33,13 @@ async function main(): Promise<void> {
   });
 
   for (const name of ['general', 'random']) {
-    await prisma.channel.upsert({
-      where: { serverId_name: { serverId: server.id, name } },
-      update: {},
-      create: { serverId: server.id, name, type: 'TEXT' },
+    const existing = await prisma.channel.findFirst({
+      where: { serverId: server.id, name },
+      select: { id: true },
     });
+    if (!existing) {
+      await prisma.channel.create({ data: { serverId: server.id, name, type: 'TEXT' } });
+    }
   }
 
   console.log('Seeded demo@betweenus.local / betweenus123');
