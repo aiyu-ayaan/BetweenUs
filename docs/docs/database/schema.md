@@ -235,6 +235,12 @@ unique: ties, including every channel that predates categories (all `0`), fall
 back to `createdAt`, so an untouched server draws exactly the order it always
 did and the migration needs no backfill.
 
+A name is **not** unique within a server: two categories may each hold a
+`#dev`, and a server holds any number of channels and categories. The old
+`(serverId, name)` unique index turned a repeated name into a 500; migration
+`20261004120000_channel_names_not_unique` drops it and keeps a plain
+`serverId` index for listing.
+
 ### `ChannelCategory`
 A heading in a server's channel sidebar - `id`, `serverId` (cascade), `name`,
 `position` (lowest first, ties by `createdAt`), `createdAt`. Shared by the whole

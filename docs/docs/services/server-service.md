@@ -60,7 +60,12 @@ which is what lets a manager who cannot see a private channel still send a
 layout. Every id is checked against the server, and a channel must also be one
 the caller can see - `MANAGE_CHANNEL` does not open a private channel. Errors
 use the standard shape: `CATEGORY_NOT_FOUND` (404), `CHANNEL_NOT_FOUND` (404),
-`DUPLICATE_LAYOUT_ENTRY` (400), `MISSING_PERMISSION` (403). Every change is
+`DUPLICATE_LAYOUT_ENTRY` (400), `MISSING_PERMISSION` (403). The layout is sent
+whole, so its bounds sit far past any real server: 2,000 categories and 10,000
+channels per request, inside a 2 MB JSON body (server-service raises Express's
+100 kB default through `bootstrapService({ jsonBodyLimit })`). There is no cap on
+how many channels or categories a server holds, and channel names may repeat.
+Every change is
 written to the server audit trail (`category.created`, `category.updated`,
 `category.deleted`, `channels.reordered`) and publishes `channel.list.changed`.
 

@@ -303,7 +303,9 @@ server clock minutes behind the host's.
 ## Errors and logs
 
 One error shape everywhere: `{ error: { code, message, requestId } }`. No
-stack traces leave the process in production. Passwords, tokens, refresh
+stack traces leave the process in production. A database unique-constraint
+failure (Prisma `P2002`) that gets past a service's own check is answered as
+409 `ALREADY_EXISTS`, never as a bare 500. Passwords, tokens, refresh
 tokens, secrets, and FCM push tokens are never logged.
 
 ## Known gaps (decisions, not oversights)
