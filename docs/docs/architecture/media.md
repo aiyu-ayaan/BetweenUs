@@ -512,14 +512,49 @@ inside a budget (`shareBudget` in `share-quality.ts`):
 | Software, one viewer | `SOFTWARE_FRAME_RATE` (30) | As captured |
 | Software, two or more viewers | 30 | Scaled to `SOFTWARE_SHARED_HEIGHT` (720p) |
 
-The encoder is found out twice. Before the capture, `probeShareEncoder` asks
-`navigator.mediaCapabilities.encodingInfo({ type: 'webrtc' })` whether the
-share's codec is `powerEfficient`, and a software share is captured at 30 fps,
-not captured at 60 with half the frames thrown away. Once the share is live,
-each link's sender reports `encoderImplementation` / `powerEfficientEncoder`.
-Any link reporting software wins, since a hardware encoder has a session limit
-and the links past it fall back. Those readings replace the probe, the budget
+The encoder is found out twice. Before the capture, `probeShareEncoder`
+(`encoder-probe.ts`) *measures* it rather than taking the platform's word: a
+canvas drawing blocks, a sweeping bar and scrolling text at the share's size
+and rate goes through a real sender on a loopback `RTCPeerConnection` for about
+a second after it settles, with the loopback's bitrate pinned so the rate
+controller is not what drops frames. `measuredKind` reads the sender's
+`outbound-rtp`:
+
+| Measured | Budgeted as |
+| --- | --- |
+| Encoded under 85% of the frames offered, or sent a smaller picture | Software, whatever it calls itself |
+| Keeps up and names its encoder | What it says |
+| Keeps up without naming it | The Media Capabilities `powerEfficient` answer |
+| No reading (no API, past the 4 s deadline) | The Media Capabilities answer |
+
+Chromium names the encoder only to a page that is capturing something, so in a
+call with a live microphone the reading is the implementation itself, and
+without one it is the cadence alone. Readings are cached per codec, size and
+rate for the session; the first share at a size pays about 1.7 s. A software
+share is captured at 30 fps, not captured at 60 with half the frames thrown
+away. Once the share is live, each link's sender reports
+`encoderImplementation` / `powerEfficientEncoder`. Any link reporting software
+wins, since a hardware encoder has a session limit and the links past it fall
+back, and so does a probe that measured software: a GPU encoder that could not
+keep up is not trusted again because its sender calls it hardware. The budget
 is recomputed, and the capture's frame rate follows through `applyConstraints`.
+
+Measured on the hybrid laptop above (OpenH264, loopback, received frames
+dropped before decode so only the sending side counts; 0.15 cores is the
+canvas alone): 1080p60 one viewer 1.24 cores, 1080p30 0.78, 720p30 0.52; three
+viewers at 1080p30 2.66, at 720p30 1.32. Two things that look like levers were
+measured and are not: 24 fps instead of 30 for three 720p viewers cost slightly
+*more* (1.44), and an 8 Mbps ceiling instead of 20 at 1080p30 saved little and
+made OpenH264 skip a third of its frames. VP8 (libvpx) instead of OpenH264
+kept its cadence better but cost more CPU at every size measured, so the codec
+is not switched for CPU.
+
+**Your own preview is not drawn while hidden.** `ShareStage` detaches the
+sharer's own track from its `<video>` while `document.visibilityState` is
+`hidden` (window minimised or in the tray) and attaches it again when shown.
+The renderer is never backgrounded during a call, so without this the preview
+kept going through the compositor at the capture's full rate with nobody
+looking. Senders hold their own reference to the track; nothing sent changes.
 The budget and the ladder both feed the sender: the lower frame rate and the
 larger `scaleResolutionDownBy` win, and they never multiply. A frame rate picked
 by hand in settings is never budgeted.
