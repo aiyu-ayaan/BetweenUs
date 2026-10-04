@@ -1,5 +1,36 @@
 # Changelog
 
+## [1.0.13](https://github.com/aiyu-ayaan/BetweenUs/compare/v1.0.12...v1.0.13) (2026-10-04)
+
+### Features
+
+* Send one share encoding to every viewer who can take it
+* Add a shared encoder that one share can send to every viewer
+* Measure the share encoder instead of trusting its flag
+* Copy a picture from a message or its preview
+
+### Bug fixes
+
+* Share one encoding with every viewer and let channel names repeat
+* Keep the call dock and its popovers clear of a shared screen
+* Let channel names repeat and lift the layout caps
+
+### Other changes
+
+* Point at the backlogged lower-quality share layer
+* Describe one share encoder for every viewer
+* Describe the measured share encoder and the hidden preview
+* Stop drawing your own share while the window is hidden
+* Document repeated channel names, layout bounds, the 409 mapping and copy image
+
+### Artifacts
+
+| Platform | This release |
+| --- | --- |
+| Server images | Built here |
+| Desktop | Built here |
+| Android | Built here |
+
 ## [1.0.12](https://github.com/aiyu-ayaan/BetweenUs/compare/v1.0.11...v1.0.12) (2026-09-26)
 
 ### Features
