@@ -2188,12 +2188,18 @@ export class Mesh {
   }
 
   /**
-   * The share's encoder: software if any link's sender says so, hardware if
-   * one says that, and the probe's guess until either does.
+   * The share's encoder: software if the probe said so or any link's sender
+   * says so, hardware if one says that, and unknown until either does.
+   *
+   * The probe's `software` is not overruled by a sender calling itself
+   * hardware: it is also the probe's answer for a GPU encoder that could not
+   * keep up with the picture, and lifting the budget for that one is the
+   * share falling over when the second person joins. Getting it wrong this
+   * way round costs a share 30 fps; the other way round costs a core.
    */
   private shareEncoder(): EncoderKind | null {
     const kinds = [...this.shareEncoders.values()];
-    if (kinds.includes('software')) return 'software';
+    if (this.sharePublish?.encoder === 'software' || kinds.includes('software')) return 'software';
     if (kinds.includes('hardware')) return 'hardware';
     return this.sharePublish?.encoder ?? null;
   }

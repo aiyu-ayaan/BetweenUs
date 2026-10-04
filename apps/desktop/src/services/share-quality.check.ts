@@ -25,6 +25,8 @@ import {
   sortPreferredVideoCodecs,
   SOFTWARE_FRAME_RATE,
   shareBudget,
+  keepsUp,
+  measuredKind,
 } from './share-quality';
 
 /** The ladder's own answer, with nothing capped, for the assertions below. */
@@ -541,6 +543,33 @@ assert.match(
   // A hand-picked rate under the budget is never raised to it.
   const slow = shareOptions('detail', fullHd, false, { ...NO_OVERRIDE, frameRate: 24 }, 'software');
   assert.equal(slow.capture.video.frameRate, 24);
+}
+
+
+// --- Which encoder, from what was measured.
+{
+  // An encoder that keeps up and names itself is what it says.
+  const gpu = { kind: 'hardware' as const, cadence: 0.98, scaled: false };
+  assert.equal(measuredKind(gpu, 'software'), 'hardware');
+
+  // A listed, "efficient" GPU encoder that drops half its frames is budgeted
+  // as software: the platform's word on it is exactly what is not trusted.
+  const struggling = { kind: 'hardware' as const, cadence: 0.45, scaled: false };
+  assert.equal(keepsUp(struggling), false);
+  assert.equal(measuredKind(struggling, 'hardware'), 'software');
+
+  // Keeping the cadence by shrinking the picture is not keeping up.
+  assert.equal(measuredKind({ kind: 'hardware', cadence: 1, scaled: true }, 'hardware'), 'software');
+
+  // An encoder that keeps up without naming itself - no capture running, so
+  // Chromium will not say - falls back to what the platform advertises.
+  const quiet = { kind: null, cadence: 1, scaled: false };
+  assert.equal(measuredKind(quiet, 'hardware'), 'hardware');
+  assert.equal(measuredKind(quiet, null), null);
+
+  // Nothing measured: the platform's claim, as before.
+  assert.equal(measuredKind(null, 'software'), 'software');
+  assert.equal(measuredKind(null, null), null);
 }
 
 console.log('share-quality self-check passed');

@@ -39,9 +39,9 @@ import {
 } from '../services/audio-devices';
 import { playCallTone, rosterChange, setToneOutput } from '../services/call-tones';
 import { micCapture, micEncoding, micProcessing, type VoiceSettings } from '../services/voice-quality';
+import { probeShareEncoder } from '../services/encoder-probe';
 import {
   captureConstraints,
-  probeShareEncoder,
   shareOptions,
   type ShareIntent,
   type ShareSize,
@@ -656,6 +656,8 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       const music = intent === 'motion';
       // Asked before the capture, because a share this machine will encode on
       // the CPU is captured at the rate it will be sent at. See `shareBudget`.
+      // Measured on a loopback sender, not just asked of the platform - see
+      // `encoder-probe.ts`.
       const asked = shareOptions(intent, size, { music }, quality).publish;
       const encoder = await probeShareEncoder(
         asked.videoCodec,

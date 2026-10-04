@@ -85,9 +85,10 @@ export interface SharePublish {
   videoCodec: Exclude<CodecChoice, 'auto'>;
   audio: false | { maxBitrate: number; stereo: boolean; dtx: boolean; red: boolean };
   /**
-   * What encoder this machine was expected to have when the share started -
-   * `probeShareEncoder`'s answer, or null when it had none. The sender's own
-   * statistics replace it once they say. See `shareBudget`.
+   * What encoder this machine was measured to have when the share started -
+   * `probeShareEncoder`'s answer, or null when it had none. A `software` here
+   * stands for the whole share; a null is replaced by the sender's own
+   * statistics once they say. See `shareBudget`.
    */
   encoder: EncoderKind | null;
   /**
@@ -502,36 +503,63 @@ export function shareBudget(
   };
 }
 
+// --- Which encoder, measured -----------------------------------------------
+//
+// The question used to be put to Media Capabilities alone: `powerEfficient`
+// for `video/H264` at this size and rate. That is what the platform
+// *advertises*, and an encoder that is listed is not an encoder that keeps
+// up - a GPU encoder that drops half its frames still reads as efficient, and
+// a share sent on it unbudgeted falls over the moment a second person joins.
+//
+// So the encoder is *measured* (`encoder-probe.ts`): a second of a synthetic
+// moving picture through a real sender on a loopback connection, at the
+// share's own size and rate. What comes back is what that sender did - the
+// implementation it got, and how many of the frames it was offered it turned
+// into frames on the wire. The decision from those readings is here, and pure,
+// so it can be checked.
+
+/** One encoder, as measured on a loopback sender. */
+export interface EncoderReading {
+  /**
+   * From the sender's own statistics. Null when it would not say - Chromium
+   * names the encoder only to a page that is capturing something, which a
+   * call joined without a microphone is not.
+   */
+  kind: EncoderKind | null;
+  /** Frames encoded over frames offered, during the measured window. */
+  cadence: number;
+  /** Whether the encoder sent a smaller picture than it was given. */
+  scaled: boolean;
+}
+
+/** The share of offered frames an encoder must turn out to count as keeping up. */
+export const SUSTAINED_CADENCE = 0.85;
+
 /**
- * Whether this machine can encode a share on its GPU, asked before the capture
- * starts so a software share is captured at the rate it will be sent at.
- *
- * `powerEfficient` is the Media Capabilities answer for WebRTC, and it is the
- * same question `powerEfficientEncoder` answers on a live sender. Null when the
- * API is missing or will not say; the sender's statistics decide then.
+ * Whether a measured encoder keeps up with the picture it was given. Keeping
+ * the cadence by shrinking the picture is not keeping up with the picture.
  */
-export async function probeShareEncoder(
-  codec: SharePublish['videoCodec'],
-  size: ShareSize,
-  frameRate: number,
-  bitrate: number,
-): Promise<EncoderKind | null> {
-  try {
-    const info = await navigator.mediaCapabilities.encodingInfo({
-      type: 'webrtc',
-      video: {
-        contentType: `video/${codec}`,
-        width: size.width,
-        height: size.height,
-        framerate: frameRate,
-        bitrate,
-      },
-    });
-    if (!info.supported) return null;
-    return info.powerEfficient ? 'hardware' : 'software';
-  } catch {
-    return null;
-  }
+export function keepsUp(reading: EncoderReading): boolean {
+  return !reading.scaled && reading.cadence >= SUSTAINED_CADENCE;
+}
+
+/**
+ * The encoder a share is budgeted for.
+ *
+ * - One that cannot keep up is software, whatever it calls itself: the cost
+ *   of not budgeting it is a share that falls over.
+ * - One that keeps up and says what it is, is that.
+ * - One that keeps up without saying falls back to what the platform
+ *   advertises, which is all there was before - and to null without that,
+ *   for the live sender's statistics to decide.
+ */
+export function measuredKind(
+  reading: EncoderReading | null,
+  advertised: EncoderKind | null,
+): EncoderKind | null {
+  if (!reading) return advertised;
+  if (!keepsUp(reading)) return 'software';
+  return reading.kind ?? advertised;
 }
 
 /**
