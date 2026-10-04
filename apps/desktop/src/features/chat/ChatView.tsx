@@ -45,6 +45,7 @@ import { PollCard } from './PollCard';
 import { PollComposer } from './PollComposer';
 import { threadChipLabel, threadUnreadBadge } from './thread';
 import { MessageMenu } from './MessageMenu';
+import { copyImage, pictureAt } from '../../services/copy-image';
 import { WhenPicker } from './WhenPicker';
 import { useScheduledStore } from '../../stores/scheduled';
 import { REMIND_PRESETS, SEND_PRESETS, scheduleBlocker } from '../../services/schedule';
@@ -790,7 +791,12 @@ function MessageList({
   const receipts = useChatStore((state) => state.receipts[channel.id]);
   const unreadCount = useChatStore((state) => state.unread[channel.id] ?? 0);
 
-  const [menu, setMenu] = useState<{ id: string; at: { x: number; y: number } } | null>(null);
+  const [menu, setMenu] = useState<{
+    id: string;
+    at: { x: number; y: number };
+    /** The decrypted picture the right-click was on, when there was one. */
+    picture: string | null;
+  } | null>(null);
   const [reminding, setReminding] = useState<{ id: string; at: { x: number; y: number } } | null>(
     null,
   );
@@ -1232,7 +1238,15 @@ function MessageList({
                       if (deleted) return;
                       event.preventDefault();
                       setArmedDelete(null);
-                      setMenu({ id: message.id, at: { x: event.clientX, y: event.clientY } });
+                      setMenu({
+                        id: message.id,
+                        at: { x: event.clientX, y: event.clientY },
+                        // Never a one-time picture: being seen once, by the
+                        // people it was sent to, is the whole of its bargain.
+                        picture: message.viewOnce
+                          ? null
+                          : pictureAt(event.target, event.currentTarget),
+                      });
                     }}
                     onMouseDown={(event) => {
                       // The browser selects the word under the cursor on the
@@ -1499,10 +1513,19 @@ function MessageList({
             })(),
             onPin: canPin ? () => report(togglePin(menu.id)) : undefined,
             pinDisabledReason: 'Needs the “Pin and unpin messages” permission',
-            onCopy: () => {
+            // Absent on a message that is only a picture: copying its empty
+            // text would silently clear whatever was on the clipboard.
+            onCopy: (() => {
               const text = messages.find((item) => item.id === menu.id)?.content ?? '';
-              void navigator.clipboard.writeText(text);
-            },
+              if (!text.trim()) return undefined;
+              return () => void navigator.clipboard.writeText(text);
+            })(),
+            onCopyImage: menu.picture
+              ? (() => {
+                  const picture = menu.picture;
+                  return () => report(copyImage(picture));
+                })()
+              : undefined,
             onDelete:
               messages.find((item) => item.id === menu.id)?.author.id === me?.id || canModerate
                 ? () => report(deleteMessage(menu.id))

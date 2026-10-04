@@ -16,6 +16,8 @@ import {
   saveAttachment,
 } from '../../services/attachments';
 import {
+  CheckIcon,
+  CopyIcon,
   DownloadIcon,
   EyeIcon,
   FileIcon,
@@ -29,6 +31,7 @@ import { isDesktopRuntime } from '../../services/platform';
 import { DOWNLOAD_URL } from '../../services/downloads';
 import { VoiceMessage } from './VoiceMessage';
 import { useFocusTrap } from '../../services/focus-trap';
+import { copyImage } from '../../services/copy-image';
 
 /** Text small enough to read in the message list without opening anything. */
 const INLINE_TEXT_CHARS = 800;
@@ -1000,6 +1003,14 @@ function PreviewOverlay({
   const isImage = attachment.contentType.startsWith('image/');
   const { url } = useDecrypted(channelId, isImage ? attachment : null);
   const [text, setText] = useState<string | null>(null);
+  // What the copy button says for a moment after it is pressed.
+  const [copied, setCopied] = useState<'copied' | 'failed' | null>(null);
+
+  useEffect(() => {
+    if (!copied) return;
+    const timer = window.setTimeout(() => setCopied(null), 1500);
+    return () => window.clearTimeout(timer);
+  }, [copied]);
 
   useEffect(() => {
     if (isImage) return;
@@ -1058,6 +1069,30 @@ function PreviewOverlay({
                 <IconButton label="Previous" onClick={() => step(-1)} icon={<span aria-hidden>‹</span>} />
                 <IconButton label="Next" onClick={() => step(1)} icon={<span aria-hidden>›</span>} />
               </>
+            )}
+            {isImage && url && (
+              <IconButton
+                label={
+                  copied === 'copied'
+                    ? 'Copied'
+                    : copied === 'failed'
+                      ? 'Could not copy that picture'
+                      : 'Copy image'
+                }
+                onClick={() =>
+                  void copyImage(url).then(
+                    () => setCopied('copied'),
+                    () => setCopied('failed'),
+                  )
+                }
+                icon={
+                  copied === 'copied' ? (
+                    <CheckIcon className="h-4 w-4 text-emerald-300" />
+                  ) : (
+                    <CopyIcon className="h-4 w-4" />
+                  )
+                }
+              />
             )}
             <IconButton
               label="Download"

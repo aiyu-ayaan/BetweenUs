@@ -3,6 +3,7 @@ import { QUICK_REACTIONS } from './emoji';
 import {
   ClockIcon,
   CopyIcon,
+  ImageIcon,
   MessageIcon,
   ReplyIcon,
   PencilIcon,
@@ -33,6 +34,8 @@ export interface MessageMenuActions {
   onRemind?: (at: { x: number; y: number }) => void;
   onPin?: () => void;
   onCopy?: () => void;
+  /** Copies the picture the menu was opened on. Absent when it was not on one. */
+  onCopyImage?: () => void;
   onDelete?: () => void;
   pinned: boolean;
   /**
@@ -94,6 +97,7 @@ export function MessageMenu({
       actions.onEdit,
       actions.onPin,
       actions.onCopy,
+      actions.onCopyImage,
       actions.onDelete,
     ].filter(
       Boolean,
@@ -212,6 +216,16 @@ export function MessageMenu({
           actions.onCopy?.();
           onClose();
         }} />
+      )}
+      {actions.onCopyImage && (
+        <Item
+          icon={<ImageIcon className="h-4 w-4" />}
+          label="Copy image"
+          onClick={() => {
+            actions.onCopyImage?.();
+            onClose();
+          }}
+        />
       )}
       {actions.onDelete && (
         <Item
