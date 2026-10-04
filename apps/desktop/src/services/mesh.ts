@@ -98,6 +98,7 @@ import {
   videoConstraints,
   type SharePublish,
 } from './share-quality';
+import { SharePool, poolMembers } from './share-pool';
 import type { CameraPublish } from './camera-quality';
 import type { MicEncoding } from './voice-quality';
 import {
@@ -197,6 +198,9 @@ const KEY_REREAD_COOLDOWN_MS = 5_000;
 
 /** Speaking polls per check of whether video is really arriving - so, a second. */
 const VIDEO_POLL_EVERY = 5;
+
+/** The shared encoder's entry among the share's encoders. See `Mesh.shareEncoder`. */
+const POOL_ENCODER = '\u0000pool';
 
 /**
  * Audio level above which somebody counts as speaking.
@@ -471,6 +475,14 @@ class PeerLink {
    * encoding at once. See `shareBudget`.
    */
   private shareBudget: ShareBudget | null = null;
+  /**
+   * Whether this link sends the shared share encoder's frames instead of
+   * encoding the share itself. See `share-pool.ts`. While it does, the screen
+   * sender carries the pool's 16x16 carrier, and everything this link would
+   * otherwise read off its own encoder - the ladder, the encoder kind - is
+   * about that carrier and is not read.
+   */
+  private pooled = false;
   /** How loud this peer is, 0..1. See `pollAudioLevel`. */
   private level = 0;
   /**
@@ -506,6 +518,12 @@ class PeerLink {
       onProblem: (message: string) => void;
       /** What the share's sender says its encoder is. See `Mesh.noteShareEncoder`. */
       onShareEncoder: (kind: EncoderKind) => void;
+      /**
+       * The screen slot's sender, the moment it exists and before it has
+       * negotiated - the only point at which Chromium will honour an encoded
+       * transform on it. See `SharePool.prepare`.
+       */
+      onScreenSender: (sender: RTCRtpSender) => void;
     },
   ) {
     // Whoever has the larger peer id yields. Both sides compute this from the
@@ -547,6 +565,7 @@ class PeerLink {
         });
         this.transceivers.set(slot, transceiver);
         this.senders.set(slot, transceiver.sender);
+        if (slot === 'screen') this.events.onScreenSender(transceiver.sender);
       }
       this.preferShareCodec('H264');
     }
@@ -708,6 +727,8 @@ class PeerLink {
       transceiver.direction = 'sendrecv';
       this.transceivers.set(slot, transceiver);
       this.senders.set(slot, transceiver.sender);
+      // Before the answer this side is about to write; see `onScreenSender`.
+      if (slot === 'screen') this.events.onScreenSender(transceiver.sender);
     }
 
     this.preferShareCodec(this.shareCodec ?? 'H264');
@@ -731,6 +752,35 @@ class PeerLink {
    * it cannot carry the picture. See `ShareLadder`.
    */
   async applyShare(): Promise<void> {
+    if (!this.sharePublish) return;
+    if (this.pooled) {
+      await this.tune(
+        'screen',
+        {
+          // The shared frames are sized by the producer; this ceiling is only
+          // what congestion control may probe up to on this link.
+          maxBitrate: ceilingFor(this.sharePublish, this.relayed),
+          // One carrier frame per shared frame. A carrier held below the
+          // producer's rate would drop frames the shared stream depends on.
+          maxFramerate: Math.max(60, this.sharePublish.maxFramerate),
+          scaleResolutionDownBy: 1,
+          priority: this.sharePublish.priority,
+          active: this.shareWatched,
+        },
+        // Under pressure a carrier may shrink its own 16x16 picture, never skip
+        // a frame: a skipped carrier frame is a shared frame that never leaves.
+        'maintain-framerate',
+      );
+    } else {
+      await this.tuneOwnShare();
+    }
+    if (this.sharePublish.audio) {
+      await this.tune('screenAudio', { maxBitrate: this.sharePublish.audio.maxBitrate });
+    }
+  }
+
+  /** The share's sender when this link encodes the share itself. */
+  private async tuneOwnShare(): Promise<void> {
     if (!this.sharePublish) return;
     await this.tune(
       'screen',
@@ -758,9 +808,6 @@ class PeerLink {
       },
       this.sharePublish.degradationPreference,
     );
-    if (this.sharePublish.audio) {
-      await this.tune('screenAudio', { maxBitrate: this.sharePublish.audio.maxBitrate });
-    }
   }
 
   /**
@@ -1137,6 +1184,9 @@ class PeerLink {
     // No sender yet means this side is still waiting for the offer that makes
     // one. `adopt` plays this back.
     if (!sender) return;
+    // A pooled screen sender keeps the pool's carrier; the share it stands for
+    // is this track, encoded once elsewhere.
+    if (slot === 'screen' && this.pooled && track) return;
     await sender.replaceTrack(track).catch(() => undefined);
   }
 
@@ -1212,6 +1262,30 @@ class PeerLink {
     }
     this.shareBudget = budget;
     return true;
+  }
+
+  /** See `pooled`. Returns whether anything changed. */
+  setPooled(pooled: boolean): boolean {
+    if (this.pooled === pooled) return false;
+    this.pooled = pooled;
+    // Back on its own encoder the ladder starts again: nothing it last
+    // measured was about this encoder.
+    if (!pooled) this.shareLadder.reset();
+    return true;
+  }
+
+  get isPooled(): boolean {
+    return this.pooled;
+  }
+
+  /** Whether ICE settled on a TURN relay. See `relayed`. */
+  get isRelayed(): boolean {
+    return this.relayed;
+  }
+
+  /** The screen slot's sender, once negotiated. */
+  screenSender(): RTCRtpSender | null {
+    return this.senders.get('screen') ?? null;
   }
 
   /** See `shareWatched`. Returns whether anything changed. */
@@ -1360,7 +1434,7 @@ class PeerLink {
     await this.applyLadder(reading);
     // Only while this link is actually encoding the share: an inactive sender
     // still reports the name of the encoder it last had.
-    if (this.sharePublish && this.shareWatched) {
+    if (this.sharePublish && this.shareWatched && !this.pooled) {
       const kind = encoderKind(encoderName, powerEfficient);
       if (kind) this.events.onShareEncoder(kind);
     }
@@ -1431,7 +1505,9 @@ class PeerLink {
    * 5 kbps deserved all along.
    */
   private async applyLadder(reading: ShareReading): Promise<void> {
-    if (!this.sharePublish) return;
+    // A pooled link's sender is encoding the carrier, and a reading of it says
+    // nothing about the share.
+    if (!this.sharePublish || this.pooled) return;
     if (this.shareLadder.step(reading)) await this.applyShare();
   }
 
@@ -1729,6 +1805,20 @@ export class Mesh {
   private readonly shareEncoders = new Map<string, EncoderKind>();
   /** The rate the screen is being captured at, so it is only changed on a real move. */
   private shareCaptureRate: number | null = null;
+  /**
+   * The share's one encoder for every viewer who can take it. See
+   * `share-pool.ts`. Created on the first share and kept for the call, because
+   * a link pooled once keeps a transform that needs its worker.
+   */
+  private pool: SharePool | null = null;
+  /** Whether the pool is encoding for anybody. See `poolMembers`. */
+  private poolActive = false;
+  /** Peers whose share is the pool's frames. */
+  private readonly pooled = new Set<string>();
+  /** Peers who could not keep up with the shared frames this share. */
+  private readonly evicted = new Set<string>();
+  /** Membership changes, one at a time. */
+  private repooling: Promise<void> = Promise.resolve();
 
   constructor(private readonly options: MeshOptions) {}
 
@@ -2013,6 +2103,7 @@ export class Mesh {
         onExhausted: () => this.rebuild(peer),
         onProblem: (message) => this.options.onProblem(message),
         onShareEncoder: (kind) => void this.noteShareEncoder(peer.peerId, kind),
+        onScreenSender: (sender) => this.sharePool()?.prepare(sender),
       },
     );
 
@@ -2080,6 +2171,7 @@ export class Mesh {
     this.rebuilds.set(peer.peerId, spentSoFar + 1);
 
     this.links.delete(peer.peerId);
+    this.leavePool(peer.peerId, old);
     old.close();
     // Whatever was last received on the dead connection is gone with it, and a
     // frozen final frame left on screen is worse than an empty tile: it is the
@@ -2104,8 +2196,154 @@ export class Mesh {
   /** Sends (or stops sending) one kind of media to everybody. */
   async setTrack(slot: Slot, track: MediaStreamTrack | null): Promise<void> {
     this.local.set(slot, track);
+    // Every link off the pool before the screen changes under it: a new
+    // capture is a new producer, and the old one's frames are not this one's.
+    if (slot === 'screen') await this.stopPool(track);
     await Promise.all([...this.links.values()].map((link) => link.setTrack(slot, track)));
     if (track) await Promise.all([...this.links.values()].map((link) => this.applyTuning(link)));
+    if (slot === 'screen' && track) await this.startPool(track);
+  }
+
+  /**
+   * The shared encoder for a new share, where this runtime has it and the
+   * share is H.264. Nobody is moved onto it here; `repool` does that once
+   * enough viewers can take it.
+   */
+  private async startPool(track: MediaStreamTrack): Promise<void> {
+    const publish = this.sharePublish;
+    const pool = this.sharePool();
+    if (!publish || publish.videoCodec !== 'H264' || !pool) return;
+    this.evicted.clear();
+    if (!(await pool.start(track, publish))) return;
+    await this.repool();
+  }
+
+  /**
+   * The call's pool, made with its first link: every screen sender is given
+   * the pool's transform before it negotiates, because that is the only time
+   * one takes. Null where the runtime cannot pool.
+   */
+  private sharePool(): SharePool | null {
+    if (this.closed || !SharePool.supported()) return null;
+    this.pool ??= new SharePool({ onStalled: (sender) => this.onPoolStalled(sender) });
+    return this.pool;
+  }
+
+  /** Every pooled link back on `track`, its own picture, and the producer gone. */
+  private async stopPool(track: MediaStreamTrack | null): Promise<void> {
+    const pool = this.pool;
+    if (!pool?.running) return;
+    await this.serialPool(async () => {
+      await Promise.all(
+        [...this.pooled].map(async (peerId) => {
+          const link = this.links.get(peerId);
+          const sender = link?.screenSender();
+          if (!link || !sender) return;
+          link.setPooled(false);
+          await pool.remove(sender, track);
+        }),
+      );
+      this.pooled.clear();
+      this.poolActive = false;
+      this.shareEncoders.delete(POOL_ENCODER);
+      pool.stop();
+    });
+  }
+
+  /** Runs one membership change after the last has finished. */
+  private serialPool(change: () => Promise<void>): Promise<void> {
+    const next = this.repooling.then(change, change);
+    this.repooling = next.catch(() => undefined);
+    return next;
+  }
+
+  /**
+   * Moves links onto the pool and off it, to match `poolMembers`.
+   *
+   * Asked whenever anything it reads may have moved: a share starting, somebody
+   * joining or leaving it, a link negotiating, a link settling on a relay, a
+   * link that fell behind. Cheap when nothing has.
+   */
+  private repool(): Promise<void> {
+    return this.serialPool(async () => {
+      const pool = this.pool;
+      if (!pool?.running) return;
+      const links = [...this.links.values()];
+      const decision = poolMembers(
+        links.map((link) => {
+          const sender = link.screenSender();
+          return {
+            id: link.peer.peerId,
+            watched: !this.unwatched.has(link.peer.peerId),
+            relayed: link.isRelayed,
+            compatible: sender !== null && pool.canCarry(sender),
+            evicted: this.evicted.has(link.peer.peerId),
+          };
+        }),
+        this.poolActive,
+      );
+      const changed = decision.active !== this.poolActive;
+      this.poolActive = decision.active;
+
+      const moves = links.map(async (link) => {
+        const peerId = link.peer.peerId;
+        const sender = link.screenSender();
+        if (!sender) return false;
+        const join = decision.members.has(peerId);
+        if (join === this.pooled.has(peerId)) return false;
+        if (join) {
+          this.pooled.add(peerId);
+          link.setPooled(true);
+          await pool.add(sender);
+        } else {
+          this.pooled.delete(peerId);
+          link.setPooled(false);
+          await pool.remove(sender, this.local.get('screen') ?? null);
+        }
+        // The link's own encoder kind no longer describes what it sends.
+        this.shareEncoders.delete(peerId);
+        await link.applyShare();
+        return true;
+      });
+      const moved = (await Promise.all(moves)).some(Boolean);
+      if (changed || moved) await this.rebudget();
+    });
+  }
+
+  /** A pooled link fell behind twice; it encodes for itself until the share ends. */
+  private onPoolStalled(sender: RTCRtpSender): void {
+    for (const link of this.links.values()) {
+      if (link.screenSender() !== sender) continue;
+      this.evicted.add(link.peer.peerId);
+      void this.repool();
+      return;
+    }
+  }
+
+  /**
+   * The producer's ceiling: the share's own, and the software budget's frame
+   * rate and scale - for one encoder, which is what the pool is.
+   */
+  private async tunePool(budget: ShareBudget | null): Promise<void> {
+    const publish = this.sharePublish;
+    if (!this.pool?.running || !publish) return;
+    await this.pool.tune(
+      {
+        maxBitrate: publish.maxBitrate,
+        maxFramerate: Math.min(publish.maxFramerate, budget?.frameRate ?? publish.maxFramerate),
+        scaleResolutionDownBy: budget?.scaleResolutionDownBy ?? 1,
+        active: this.poolActive,
+      },
+      publish.degradationPreference,
+    );
+  }
+
+  /** What the producer's encoder is, once it says - the share's encoder for the pooled links. */
+  private async notePoolEncoder(): Promise<void> {
+    if (!this.pool?.running || !this.poolActive) return;
+    const reading = await this.pool.reading();
+    const kind = reading ? encoderKind(reading.implementation, reading.powerEfficient) : null;
+    if (kind) await this.noteShareEncoder(POOL_ENCODER, kind);
   }
 
   private async applyTuning(link: PeerLink): Promise<void> {
@@ -2140,6 +2378,7 @@ export class Mesh {
   }
 
   async setSharePublish(publish: SharePublish | null): Promise<void> {
+    if (!publish) await this.stopPool(this.local.get('screen') ?? null);
     this.sharePublish = publish;
     // A new capture starts from the probe's answer again: the last one's
     // senders were describing an encoder for a different picture.
@@ -2185,6 +2424,7 @@ export class Mesh {
     await link.applyShare();
     // One encoder more or fewer, which is what the budget is counted in.
     await this.rebudget();
+    await this.repool();
   }
 
   /**
@@ -2207,9 +2447,12 @@ export class Mesh {
   /** The budget every link encodes the share within. See `shareBudget`. */
   private budget(): ShareBudget | null {
     if (!this.sharePublish) return null;
-    let watchers = 0;
-    for (const peerId of this.links.keys()) if (!this.unwatched.has(peerId)) watchers += 1;
-    return shareBudget(this.sharePublish, this.shareEncoder(), watchers);
+    // Encoders, not viewers: everybody on the pool is one between them.
+    let encoders = this.poolActive ? 1 : 0;
+    for (const peerId of this.links.keys()) {
+      if (!this.unwatched.has(peerId) && !this.pooled.has(peerId)) encoders += 1;
+    }
+    return shareBudget(this.sharePublish, this.shareEncoder(), encoders);
   }
 
   /**
@@ -2224,6 +2467,7 @@ export class Mesh {
     const budget = this.budget();
     const moved = [...this.links.values()].filter((link) => link.setShareBudget(budget));
     await Promise.all(moved.map((link) => link.applyShare()));
+    await this.tunePool(budget);
 
     const track = this.local.get('screen');
     if (!budget || !track || !this.sharePublish) return;
@@ -2264,7 +2508,24 @@ export class Mesh {
    */
   async stats(): Promise<LinkStats[]> {
     const links = [...this.links.values()];
-    const samples = await Promise.all(links.map((link) => link.sample()));
+    const [samples, producer] = await Promise.all([
+      Promise.all(links.map((link) => link.sample())),
+      this.poolActive ? (this.pool?.reading() ?? null) : null,
+    ]);
+    // A pooled link's own sender is encoding the 16x16 carrier. What it sends
+    // is the producer's picture, so that is what its row shows.
+    if (producer) {
+      links.forEach((link, index) => {
+        const sample = samples[index];
+        if (!sample || !link.isPooled) return;
+        sample.sendWidth = producer.width;
+        sample.sendHeight = producer.height;
+        sample.sendFramesPerSecond = producer.framesPerSecond;
+        sample.sendLimitedBy = producer.limitedBy;
+        sample.encoderImplementation = producer.implementation;
+        sample.powerEfficientEncoder = producer.powerEfficient;
+      });
+    }
 
     // The echo canceller is one per machine, not one per link, so the reading
     // is kept here rather than on any of the rows below. Every link reports the
@@ -2323,6 +2584,13 @@ export class Mesh {
       // is not free.
       if (++tick % VIDEO_POLL_EVERY === 0) {
         for (const link of this.links.values()) void link.pollVideo();
+        // The same once-a-second beat settles the pool: links negotiate, land
+        // on relays and join shares between ticks, and none of that has an
+        // event of its own here.
+        if (this.pool?.running) {
+          void this.repool();
+          void this.notePoolEncoder();
+        }
       }
 
       const speaking = new Set<string>();
@@ -2353,6 +2621,7 @@ export class Mesh {
   private drop(peerId: string): void {
     const link = this.links.get(peerId);
     this.links.delete(peerId);
+    if (link) this.leavePool(peerId, link);
     // Before the early return below: a peer who leaves mid-rebuild has no link
     // to find here, and must still not have one built for them afterwards.
     this.peerIsExpected.delete(peerId);
@@ -2376,12 +2645,21 @@ export class Mesh {
       });
   }
 
+  /** A link going away takes its transform with it; the pool stops feeding it. */
+  private leavePool(peerId: string, link: PeerLink): void {
+    const sender = link.screenSender();
+    if (sender) this.pool?.forget(sender);
+    if (this.pooled.delete(peerId)) void this.repool().then(() => this.rebudget());
+  }
+
   private send(event: ClientCallEvent): void {
     if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify(event));
   }
 
   close(): void {
     this.closed = true;
+    this.pool?.close();
+    this.pool = null;
     if (this.speakingTimer !== null) window.clearInterval(this.speakingTimer);
     this.speakingTimer = null;
 
