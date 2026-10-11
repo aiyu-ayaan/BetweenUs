@@ -142,6 +142,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  actions: write
 
 # Never two releases at once: the second would compute its version from a
 # manifest the first has already moved past.
@@ -1333,6 +1334,21 @@ jobs:
             bundle/backup.sh
             bundle/deploy.sh
             bundle/docker-compose.secrets.yml
+
+      # The Release now holds every installer, so the workflow-run copies are
+      # dead weight against the repo's artifact storage quota. Delete this run's
+      # (digests, installers, APKs, build records) and, while here, any left by
+      # earlier runs. Best effort: a failed delete must not fail a release that
+      # has already shipped.
+      - name: Delete build artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100" \
+            --jq '.artifacts[].id' | while read -r id; do
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$id" > /dev/null \
+              || echo "could not delete artifact $id"
+          done || true
 
   # The docs site, for every release. It is the same build and the same deploy
   # as docs.yml, from the commit that was released, and it shares that
