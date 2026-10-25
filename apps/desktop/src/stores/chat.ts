@@ -1947,6 +1947,11 @@ chatSocket.on((event) => {
     // An edit, a deletion, a pin and a reaction all replace the stored row, so
     // the cache does not hand back a message that was taken down an hour ago.
     void cache.putMessages([event.message]).catch(() => undefined);
+    // The old words must not sit in the sealed snapshot while the debounced
+    // write waits: an edit or a delete drops it at once.
+    if (event.message.editedAt || event.message.deletedAt) {
+      void cache.invalidatePlain([event.message.id]).catch(() => undefined);
+    }
     void decrypt(event.message).then(replaceMessage);
     return;
   }

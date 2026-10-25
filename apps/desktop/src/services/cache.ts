@@ -288,9 +288,24 @@ export const cache = {
     for (const id of messageIds) store.delete(id);
     await done(transaction);
 
-    // A snapshot that holds any of them is dropped whole. It is rewritten from
-    // what is on screen the next time the channel changes, and the cost of that
-    // is one slower cold start - against opening a sealed snapshot to edit it.
+    await cache.invalidatePlain(messageIds);
+  },
+
+  // --- Decrypted history ------------------------------------------------------
+
+  /**
+   * Drops every sealed snapshot that holds any of these messages.
+   *
+   * Dropped whole rather than opened and edited: the snapshot is rewritten from
+   * what is on screen as soon as the channel next changes, and the price of that
+   * is one slower cold start, against holding the key open to patch a record.
+   * What it buys is that an edit or a delete does not leave the old words on
+   * disk for even the second the debounced write would take.
+   */
+  async invalidatePlain(messageIds: string[]): Promise<void> {
+    if (messageIds.length === 0) return;
+    const db = await database();
+    if (!db) return;
     const gone = new Set(messageIds);
     const plain = db.transaction(PLAIN, 'readwrite');
     const rows = plain.objectStore(PLAIN);
@@ -300,8 +315,6 @@ export const cache = {
     }
     await done(plain);
   },
-
-  // --- Decrypted history ------------------------------------------------------
 
   /**
    * The newest decrypted messages of a channel as of the last time it changed,
