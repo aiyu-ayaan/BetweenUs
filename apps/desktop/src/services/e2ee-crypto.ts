@@ -197,10 +197,10 @@ export async function decryptMessage(
  * `encryptMessage` because the result is uploaded as a blob rather than
  * stored in a message, so it stays binary instead of becoming base64.
  *
- * ponytail: the whole file is sealed in one AES-GCM operation, which means it
- * is held in memory twice while that happens. That is why the client refuses
- * attachments over MAX_ATTACHMENT_BYTES. Chunked AEAD - one sealed frame per
- * upload part, each with its own nonce - is the upgrade if larger files matter.
+ * The whole file is sealed in one AES-GCM operation, which means it is held in
+ * memory twice while that happens. That is why this is only used up to
+ * LEGACY_ATTACHMENT_BYTES; anything larger goes through the chunked format
+ * below, one sealed frame at a time.
  */
 export async function encryptBytes(
   plaintext: Uint8Array<ArrayBuffer>,
@@ -220,6 +220,202 @@ export async function decryptBytes(
   const key = await importContentKey(channelKey);
   const opened = await subtle.decrypt({ name: 'AES-GCM', iv: fromBase64(iv) }, key, ciphertext);
   return new Uint8Array(opened);
+}
+
+// --- Chunked files ------------------------------------------------------------
+//
+// A STREAM-style construction (Hoang, Reyhanitabar, Rogaway, Vizár): the file
+// is cut into frames of `chunk` plaintext bytes, and each frame is sealed with
+// AES-256-GCM under the channel key on its own.
+//
+//   nonce_i = prefix (8 random bytes, carried as the attachment's `iv`)
+//             || u32 big-endian frame index i
+//   aad_i   = [ 0x01 (format version), 0x01 if this is the last frame else 0x00 ]
+//
+// The index in the nonce is what stops frames being reordered or repeated; the
+// final flag in the AAD is what stops a stream being cut short at a frame
+// boundary, which a per-frame tag alone cannot see. The frame size lives in the
+// attachment's manifest (`chunk`), inside the sealed message body, so the
+// server learns neither it nor where a frame ends.
+//
+// The ciphertext is the frames end to end: every frame but the last is
+// `chunk + 16` bytes, the last is 16 to `chunk + 16`. A file whose length is an
+// exact multiple of `chunk` ends on a full frame; an empty file is one empty
+// frame. Android implements the same thing in `Crypto.sealChunk` / `openChunk`,
+// and `chunked-vector.ts` is the vector both sides are checked against.
+
+/** Plaintext bytes per frame. Small enough to open as it arrives, large enough that the tag is noise. */
+export const CHUNK_PLAINTEXT_BYTES = 1024 * 1024;
+/** The largest file the one-shot format took. A client that predates chunking can open anything up to here. */
+export const LEGACY_ATTACHMENT_BYTES = 100 * 1024 * 1024;
+
+const CHUNK_TAG_BYTES = 16;
+const CHUNK_PREFIX_BYTES = 8;
+const CHUNK_FORMAT_VERSION = 1;
+const CHUNK_MAX_FRAMES = 2 ** 32;
+
+/** Ciphertext length for `size` plaintext bytes. */
+export function chunkedCiphertextSize(size: number, chunk = CHUNK_PLAINTEXT_BYTES): number {
+  return size + Math.max(1, Math.ceil(size / chunk)) * CHUNK_TAG_BYTES;
+}
+
+function chunkNonce(prefix: Uint8Array, index: number): Uint8Array<ArrayBuffer> {
+  if (!Number.isInteger(index) || index < 0 || index >= CHUNK_MAX_FRAMES) {
+    throw new Error('Chunked file has too many frames');
+  }
+  const nonce = new Uint8Array(new ArrayBuffer(IV_BYTES));
+  nonce.set(prefix, 0);
+  new DataView(nonce.buffer).setUint32(CHUNK_PREFIX_BYTES, index, false);
+  return nonce;
+}
+
+function chunkAad(final: boolean): Uint8Array<ArrayBuffer> {
+  return new Uint8Array([CHUNK_FORMAT_VERSION, final ? 1 : 0]);
+}
+
+export interface ChunkSealer {
+  /** Base64 of the 8-byte nonce prefix: the attachment's `iv`. */
+  iv: string;
+  /** Frames must be sealed in order; the last one, and only the last, is `final`. */
+  seal(plain: Uint8Array<ArrayBuffer>, final: boolean): Promise<Uint8Array<ArrayBuffer>>;
+}
+
+/** `prefix` is for the test vector; leave it out and one is drawn. */
+export async function createChunkSealer(
+  channelKey: string,
+  prefix: Uint8Array = randomBytes(CHUNK_PREFIX_BYTES),
+): Promise<ChunkSealer> {
+  if (prefix.length !== CHUNK_PREFIX_BYTES) throw new Error('Chunk nonce prefix must be 8 bytes');
+  const key = await importContentKey(channelKey);
+  let index = 0;
+  let finished = false;
+  return {
+    iv: toBase64(prefix),
+    async seal(plain, final) {
+      if (finished) throw new Error('Chunked file already ended');
+      const nonce = chunkNonce(prefix, index);
+      index += 1;
+      finished = final;
+      const sealed = await subtle.encrypt(
+        { name: 'AES-GCM', iv: nonce, additionalData: chunkAad(final) },
+        key,
+        plain,
+      );
+      return new Uint8Array(sealed);
+    },
+  };
+}
+
+export interface ChunkOpener {
+  /** Frames in order; `final` is true for the last one the stream held. */
+  open(frame: Uint8Array<ArrayBuffer>, final: boolean): Promise<Uint8Array<ArrayBuffer>>;
+}
+
+export async function createChunkOpener(channelKey: string, iv: string): Promise<ChunkOpener> {
+  const prefix = fromBase64(iv);
+  if (prefix.length !== CHUNK_PREFIX_BYTES) throw new Error('Chunk nonce prefix must be 8 bytes');
+  const key = await importContentKey(channelKey);
+  let index = 0;
+  let finished = false;
+  return {
+    async open(frame, final) {
+      if (finished) throw new Error('Chunked file has data after its last frame');
+      const nonce = chunkNonce(prefix, index);
+      index += 1;
+      finished = final;
+      const opened = await subtle.decrypt(
+        { name: 'AES-GCM', iv: nonce, additionalData: chunkAad(final) },
+        key,
+        frame,
+      );
+      return new Uint8Array(opened);
+    },
+  };
+}
+
+/** Seals a whole buffer. For the vector and the check; the app seals a frame at a time. */
+export async function sealChunked(
+  plaintext: Uint8Array<ArrayBuffer>,
+  channelKey: string,
+  chunk = CHUNK_PLAINTEXT_BYTES,
+  prefix?: Uint8Array,
+): Promise<{ iv: string; ciphertext: Uint8Array<ArrayBuffer> }> {
+  const sealer = await createChunkSealer(channelKey, prefix);
+  const frames = Math.max(1, Math.ceil(plaintext.length / chunk));
+  const out = new Uint8Array(new ArrayBuffer(chunkedCiphertextSize(plaintext.length, chunk)));
+  let at = 0;
+  for (let index = 0; index < frames; index += 1) {
+    const sealed = await sealer.seal(
+      plaintext.slice(index * chunk, (index + 1) * chunk),
+      index === frames - 1,
+    );
+    out.set(sealed, at);
+    at += sealed.length;
+  }
+  return { iv: sealer.iv, ciphertext: out };
+}
+
+/**
+ * Opens a ciphertext as it arrives, calling `onPlain` with each frame's
+ * plaintext in order. The last frame is the one still in hand when the stream
+ * ends, so one frame is always held back - which is also why a stream cut at a
+ * frame boundary fails here instead of looking like a shorter file.
+ */
+export async function openChunkedStream(
+  source: AsyncIterable<Uint8Array>,
+  opener: ChunkOpener,
+  onPlain: (plain: Uint8Array<ArrayBuffer>) => void | Promise<void>,
+  chunk = CHUNK_PLAINTEXT_BYTES,
+): Promise<void> {
+  const frameBytes = chunk + CHUNK_TAG_BYTES;
+  let pending: Uint8Array<ArrayBuffer> = new Uint8Array(new ArrayBuffer(0));
+
+  const append = (next: Uint8Array): void => {
+    const joined = new Uint8Array(new ArrayBuffer(pending.length + next.length));
+    joined.set(pending, 0);
+    joined.set(next, pending.length);
+    pending = joined;
+  };
+
+  for await (const piece of source) {
+    append(piece);
+    // Strictly more than one frame in hand means the first is not the last.
+    while (pending.length > frameBytes) {
+      await onPlain(await opener.open(pending.slice(0, frameBytes), false));
+      pending = pending.slice(frameBytes);
+    }
+  }
+
+  if (pending.length < CHUNK_TAG_BYTES) throw new Error('Chunked file is truncated');
+  await onPlain(await opener.open(pending, true));
+}
+
+/** Opens a whole buffer. For the vector and the check. */
+export async function openChunked(
+  ciphertext: Uint8Array<ArrayBuffer>,
+  iv: string,
+  channelKey: string,
+  chunk = CHUNK_PLAINTEXT_BYTES,
+): Promise<Uint8Array<ArrayBuffer>> {
+  const parts: Uint8Array<ArrayBuffer>[] = [];
+  const opener = await createChunkOpener(channelKey, iv);
+  await openChunkedStream(
+    (async function* () {
+      yield ciphertext;
+    })(),
+    opener,
+    (plain) => {
+      parts.push(plain);
+    },
+    chunk,
+  );
+  const out = new Uint8Array(new ArrayBuffer(parts.reduce((sum, part) => sum + part.length, 0)));
+  let at = 0;
+  for (const part of parts) {
+    out.set(part, at);
+    at += part.length;
+  }
+  return out;
 }
 
 /**
