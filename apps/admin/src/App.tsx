@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { AuthResponse, PublicUser } from '@betweenus/shared-types';
 import { ApiError, api, refreshSession, session } from './api';
+import { BrandMark } from './BrandMark';
 import { LoginScreen } from './screens/LoginScreen';
 import { BootstrapScreen } from './screens/BootstrapScreen';
 import { ChangePasswordScreen } from './screens/ChangePasswordScreen';
@@ -76,8 +77,9 @@ export default function App(): JSX.Element {
 
   if (booting) {
     return (
-      <div className="grid h-full place-items-center" aria-busy="true">
-        <p className="animate-pulse text-lg font-semibold text-slate-300">BetweenUs Admin</p>
+      <div className="grid h-full place-content-center justify-items-center gap-4" aria-busy="true">
+        <BrandMark motion="talk" className="h-14 w-14 text-brand" />
+        <p className="text-lg font-semibold text-slate-300">BetweenUs Admin</p>
       </div>
     );
   }
@@ -89,7 +91,10 @@ export default function App(): JSX.Element {
   return (
     <div className="mx-auto flex h-full max-w-6xl flex-col px-6 py-6">
       <header className="mb-6 flex items-center gap-4">
-        <h1 className="text-xl font-semibold text-slate-50">BetweenUs Admin</h1>
+        <h1 className="flex items-center gap-2.5 text-xl font-semibold text-slate-50">
+          <BrandMark className="h-6 w-6 text-brand" />
+          BetweenUs Admin
+        </h1>
 
         <nav className="ml-6 flex gap-1" aria-label="Sections">
           {(

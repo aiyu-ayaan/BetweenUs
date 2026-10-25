@@ -1452,13 +1452,23 @@ ipcMain.on('notification:dismiss', (_event, channelId: string) => {
 // only hides it, so the chat socket stays connected and a message that arrives
 // while BetweenUs is "closed" still raises a notification.
 //
-// The icon is a data URI rather than a file because electron-builder packages
-// `dist/` and `dist-electron/` only; a 32px mark is not worth an asset pipeline
-// and a packaging rule to go with it.
+// The icon is `public/tray.png`: the mark's small cut, which keeps the faces
+// readable at tray size where the full drawing's lips close up. The data URI is
+// the same image at 32px, for a run where the file cannot be found. Both are
+// written by design/brand/build.py.
 const TRAY_ICON =
-  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAf0lEQVR42mNgwAMiUj/9pwZm' +
-  'IAVQy1KyHENry/E6gl6WY3UEvS3HcMTIdsBAWQ53BDGK0AGl6ih2AC7D6eoAbBaMPAegWzIgDkC2aOQ6AGYZ3RxAiqNoWh' +
-  'CNOoCULErTumDUAaRUWEOzOh62raLRRung6ZgMiq7ZoOicDkT3HAAbx8q7ivG47wAAAABJRU5ErkJggg==';
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAC9klEQVR4nMSXTUhUURTH//fN+JVkikofLkqt/KoUw9AolXYu' +
+  'aicRKi1aBQUthBbVJkGiWghFiyIqKUNatQqCKAoRpEgFzY/UzCAs8wPDHHXmdo7T9GZ88+57T8aZHzy499xzz/m/e9+97143' +
+  'gjhfIxO2pOOClKgQAgfIlI3IMEYxeylm59wvtNx6ITyBBhEoXKmXR8npPln2YCORGCYhZ5oei3f/BVyql4epwAYN0cEnJCqb' +
+  'nogO0dggkxMlesiYi+gysihQrMV7URuD5ExukhfH3ZpAOWKE1FCuYR0CkpLt2WxQ7ZZAvrDpvXsfUHYM2JwK3L0a2nb6IjA3' +
+  'BXS9osntsxePc7speYKVozsOqD0LFJb56xOfjT4ul7+dn74u4NkdwOtVx+XcbliQnAI0NAJZQVtSXDzCigxQdAhIzQBabwIL' +
+  '81Biue5PngtNztBuaYCnJZisHH9fK5QCimg4swuMdv7g0rfq9cwdNJZJRr+cQqDgINYnwEWTU1Nn2g8lR/RyaZW5H8fQXHAu' +
+  'gNWHG+oA+yv0cnGFuV9aJrArD84FpG+DEp6G+IR/T6LaN2M7Ii+grQVY8vif9ttqX1Us02XoWYCSiWG9PGqx8SwtmreZjsDM' +
+  'FJTsDJrXnCK178xPOBcwq+jE7C3Ry/mlat/pH3AuYHwImJ817YfUoBWSkmbuR0ewsFu3pYCVZeBlO8wDT+tl1RBzDO8KnAtg' +
+  'ejpoJAbDt30d0stmb/hlAOjthBKlADqkovWGMQHbR/v1+tgnY18Wzj8jKyx/RrzOH14Dvo3oNn77xaBl+nsO+D4emvzRdWDZ' +
+  'A0ssf8cBEfeaaM+vBKpOAP0fjD797/2745vnwMe3dOz1wRbicp0coJNBHmyi0ZjF0fbr+RNqT9zkt/H02EZiUCP/bgddVt9s' +
+  'bXKGp8RR8tX86OZvwJGACNOtSR8ekPJJRBnOybm15qdikiqnyGbzs4kIPs7JuVeXYXObeE0n1Gq+OGKj4csp5eKcXA25EsTi' +
+  'ev4XAAD//wJ394YAAAAGSURBVAMA/5DqWSNSJ1kAAAAASUVORK5CYII=';
 
 let tray: Tray | null = null;
 /** Total unread, mirrored into the tooltip and the dock/taskbar badge. */
@@ -1518,7 +1528,12 @@ function setLaunchOnStartup(enabled: boolean): void {
 }
 
 function createTray(): void {
-  const icon = getAppIcon();
+  const file = [
+    path.join(dirname, '../public/tray.png'),
+    path.join(dirname, '../dist/tray.png'),
+    path.join(process.cwd(), 'apps/desktop/public/tray.png'),
+  ].find((p) => fs.existsSync(p));
+  const icon = file ? nativeImage.createFromPath(file) : nativeImage.createEmpty();
   const trayIcon = icon.isEmpty() ? nativeImage.createFromDataURL(TRAY_ICON) : icon.resize({ width: 32, height: 32 });
   tray = new Tray(trayIcon);
   // Windows and Linux: a plain click is "bring it back". macOS opens the menu

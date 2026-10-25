@@ -44,3 +44,66 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* The mark's two faces (BrandMark). Lengths on an SVG path are viewBox units:
+   36px is 36/256 of the mark. Same motion as apps/desktop/src/index.css. */
+.mark-in .brand-l,
+.mark-talk .brand-l {
+  animation: mark-in-l 680ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.mark-in .brand-r,
+.mark-talk .brand-r {
+  animation: mark-in-r 680ms cubic-bezier(0.2, 0.8, 0.2, 1) 80ms both;
+}
+.mark-talk .brand-l {
+  animation:
+    mark-in-l 680ms cubic-bezier(0.2, 0.8, 0.2, 1) both,
+    mark-talk-l 2.4s ease-in-out 900ms infinite;
+}
+.mark-talk .brand-r {
+  animation:
+    mark-in-r 680ms cubic-bezier(0.2, 0.8, 0.2, 1) 80ms both,
+    mark-talk-r 2.4s ease-in-out 900ms infinite;
+}
+
+@keyframes mark-in-l {
+  from {
+    transform: translateX(-36px);
+    opacity: 0;
+  }
+  70% {
+    transform: translateX(2px);
+    opacity: 1;
+  }
+}
+
+@keyframes mark-in-r {
+  from {
+    transform: translateX(36px);
+    opacity: 0;
+  }
+  70% {
+    transform: translateX(-2px);
+    opacity: 1;
+  }
+}
+
+@keyframes mark-talk-l {
+  25% {
+    transform: translateX(4px);
+  }
+  50%,
+  100% {
+    transform: none;
+  }
+}
+
+@keyframes mark-talk-r {
+  0%,
+  50% {
+    transform: none;
+  }
+  75% {
+    transform: translateX(-4px);
+  }
+}

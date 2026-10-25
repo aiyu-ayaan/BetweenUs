@@ -1,10 +1,6 @@
 package com.aatech.betweenus.feature.shell
 
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -14,6 +10,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -30,26 +27,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.aatech.betweenus.core.data.Session
-import com.aatech.betweenus.ui.components.BetweenUsLogoTile
+import com.aatech.betweenus.ui.components.BetweenUsMark
+import com.aatech.betweenus.ui.components.MarkMotion
 import kotlinx.coroutines.delay
 
 /**
  * What the phone shows while a session is being restored.
  *
  * The same screen the desktop draws, in this platform's own idiom - a mark
- * breathing inside a travelling arc, rather than a spinner. A spinner says
- * something is happening; a brand mark says *which application* is being waited
- * for, which matters most on the one screen that appears before anything else
- * identifies it.
+ * whose two faces lean in by turns, rather than a spinner. A spinner says something is happening; a brand mark says *which
+ * application* is being waited for, which matters most on the one screen that
+ * appears before anything else identifies it.
  *
  * **The tip is deliberately late, and that is this file's one real decision.**
  * The comment this screen replaced said it outright: a splash that says
@@ -106,6 +97,9 @@ object BootTips {
     val phoneTips: List<String> = TIPS.filterNot { it.startsWith("Press Ctrl") }
 }
 
+/** The mark's size here: the same as `drawable/splash_mark` draws it, so the hand-over does not jump. */
+private val MARK_DP = 88.dp
+
 @Composable
 fun LoadingScreen(
     problem: String? = null,
@@ -113,23 +107,6 @@ fun LoadingScreen(
     onSignIn: () -> Unit = {},
 ) {
     val scheme = MaterialTheme.colorScheme
-    val transition = rememberInfiniteTransition(label = "boot")
-
-    val sweep by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(tween(1150), RepeatMode.Restart),
-        label = "sweep",
-    )
-    // A slower beat than the ring, so the two read as one object rather than as
-    // two things that happen to be moving.
-    val breath by transition.animateFloat(
-        initialValue = 1f,
-        targetValue = 0.94f,
-        animationSpec = infiniteRepeatable(tween(1200), RepeatMode.Reverse),
-        label = "breath",
-    )
-
     // Null until the wait has become a wait. `-1` would be the first tip, which
     // is the thing this is avoiding.
     var tip by remember { mutableStateOf<Int?>(null) }
@@ -149,79 +126,77 @@ fun LoadingScreen(
         modifier = Modifier.fillMaxSize().background(scheme.background),
         contentAlignment = Alignment.Center,
     ) {
+        // The mark at the exact centre of the screen, where the system splash
+        // drew it, and everything else hung underneath - two equal weights
+        // either side of it - so the hand-over from the splash moves nothing.
         Column(
+            modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
-            Box(contentAlignment = Alignment.Center) {
-                Box(
-                    modifier = Modifier
-                        .size(88.dp)
-                        .rotate(sweep)
-                        .drawBehind {
-                            // One arc rather than a full ring, so it reads as
-                            // travelling rather than merely glowing.
-                            drawArc(
-                                color = scheme.primary,
-                                startAngle = 0f,
-                                sweepAngle = 96f,
-                                useCenter = false,
-                                topLeft = Offset(0f, 0f),
-                                size = Size(size.width, size.height),
-                                style = Stroke(width = 3.dp.toPx()),
-                            )
-                        },
-                )
-                BetweenUsLogoTile(size = 56, modifier = Modifier.scale(breath))
-            }
-
-            Text(
-                text = "BETWEENUS",
-                style = MaterialTheme.typography.labelLarge,
-                color = scheme.onSurfaceVariant,
+            Spacer(Modifier.weight(1f))
+            // The system splash has just played the faces' entrance, so they
+            // carry on from rest, leaning in by turns - the same motion the
+            // desktop's boot screen settles into, and the whole "working"
+            // signal: there is no spinner beside it.
+            BetweenUsMark(
+                color = scheme.primary,
+                modifier = Modifier.size(MARK_DP),
+                motion = MarkMotion.Talk,
             )
 
-            // Reserved height, so the mark does not jump upwards when the line
-            // below arrives - a layout that shifts under somebody already
-            // waiting reads as a second thing going wrong.
-            Box(
-                modifier = Modifier.heightIn(min = 72.dp).padding(horizontal = 32.dp),
-                contentAlignment = Alignment.TopCenter,
+            Column(
+                modifier = Modifier.weight(1f).padding(top = 20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(20.dp),
             ) {
-                if (problem != null) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Text(
-                            text = problem,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = scheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center,
-                        )
-                        Text(
-                            text = "Still trying…",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = scheme.onSurfaceVariant,
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            TextButton(onClick = onRetry) { Text("Try now") }
-                            TextButton(onClick = onSignIn) { Text("Sign in instead") }
+                Text(
+                    text = "BETWEENUS",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = scheme.onSurfaceVariant,
+                )
+
+                // Everything here hangs from the top, so the line arriving
+                // moves nothing above it - a layout that shifts under somebody
+                // already waiting reads as a second thing going wrong.
+                Box(
+                    modifier = Modifier.heightIn(min = 72.dp).padding(horizontal = 32.dp),
+                    contentAlignment = Alignment.TopCenter,
+                ) {
+                    if (problem != null) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Text(
+                                text = problem,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = scheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                            )
+                            Text(
+                                text = "Still trying…",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = scheme.onSurfaceVariant,
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                TextButton(onClick = onRetry) { Text("Try now") }
+                                TextButton(onClick = onSignIn) { Text("Sign in instead") }
+                            }
                         }
-                    }
-                } else {
-                    AnimatedContent(
-                        targetState = tip,
-                        transitionSpec = { fadeIn(tween(300)) togetherWith fadeOut(tween(200)) },
-                        label = "tip",
-                    ) { at ->
-                        Text(
-                            text = at?.let { BootTips.phoneTips[it] } ?: "",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = scheme.onSurfaceVariant.copy(alpha = 0.7f),
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.alpha(if (at == null) 0f else 1f),
-                        )
+                    } else {
+                        AnimatedContent(
+                            targetState = tip,
+                            transitionSpec = { fadeIn(tween(300)) togetherWith fadeOut(tween(200)) },
+                            label = "tip",
+                        ) { at ->
+                            Text(
+                                text = at?.let { BootTips.phoneTips[it] } ?: "",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = scheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.alpha(if (at == null) 0f else 1f),
+                            )
+                        }
                     }
                 }
             }

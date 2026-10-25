@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
-    <link rel="apple-touch-icon" href="/icon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <!--
       Same rule as the desktop renderer: script-src stays 'self', so nothing
       this page fetches can become code.
@@ -58,7 +58,9 @@
       beside it, and why nothing has to remove it.
 
       Hand-inlined on purpose. A stylesheet would be a second request in front
-      of the paint this exists to bring forward, and the two colour values are
+      of the paint this exists to bring forward - and so is an <img>, which is
+      why the mark itself is inline too, written between the brand:mark markers
+      by design/brand/build.py. The two colour values are
       the dark theme's `--color-ground` and `--color-accent` from `index.css`,
       which is the one duplication here worth having: a splash that reads the
       theme cannot draw until the theme has loaded.
@@ -73,47 +75,73 @@
           justify-content: center;
           background: rgb(6 7 10);
         }
-        #boot .ring {
-          width: 5rem;
-          height: 5rem;
-          border-radius: 1.4rem;
-          border: 2px solid transparent;
-          border-top-color: rgb(124 92 255 / 0.7);
-          border-right-color: rgb(124 92 255 / 0.25);
-          animation: boot-spin 1.15s linear infinite;
+        #boot .mark {
+          width: 4.5rem;
+          height: 4.5rem;
+          fill: rgb(124 92 255);
+          overflow: visible;
         }
-        #boot img {
-          position: absolute;
-          width: 2.5rem;
-          height: 2.5rem;
-          animation: boot-breathe 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        /* The two faces slide in from either side and lean in, then keep
+           leaning in by turns - a conversation - for as long as this stays up.
+           That motion is the whole progress indicator; there is no spinner.
+           Lengths on an SVG path are viewBox units: 36 is 36/256 of the mark. */
+        #boot .l {
+          animation:
+            boot-in-l 680ms cubic-bezier(0.2, 0.8, 0.2, 1) both,
+            boot-talk-l 2.4s ease-in-out 900ms infinite;
         }
-        @keyframes boot-spin {
-          to {
-            transform: rotate(360deg);
+        #boot .r {
+          animation:
+            boot-in-r 680ms cubic-bezier(0.2, 0.8, 0.2, 1) 80ms both,
+            boot-talk-r 2.4s ease-in-out 900ms infinite;
+        }
+        @keyframes boot-in-l {
+          from {
+            transform: translateX(-36px);
+            opacity: 0;
           }
-        }
-        @keyframes boot-breathe {
-          0%,
-          100% {
-            transform: scale(1);
+          70% {
+            transform: translateX(2px);
             opacity: 1;
           }
+        }
+        @keyframes boot-in-r {
+          from {
+            transform: translateX(36px);
+            opacity: 0;
+          }
+          70% {
+            transform: translateX(-2px);
+            opacity: 1;
+          }
+        }
+        @keyframes boot-talk-l {
+          25% {
+            transform: translateX(4px);
+          }
+          50%,
+          100% {
+            transform: none;
+          }
+        }
+        @keyframes boot-talk-r {
+          0%,
           50% {
-            transform: scale(0.94);
-            opacity: 0.72;
+            transform: none;
+          }
+          75% {
+            transform: translateX(-4px);
           }
         }
         @media (prefers-reduced-motion: reduce) {
-          #boot .ring,
-          #boot img {
+          #boot .l,
+          #boot .r {
             animation: none;
           }
         }
       </style>
       <div id="boot">
-        <div class="ring"></div>
-        <img src="/icon.svg" alt="" />
+        <!-- brand:mark --><svg class="mark" viewBox="0 0 256 256" aria-hidden="true"><path class="l" d="M106 26.35C106.17 31.63 106.5 48.39 107 58C107.5 67.61 106.67 76.33 109 84C111.33 91.67 118.83 99.5 121 104C123.17 108.5 123.67 107.83 122 111C120.33 114.17 111.83 118.5 111 123C110.17 127.5 116.83 133.67 117 138C117.17 142.33 112 145.33 112 149C112 152.67 116.5 156.17 117 160C117.5 163.83 117.17 165.67 115 172C112.83 178.33 106.83 188.74 104 198C101.17 207.26 99 222.65 98 227.58A104 104 0 0 1 106 26.35Z"/><path class="r" d="M150 26.35C149.83 31.63 149.5 48.39 149 58C148.5 67.61 149.33 76.33 147 84C144.67 91.67 137.17 99.5 135 104C132.83 108.5 132.33 107.83 134 111C135.67 114.17 144.17 118.5 145 123C145.83 127.5 139.17 133.67 139 138C138.83 142.33 144 145.33 144 149C144 152.67 139.5 156.17 139 160C138.5 163.83 138.83 165.67 141 172C143.17 178.33 149.17 188.74 152 198C154.83 207.26 157 222.65 158 227.58A104 104 0 0 0 150 26.35Z"/></svg><!-- /brand:mark -->
       </div>
     </div>
     <script type="module" src="/src/main.tsx"></script>

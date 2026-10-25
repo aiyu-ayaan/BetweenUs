@@ -11,6 +11,9 @@ export default {
           800: '#1E293B',
           700: '#334155',
         },
+        // The BetweenUs mark's own colour, the main app's accent. The panel's
+        // blue stays the panel's; the mark is the same everywhere.
+        brand: '#7C5CFF',
         accent: {
           DEFAULT: '#3B82F6',
           hover: '#2563EB',

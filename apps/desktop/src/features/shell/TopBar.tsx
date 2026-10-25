@@ -59,7 +59,7 @@ export function TopBar({
     >
       {/* Left: Brand mark and sidebar toggle */}
       <div className={`flex items-center gap-2.5 shrink-0 ${isMac ? 'ps-[72px]' : 'ps-0.5'}`}>
-        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent text-white shadow-md shadow-accent/20">
+        <div className="mark-lean flex h-7 w-7 items-center justify-center rounded-lg bg-accent text-white shadow-md shadow-accent/20">
           <BetweenUsLogoIcon className="h-4 w-4" />
         </div>
         <span className="text-[13px] font-bold tracking-tight text-slate-100">

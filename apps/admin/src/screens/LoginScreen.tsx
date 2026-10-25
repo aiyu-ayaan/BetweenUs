@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import type { OAuthProviderSummary, PublicUser } from '@betweenus/shared-types';
 import { api } from '../api';
+import { BrandMark } from '../BrandMark';
 import { adminOnly, messageOf } from '../App';
 
 export function LoginScreen({
@@ -48,6 +49,7 @@ export function LoginScreen({
   return (
     <div className="grid h-full place-items-center px-4">
       <form onSubmit={submit} className="w-full max-w-sm rounded-xl bg-surface-800 p-8 shadow-2xl" noValidate>
+        <BrandMark motion="in" className="mb-4 h-10 w-10 text-brand" />
         <h1 className="mb-1 text-2xl font-semibold text-slate-50">BetweenUs Admin</h1>
         <p className="mb-6 text-sm text-slate-400">Sign in with your administrator account.</p>
 

@@ -43,6 +43,7 @@ import com.aatech.betweenus.core.data.OAuthFlow
 import com.aatech.betweenus.ui.components.BetweenUsButton
 import com.aatech.betweenus.ui.components.BetweenUsField
 import com.aatech.betweenus.ui.components.BetweenUsLogoTile
+import com.aatech.betweenus.ui.components.MarkMotion
 import com.aatech.betweenus.ui.components.BetweenUsSecondaryButton
 import com.aatech.betweenus.ui.components.Notice
 import com.aatech.betweenus.ui.theme.StatusOnline
@@ -97,7 +98,7 @@ fun LoginScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                BetweenUsLogoTile()
+                BetweenUsLogoTile(motion = MarkMotion.In)
                 Spacer(Modifier.height(20.dp))
                 Text(
                     text = if (registering) "Create your account" else "Welcome back",

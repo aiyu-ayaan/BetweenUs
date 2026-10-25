@@ -26,6 +26,7 @@ files:
   - dist/**
   - dist-electron/**
   - public/icon.png
+  - public/tray.png
 # Release artifacts are named BetweenUs-<version>-<what it is>, the same shape
 # the Android APKs use, so a downloaded file still says which release it is and
 # a folder of them sorts by version rather than by target.

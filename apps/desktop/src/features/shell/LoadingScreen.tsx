@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import { BetweenUsLogoIcon } from '../../components/icons';
 
 /**
@@ -68,6 +68,9 @@ export const TIPS: readonly string[] = [
 ];
 
 export function LoadingScreen(): JSX.Element {
+  // How long the page has been up when this mounts - the splash in index.html
+  // started its animation at the first paint, and this one continues it.
+  const [startedAt] = useState(() => Math.round(performance.now()));
   // Which tip, or null while the wait is still short enough not to fill.
   const [tip, setTip] = useState<number | null>(null);
 
@@ -96,20 +99,16 @@ export function LoadingScreen(): JSX.Element {
       aria-busy="true"
       aria-live="polite"
     >
-      <div className="relative flex h-20 w-20 items-center justify-center">
-        {/* The ring is the part that says "working". It is drawn as a single
-            arc of a circle rather than a full border, so that it reads as
-            travelling rather than merely glowing. */}
-        <span
-          aria-hidden="true"
-          className="absolute inset-0 rounded-[1.4rem] border-2 border-transparent border-t-accent/70 border-e-accent/25 animate-boot-ring"
-        />
-        <span
-          aria-hidden="true"
-          className="absolute inset-1.5 rounded-[1.1rem] bg-accent/10 animate-boot-glow"
-        />
-        <BetweenUsLogoIcon className="relative h-10 w-10 text-accent animate-boot-mark" />
-      </div>
+      {/* The same mark, size and motion as the splash in index.html, which
+          this replaces on mount - and the faces leaning in by turns is the
+          whole "working" signal, with no spinner beside it. `--mark-t` is how
+          long the page has been up, so the faces carry on from wherever that
+          splash had got to rather than jumping apart and sliding in again. */}
+      <BetweenUsLogoIcon
+        detail="full"
+        className="h-[4.5rem] w-[4.5rem] text-accent animate-mark-talk"
+        style={{ '--mark-t': `${startedAt}ms` } as CSSProperties}
+      />
 
       <p className="text-sm font-semibold tracking-[0.35em] text-slate-300">BETWEENUS</p>
 

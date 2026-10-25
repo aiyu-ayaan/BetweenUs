@@ -662,21 +662,64 @@
   }
 
   /**
-   * The boot screen's three moving parts - see `features/shell/LoadingScreen`.
+   * The boot screen's moving parts - see `features/shell/LoadingScreen` and
+   * the mark's faces below.
    *
-   * All three are transform and opacity only, so they run on the compositor
+   * All of them are transform and opacity only, so they run on the compositor
    * while the main thread is busy doing the very thing being waited for. An
    * animation that stutters *because* the app is loading would be worse than
    * none: it would read as the application already struggling.
    */
-  .animate-boot-ring {
-    animation: boot-ring 1.15s linear infinite;
+  /**
+   * The mark's two faces (`.brand-l`, `.brand-r` in BetweenUsLogoIcon).
+   *
+   * `animate-mark-in`: they slide in from either side and lean in - the same
+   * entrance as the boot splash in index.html and the Android splash.
+   * `animate-mark-talk`: the entrance, then leaning in by turns for as long as
+   * it stays up. `--mark-t` is how far into that the animation already is, so
+   * the React screen picks up where the plain-markup splash it replaces left
+   * off instead of starting the faces over.
+   * `mark-lean`: they lean in while the pointer is over the element.
+   *
+   * Lengths on an SVG path are viewBox units: 36px is 36/256 of the mark.
+   */
+  .animate-mark-in .brand-l {
+    animation: mark-in-l 680ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
   }
-  .animate-boot-glow {
-    animation: boot-glow 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  .animate-mark-in .brand-r {
+    animation: mark-in-r 680ms cubic-bezier(0.2, 0.8, 0.2, 1) 80ms both;
   }
-  .animate-boot-mark {
-    animation: boot-mark 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  .animate-mark-talk .brand-l {
+    animation:
+      mark-in-l 680ms cubic-bezier(0.2, 0.8, 0.2, 1) calc(0ms - var(--mark-t, 0ms)) both,
+      mark-talk-l 2.4s ease-in-out calc(900ms - var(--mark-t, 0ms)) infinite;
+  }
+  .animate-mark-talk .brand-r {
+    animation:
+      mark-in-r 680ms cubic-bezier(0.2, 0.8, 0.2, 1) calc(80ms - var(--mark-t, 0ms)) both,
+      mark-talk-r 2.4s ease-in-out calc(900ms - var(--mark-t, 0ms)) infinite;
+  }
+  .mark-lean .brand-l,
+  .mark-lean .brand-r {
+    transition: transform 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .mark-lean:hover .brand-l {
+    transform: translateX(6px);
+  }
+  .mark-lean:hover .brand-r {
+    transform: translateX(-6px);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .animate-mark-in .brand-l,
+    .animate-mark-in .brand-r,
+    .animate-mark-talk .brand-l,
+    .animate-mark-talk .brand-r {
+      animation: none;
+    }
+    .mark-lean:hover .brand-l,
+    .mark-lean:hover .brand-r {
+      transform: none;
+    }
   }
   .animate-boot-tip {
     animation: boot-tip 420ms cubic-bezier(0.16, 1, 0.3, 1);
@@ -756,37 +799,48 @@
   }
 }
 
-/* The arc travelling round the mark: "working", without claiming progress. */
-@keyframes boot-ring {
+/* The faces sliding in from either side, overshooting into each other by a
+   hair and settling: they lean in. */
+@keyframes mark-in-l {
   from {
-    transform: rotate(0deg);
+    transform: translateX(-36px);
+    opacity: 0;
   }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-/* The mark breathing inside it, a slower beat than the ring so the two read
-   as one object rather than two things that happen to be spinning. */
-@keyframes boot-mark {
-  0%, 100% {
-    transform: scale(1);
+  70% {
+    transform: translateX(2px);
     opacity: 1;
   }
-  50% {
-    transform: scale(0.94);
-    opacity: 0.72;
+}
+
+@keyframes mark-in-r {
+  from {
+    transform: translateX(36px);
+    opacity: 0;
+  }
+  70% {
+    transform: translateX(-2px);
+    opacity: 1;
   }
 }
 
-@keyframes boot-glow {
-  0%, 100% {
-    opacity: 0.55;
-    transform: scale(1);
+/* A conversation: the left face leans in and back, then the right one. */
+@keyframes mark-talk-l {
+  25% {
+    transform: translateX(4px);
   }
+  50%,
+  100% {
+    transform: none;
+  }
+}
+
+@keyframes mark-talk-r {
+  0%,
   50% {
-    opacity: 0.9;
-    transform: scale(1.06);
+    transform: none;
+  }
+  75% {
+    transform: translateX(-4px);
   }
 }
 

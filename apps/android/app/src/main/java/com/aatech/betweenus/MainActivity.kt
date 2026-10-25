@@ -2,7 +2,11 @@ package com.aatech.betweenus
 
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
+import android.view.View
+import android.view.ViewTreeObserver
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -37,10 +41,35 @@ import com.aatech.betweenus.ui.components.ProfileDialogHost
 import com.aatech.betweenus.ui.theme.BetweenUsTheme
 import kotlinx.coroutines.launch
 
+/**
+ * `drawable/splash_mark` runs 900ms from the window appearing, and onCreate is
+ * about 200ms into that, so the first frame waits the rest.
+ */
+private const val SPLASH_MS = 700L
+
 class MainActivity : ComponentActivity() {
+    /**
+     * Android 12+ takes the system splash down at the first drawn frame, which
+     * on a warm device is before the faces have met. On a cold start, hold that
+     * frame until the splash animation has finished.
+     */
+    private fun holdSplash(coldStart: Boolean) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || !coldStart) return
+        val until = SystemClock.uptimeMillis() + SPLASH_MS
+        val content = findViewById<View>(android.R.id.content)
+        content.viewTreeObserver.addOnPreDrawListener(object : ViewTreeObserver.OnPreDrawListener {
+            override fun onPreDraw(): Boolean {
+                if (SystemClock.uptimeMillis() < until) return false
+                content.viewTreeObserver.removeOnPreDrawListener(this)
+                return true
+            }
+        })
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        holdSplash(savedInstanceState == null)
 
         // A stored refresh token is spent once per process, here, rather than
         // by whichever screen happens to make the first request.

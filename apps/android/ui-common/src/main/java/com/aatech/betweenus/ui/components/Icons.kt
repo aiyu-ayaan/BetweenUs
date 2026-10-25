@@ -89,6 +89,7 @@ object BetweenUsIcons {
     val VideoOff = R.drawable.ic_video_off
     val X = R.drawable.ic_x
     val Logo = R.drawable.ic_betweenus_logo
+    val LogoSmall = R.drawable.ic_betweenus_logo_small
 }
 
 /**
@@ -129,7 +130,9 @@ fun BetweenUsLogo(
     tint: Color = MaterialTheme.colorScheme.primary,
     size: Dp = 24.dp,
 ) {
-    BetweenUsIcon(BetweenUsIcons.Logo, modifier, tint, size)
+    // At 24dp and under the full drawing's lips close up; the small cut keeps
+    // only a nose and a chin, which still read.
+    BetweenUsIcon(if (size <= 24.dp) BetweenUsIcons.LogoSmall else BetweenUsIcons.Logo, modifier, tint, size)
 }
 
 /**
@@ -139,9 +142,12 @@ fun BetweenUsLogo(
  * this app, it is the one moment with nothing else on screen to compete with,
  * and Material's own shape set is what says "expressive" before a single word
  * has been read.
+ *
+ * [motion] lets the faces slide in as the screen opens - the same entrance as
+ * the splash the screen follows.
  */
 @Composable
-fun BetweenUsLogoTile(modifier: Modifier = Modifier, size: Int = 64) {
+fun BetweenUsLogoTile(modifier: Modifier = Modifier, size: Int = 64, motion: MarkMotion = MarkMotion.Still) {
     Box(
         modifier = modifier
             .size(size.dp)
@@ -149,9 +155,11 @@ fun BetweenUsLogoTile(modifier: Modifier = Modifier, size: Int = 64) {
             .background(MaterialTheme.colorScheme.primaryContainer),
         contentAlignment = Alignment.Center,
     ) {
-        BetweenUsLogo(
-            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-            size = (size * 0.45f).dp,
+        BetweenUsMark(
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
+            modifier = Modifier.size((size * 0.56f).dp),
+            small = size * 0.56f <= 24f,
+            motion = motion,
         )
     }
 }

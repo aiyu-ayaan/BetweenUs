@@ -3,4 +3,6 @@
     <!-- Only what the platform window needs before Compose takes over. The
          palette proper lives in ui/theme/Color.kt. -->
     <color name="ground">#FF06070A</color>
+    <!-- The mark on the Android 12+ splash: the dark theme's accent. -->
+    <color name="splash_mark">#FF7C5CFF</color>
 </resources>
