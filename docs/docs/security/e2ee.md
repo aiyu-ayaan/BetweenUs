@@ -329,6 +329,8 @@ sequenceDiagram
     Recipient->>Recipient: Decrypt Attachment Blob Locally with Manifest Key
 ```
 
+A file above 100 MiB is not sealed in one operation. It is cut into 1 MiB frames, each sealed with AES-256-GCM under the channel key with a nonce made of a per-file random prefix and the frame's index, and a flag in the additional data that marks the last frame. The index stops frames being reordered; the flag stops a transfer being cut short at a frame boundary. The sender seals and uploads a few frames' worth at a time, and the recipient opens frames as they stream in, so neither side holds the file whole. The manifest's `chunk` field (inside the sealed message) says which format a file uses; a file without it is opened in one piece as before. The full layout is in `development/devdocs/E2EE.md`.
+
 ### When a blob is collected
 
 Three passes, answering three different questions. They are separate on

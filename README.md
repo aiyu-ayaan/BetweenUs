@@ -172,7 +172,7 @@ to be framed, so no browser tab can ever show it.
 | Search a conversation from the keyboard (Ctrl+F) | ✅ | ✅ | — |
 | Keyboard shortcut sheet (`?`) | ✅ | ✅ | — |
 | Message density: cozy or compact | ✅ | ✅ | — |
-| Attachments of any type, up to 100 MB | ✅ | ✅ | ✅ |
+| Attachments of any type, up to 100 MB (2 GB from desktop and web) | ✅ | ✅ | ✅ |
 | Sending survives leaving the screen | — | — | ✅ foreground service |
 | HEIC photos converted, photos re-encoded on the way out | ✅ | ✅ | ✅ |
 | Preview before sending, multi-select, captions | ✅ | ✅ | ✅ |
