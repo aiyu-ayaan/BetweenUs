@@ -1,5 +1,42 @@
 # Changelog
 
+## [1.0.14](https://github.com/aiyu-ayaan/BetweenUs/compare/v1.0.13...v1.0.14) (2026-10-25)
+
+### Features
+
+* Replace the headset mark with two faces leaning in
+* Seal decrypted message bodies under a Keystore key so history opens offline
+* Drop a sealed snapshot the moment one of its messages is edited or deleted
+* Keep decrypted history sealed at rest under a per-device key
+* Open chunked attachments and check them against the desktop vector
+* Upload and open attachments over 100 MB as sealed frames
+* Add a chunked AES-GCM file format with a cross-implementation vector
+
+### Bug fixes
+
+* Android baseline profile, sealed history at rest, chunked attachments and the new brand mark
+
+### Other changes
+
+* Record the baseline profile A/B
+* Benchmark the baseline profile against no precompilation
+* Record the Android baseline profile
+* Ship a baseline profile so launch runs precompiled code
+* Record decrypted history at rest
+* Describe decrypted history kept sealed on the device
+* Record chunked attachments, phase 53
+* Describe the chunked attachment format and the 2 GB ceiling
+* Delete build artifacts once the release is published
+* Deploy a flat bundle instead of a checkout on the host
+
+### Artifacts
+
+| Platform | This release |
+| --- | --- |
+| Server images | Built here |
+| Desktop | Built here |
+| Android | Built here |
+
 ## [1.0.13](https://github.com/aiyu-ayaan/BetweenUs/compare/v1.0.12...v1.0.13) (2026-10-04)
 
 ### Features
