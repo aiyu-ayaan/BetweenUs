@@ -2189,10 +2189,21 @@ export interface MessageAttachment {
   contentType: string;
   /** Plaintext size in bytes, before encryption. */
   size: number;
-  /** Base64 AES-GCM nonce for the file itself. */
+  /**
+   * Base64 AES-GCM nonce for the file itself. For a chunked file (see `chunk`)
+   * it is the 8-byte prefix every frame's nonce starts with.
+   */
   iv: string;
   /** Channel-key generation the file was sealed under. */
   epoch: number;
+  /**
+   * Set when the file is sealed as a stream of frames rather than in one piece:
+   * the plaintext bytes in every frame but the last. Absent on everything sent
+   * before chunking existed, which is how a reader knows to open it in one go.
+   * Only files above the old 100 MiB ceiling are chunked, so a client that
+   * predates the format never meets one it could have opened.
+   */
+  chunk?: number;
   /** Set when the plaintext was gzipped before it was encrypted. */
   gzip?: boolean;
   /** Pixel size of an image, so the layout can be reserved before it loads. */

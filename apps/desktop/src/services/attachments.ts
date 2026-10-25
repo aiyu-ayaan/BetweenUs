@@ -13,10 +13,24 @@
  */
 import type { MessageAttachment, UploadedPart } from '@betweenus/shared-types';
 import { api } from './api';
-import { decryptFileForChannel, encryptFileForChannel } from './e2ee';
+import {
+  chunkSealerForChannel,
+  decryptChunkedFileForChannel,
+  decryptFileForChannel,
+  encryptFileForChannel,
+} from './e2ee';
+import {
+  CHUNK_PLAINTEXT_BYTES,
+  LEGACY_ATTACHMENT_BYTES,
+  chunkedCiphertextSize,
+} from './e2ee-crypto';
 
-/** Matches MAX_ATTACHMENT_BYTES on the server. See the note in e2ee-crypto. */
-export const MAX_ATTACHMENT_BYTES = 100 * 1024 * 1024;
+/**
+ * The largest file a message can carry: 2 GB less a little. The server's
+ * MAX_ATTACHMENT_BYTES is 2 GB of *ciphertext* and the column that records it
+ * is a 32-bit integer, so this leaves room for a tag on each frame.
+ */
+export const MAX_ATTACHMENT_BYTES = 1_999_000_000;
 
 /**
  * One part of a large upload. Comfortably over S3's 5 MiB minimum and under
@@ -58,23 +72,27 @@ export async function uploadAttachment(
   const name = shrunk ? withExtension(file.name, 'jpg') : file.name;
   const contentType = shrunk ? JPEG : file.type || 'application/octet-stream';
 
-  const gzip = shouldGzip(contentType, source.size);
+  // Compressing holds the file in memory, so it stays a privilege of the sizes
+  // that were always sealed in one piece.
+  const gzip = source.size <= LEGACY_ATTACHMENT_BYTES && shouldGzip(contentType, source.size);
   const packed = gzip ? await gzipBlob(source) : source;
-  const plaintext = new Uint8Array(await packed.arrayBuffer());
 
-  const { ciphertext, iv, epoch } = await encryptFileForChannel(channelId, plaintext);
-  const stored = await putBytes(ciphertext, onProgress);
+  const sealed =
+    packed.size > LEGACY_ATTACHMENT_BYTES
+      ? await putChunked(channelId, packed, onProgress)
+      : await putWhole(channelId, packed, onProgress);
 
   return {
-    key: stored.key,
-    url: stored.url,
+    key: sealed.stored.key,
+    url: sealed.stored.url,
     name,
     contentType,
     // The size a person is shown is the size of the file they picked, not of
     // whatever the compressor and the cipher made of it.
     size: source.size,
-    iv,
-    epoch,
+    iv: sealed.iv,
+    epoch: sealed.epoch,
+    ...(sealed.chunk ? { chunk: sealed.chunk } : {}),
     ...(gzip ? { gzip: true } : {}),
     ...(shrunk ? { width: shrunk.width, height: shrunk.height } : {}),
     ...(options.overflow ? { overflow: true } : {}),
@@ -82,6 +100,92 @@ export async function uploadAttachment(
       ? { duration: options.voice.duration, waveform: options.voice.waveform }
       : {}),
   };
+}
+
+interface Sealed {
+  stored: { key: string; url: string };
+  iv: string;
+  epoch: number;
+  /** Set when the file went up as frames; see `MessageAttachment.chunk`. */
+  chunk?: number;
+}
+
+/** Up to LEGACY_ATTACHMENT_BYTES: one AES-GCM operation, the format every client reads. */
+async function putWhole(
+  channelId: string,
+  packed: Blob,
+  onProgress?: UploadProgress,
+): Promise<Sealed> {
+  const plaintext = new Uint8Array(await packed.arrayBuffer());
+  const { ciphertext, iv, epoch } = await encryptFileForChannel(channelId, plaintext);
+  return { stored: await putBytes(ciphertext, onProgress), iv, epoch };
+}
+
+/** Frames sealed into each upload part: 8 MiB, over S3's minimum and under the gateway cap. */
+const FRAMES_PER_PART = 8;
+
+/**
+ * Larger than LEGACY_ATTACHMENT_BYTES: sealed a part at a time and uploaded as
+ * it goes, so the file is never in memory whole - only the parts in flight.
+ *
+ * Sealing is sequential, because a frame's nonce is its position; uploading is
+ * not, so a few finished parts ride the existing multipart lanes while the next
+ * one is being sealed.
+ */
+async function putChunked(
+  channelId: string,
+  packed: Blob,
+  onProgress?: UploadProgress,
+): Promise<Sealed> {
+  const { sealer, epoch } = await chunkSealerForChannel(channelId);
+  const { ticket, maxPartBytes } = await api.startMultipart(chunkedCiphertextSize(packed.size));
+
+  const frameBytes = CHUNK_PLAINTEXT_BYTES + 16;
+  const framesPerPart = Math.max(1, Math.min(FRAMES_PER_PART, Math.floor(maxPartBytes / frameBytes)));
+  const partPlain = framesPerPart * CHUNK_PLAINTEXT_BYTES;
+  const parts: UploadedPart[] = [];
+  const totalParts = Math.ceil(packed.size / partPlain);
+  const lastFrame = Math.ceil(packed.size / CHUNK_PLAINTEXT_BYTES) - 1;
+
+  try {
+    const inFlight = new Set<Promise<void>>();
+    let failure: unknown = null;
+    let done = 0;
+
+    for (let part = 0; part < totalParts; part += 1) {
+      if (failure) break;
+      const plain = new Uint8Array(await packed.slice(part * partPlain, (part + 1) * partPlain).arrayBuffer());
+      const frames: Uint8Array<ArrayBuffer>[] = [];
+      for (let at = 0; at < plain.length; at += CHUNK_PLAINTEXT_BYTES) {
+        const frame = part * framesPerPart + at / CHUNK_PLAINTEXT_BYTES;
+        frames.push(await sealer.seal(plain.slice(at, at + CHUNK_PLAINTEXT_BYTES), frame === lastFrame));
+      }
+
+      const task: Promise<void> = api
+        .uploadPart(ticket, part + 1, new Blob(frames))
+        .then(
+          (uploaded) => {
+            parts[part] = uploaded;
+            done += 1;
+            onProgress?.(done / totalParts);
+          },
+          (error: unknown) => {
+            failure ??= error;
+          },
+        )
+        .finally(() => inFlight.delete(task));
+      inFlight.add(task);
+      if (inFlight.size >= UPLOAD_LANES) await Promise.race(inFlight);
+    }
+
+    await Promise.all(inFlight);
+    if (failure) throw failure;
+    const stored = await api.completeMultipart(ticket, parts);
+    return { stored, iv: sealer.iv, epoch, chunk: CHUNK_PLAINTEXT_BYTES };
+  } catch (error) {
+    await api.abortMultipart(ticket).catch(() => undefined);
+    throw error;
+  }
 }
 
 /**
@@ -154,20 +258,45 @@ export async function openAttachment(
   const cached = cache.get(attachment.key);
   if (cached) return cached;
 
-  const ciphertext = await api.fetchObject(attachment.url);
-  const plaintext = await decryptFileForChannel(
-    channelId,
-    ciphertext,
-    attachment.iv,
-    attachment.epoch,
-  );
-
-  const sealed = new Blob([plaintext], { type: attachment.contentType });
+  let sealed: Blob;
+  if (attachment.chunk) {
+    // Opened frame by frame as it arrives. Each opened frame becomes a Blob of
+    // its own the moment it exists, which hands the bytes to the browser's blob
+    // store - and, for a big file, to disk - instead of keeping them in this
+    // heap; the array holds handles, not data.
+    const opened: Blob[] = [];
+    await api.fetchObjectStream(attachment.url, (body) =>
+      decryptChunkedFileForChannel(
+        channelId,
+        body,
+        attachment.iv,
+        attachment.epoch,
+        attachment.chunk!,
+        (plain) => {
+          opened.push(new Blob([plain]));
+        },
+      ),
+    );
+    sealed = new Blob(opened, { type: attachment.contentType });
+  } else {
+    const ciphertext = await api.fetchObject(attachment.url);
+    const plaintext = await decryptFileForChannel(
+      channelId,
+      ciphertext,
+      attachment.iv,
+      attachment.epoch,
+    );
+    sealed = new Blob([plaintext], { type: attachment.contentType });
+  }
   const unpacked = attachment.gzip ? await gunzipBlob(sealed, attachment.contentType) : sealed;
   // A HEIC sent from a phone before its client learned to convert them. The
   // DOM cannot draw one, so it becomes a JPEG here, once, on the way into the
   // cache - every screen that asks for this attachment gets the JPEG.
   const blob = await viewableImage(unpacked, attachment.name);
+
+  // A file big enough to be chunked is not worth keeping decrypted: opening it
+  // again is a download, and holding gigabytes of plaintext is the cost.
+  if (attachment.chunk) return blob;
 
   // Bounded so a long scroll through an image channel does not grow forever.
   if (cache.size > 40) cache.delete(cache.keys().next().value as string);

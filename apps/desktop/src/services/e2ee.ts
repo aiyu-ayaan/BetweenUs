@@ -50,6 +50,8 @@ import { ACCOUNT_SCOPE } from '@betweenus/shared-types';
 import { ApiError, api } from './api';
 import { setIdentityStatus } from '../stores/identity';
 import {
+  createChunkOpener,
+  createChunkSealer,
   currentIdentityOf,
   decryptBytes,
   decryptMessage,
@@ -63,12 +65,14 @@ import {
   openKeyring,
   openMasterKeyFromGrant,
   openMasterKeyWithSecret,
+  openChunkedStream,
   parseEnvelope,
   sealKeyring,
   sealMasterKeyForDevice,
   sealMasterKeyWithSecret,
   unwrapChannelKey,
   wrapChannelKey,
+  type ChunkSealer,
   type IdentityKeyPair,
   type KeyringEntry,
   type OpenVault,
@@ -770,6 +774,34 @@ export async function decryptFileForChannel(
   epoch: number,
 ): Promise<Uint8Array<ArrayBuffer>> {
   return decryptBytes(ciphertext, iv, await keyForEpoch(channelId, epoch));
+}
+
+/**
+ * The chunked counterpart of `encryptFileForChannel`: hands back a sealer that
+ * turns one frame of plaintext at a time into ciphertext, so a file larger than
+ * memory is never held whole. The epoch is fixed when the sealer is made, so
+ * every frame of one file is under one key even if the channel rotates midway.
+ */
+export async function chunkSealerForChannel(
+  channelId: string,
+): Promise<{ sealer: ChunkSealer; epoch: number }> {
+  const state = await ensureChannelKey(channelId);
+  const key = state.keys.get(state.epoch);
+  if (!key) throw new MissingChannelKeyError();
+  return { sealer: await createChunkSealer(key), epoch: state.epoch };
+}
+
+/** Opens a chunked file as it arrives. Throws on any frame that does not verify, or on a short stream. */
+export async function decryptChunkedFileForChannel(
+  channelId: string,
+  source: AsyncIterable<Uint8Array>,
+  iv: string,
+  epoch: number,
+  chunk: number,
+  onPlain: (plain: Uint8Array<ArrayBuffer>) => void | Promise<void>,
+): Promise<void> {
+  const opener = await createChunkOpener(await keyForEpoch(channelId, epoch), iv);
+  await openChunkedStream(source, opener, onPlain, chunk);
 }
 
 /**

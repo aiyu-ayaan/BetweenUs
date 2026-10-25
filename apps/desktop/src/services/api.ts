@@ -266,6 +266,20 @@ async function upload<T>(path: string, form: FormData, retry = true): Promise<T>
   return requirePayload(path, response, body) as T;
 }
 
+/** A response body as something `for await` takes, without relying on the stream being iterable. */
+async function* chunksOf(body: ReadableStream<Uint8Array>): AsyncGenerator<Uint8Array> {
+  const reader = body.getReader();
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) return;
+      yield value;
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 /** Where the browser has to reach this deployment; `/start` is opened there. */
 export const apiBaseUrl = (): string => serverUrl();
 
@@ -716,6 +730,36 @@ export const api = {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
         if (response.ok) return new Uint8Array(await response.arrayBuffer());
+        if (!worthRetrying(response.status, attempt)) {
+          throw new ApiError(
+            'OBJECT_NOT_FOUND',
+            'That file is no longer available',
+            response.status,
+          );
+        }
+        await new Promise((resolve) => {
+          setTimeout(resolve, retryDelayMs(attempt));
+        });
+      }
+    }),
+
+  /**
+   * The streaming twin of `fetchObject`, for a file too large to hold as one
+   * buffer. Holds the same slot and retries the same refusals - but only until
+   * the response starts: once bytes are flowing, a failure belongs to `consume`,
+   * which has already acted on what it was given.
+   */
+  fetchObjectStream: <T>(
+    url: string,
+    consume: (body: AsyncIterable<Uint8Array>) => Promise<T>,
+  ): Promise<T> =>
+    objectSlot(async () => {
+      for (let attempt = 0; ; attempt += 1) {
+        const token = await bearer();
+        const response = await fetch(absoluteUrl(url), {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (response.ok && response.body) return consume(chunksOf(response.body));
         if (!worthRetrying(response.status, attempt)) {
           throw new ApiError(
             'OBJECT_NOT_FOUND',

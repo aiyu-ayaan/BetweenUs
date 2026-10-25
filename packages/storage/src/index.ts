@@ -624,10 +624,12 @@ async function streamToBuffer(stream: Readable): Promise<Buffer> {
 /** Ceiling for one request body: a single-shot upload, or one multipart part. */
 export const MAX_UPLOAD_BYTES = Number(envOr('MAX_UPLOAD_BYTES', String(25 * 1024 * 1024)));
 
-/** Ceiling for a whole attachment, assembled from however many parts. */
-export const MAX_ATTACHMENT_BYTES = Number(
-  envOr('MAX_ATTACHMENT_BYTES', String(100 * 1024 * 1024)),
-);
+/**
+ * Ceiling for a whole attachment, assembled from however many parts. Measured
+ * in ciphertext, and recorded in `Attachment.size`, a 32-bit column - so the
+ * default stays under 2^31 and raising it past that needs a migration first.
+ */
+export const MAX_ATTACHMENT_BYTES = Number(envOr('MAX_ATTACHMENT_BYTES', '2000000000'));
 
 /** Ceiling for an avatar or a server icon, which the client downscales first. */
 export const MAX_PICTURE_BYTES = Number(envOr('MAX_PICTURE_BYTES', String(8 * 1024 * 1024)));
