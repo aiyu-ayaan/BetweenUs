@@ -63,8 +63,11 @@ which Android compiles ahead of time instead of interpreting them until the app
 has been opened a few times. It costs about 0.2 MiB per APK and changes no
 behaviour. It is generated on a device by `pnpm android:profile` and committed,
 and it covers a signed-out cold start - screens behind a session are not in it.
-No startup figure is published yet, because one taken on an emulator would not
-mean anything on your phone.
+A first A/B on an emulator (profile against no precompilation) showed no
+measurable change in startup time and a modest improvement in the slowest
+frames - about 20% lower CPU time at the 90th percentile and 36% at the 95th
+while moving around the app. That is a direction, not a promise: it needs
+repeating on a real phone before it is quoted. `pnpm android:benchmark` runs it.
 
 ### Desktop (Windows)
 
