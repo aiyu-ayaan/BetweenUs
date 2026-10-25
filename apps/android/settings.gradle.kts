@@ -26,3 +26,4 @@ rootProject.name = "BetweenUs"
 include(":app")
 include(":core")
 include(":ui-common")
+include(":baselineprofile")

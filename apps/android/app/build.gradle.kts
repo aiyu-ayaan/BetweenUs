@@ -3,6 +3,7 @@ import java.util.Properties
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.androidx.baselineprofile)
 }
 
 /**
@@ -125,7 +126,13 @@ android {
     // ABI splits for standalone APK distribution (e.g. GitHub releases, direct download).
     // Disabled automatically during bundle tasks because AAB handles ABI splitting natively
     // and AGP does not allow APK splits during App Bundle creation.
-    val isBuildingBundle = gradle.startParameter.taskNames.any { it.contains("bundle", ignoreCase = true) }
+    //
+    // Generating the baseline profile installs one APK on one device, which a
+    // split build makes four of and the plugin cannot choose between; it is
+    // switched off for that task for the same reason.
+    val isBuildingBundle = gradle.startParameter.taskNames.any {
+        it.contains("bundle", ignoreCase = true) || it.contains("baselineprofile", ignoreCase = true)
+    }
     splits {
         abi {
             isEnable = !isBuildingBundle
@@ -217,6 +224,18 @@ android {
 
 
 /**
+ * The profile is generated on a device by `:baselineprofile` and written back
+ * into `src/main/generated/baselineProfiles`, where it is committed: a release
+ * build then needs no device, and a diff of the profile shows what a change to
+ * startup actually touched. Regenerate with `pnpm android:profile`.
+ */
+baselineProfile {
+    // Rules for the app itself are generated; Compose, Coil and the rest ship
+    // their own profiles, and profileinstaller merges all of them.
+    saveInSrc = true
+}
+
+/**
  * Material 3 Expressive is still an opt-in API surface. The client is drawn in
  * that language from the theme down, so the opt-in is a build setting rather
  * than an annotation on every file that draws a button.
@@ -273,6 +292,11 @@ dependencies {
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.messaging)
     implementation(libs.kotlinx.coroutines.play.services)
+    // Installs the baseline profile into ART on first run. Play delivers one
+    // with the bundle; a sideloaded APK or a GitHub release has no store to do
+    // it, and this is what makes the profile work there.
+    implementation(libs.androidx.profileinstaller)
+    baselineProfile(project(":baselineprofile"))
     testImplementation(libs.junit)
     // The real org.json, so a test that builds a wire payload builds the payload
     // rather than Android's stub, which throws on every method.

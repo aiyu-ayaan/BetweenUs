@@ -15,6 +15,9 @@ coverage
 !.env.example
 dist-electron
 release
+# ...except the Android baseline profile, which is generated on a device and
+# committed so a release build needs no device. See PERFORMANCE.md.
+!apps/android/app/src/release/
 storage-data
 
 # A Firebase service-account key is a private key. It belongs in .env (see

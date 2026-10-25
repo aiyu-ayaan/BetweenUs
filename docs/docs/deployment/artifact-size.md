@@ -37,24 +37,34 @@ Measured on `0.0.1-alpha.27`.
 
 ### Android
 
-A phone downloads only the APK for its own CPU, so **14.5 MiB** is the figure
+A phone downloads only the APK for its own CPU, so **14.7 MiB** is the figure
 that matters for almost everyone.
 
 | APK | Size | Budget |
 | :--- | ---: | ---: |
-| `armeabi-v7a` (older 32-bit devices) | 9.9 MiB | 13 MiB |
-| `arm64-v8a` (most phones) | **14.5 MiB** | 18 MiB |
-| `x86` (emulators) | 15.2 MiB | 19 MiB |
-| `x86_64` (emulators) | 15.8 MiB | 19 MiB |
-| `universal` (all CPUs in one file) | 44.5 MiB | 52 MiB |
+| `armeabi-v7a` (older 32-bit devices) | 10.1 MiB | 13 MiB |
+| `arm64-v8a` (most phones) | **14.7 MiB** | 18 MiB |
+| `x86` (emulators) | 15.5 MiB | 19 MiB |
+| `x86_64` (emulators) | 16.0 MiB | 19 MiB |
+| `universal` (all CPUs in one file) | 44.8 MiB | 52 MiB |
 
 The release build runs R8 code shrinking and resource shrinking together, which
 takes roughly **70-78%** off the debug build - the `arm64-v8a` APK goes from
-53.9 MiB to 14.5. The `universal` APK exists only so you do not have to know
+53.9 MiB to 14.7. The `universal` APK exists only so you do not have to know
 which CPU your phone has; if you do know, take the smaller one.
 
 Most of what remains is the native WebRTC media library, which is why the
 32-bit build is several megabytes lighter than the 64-bit one.
+
+#### Baseline Profile
+
+The release APK carries a Baseline Profile: a list of the methods a launch runs,
+which Android compiles ahead of time instead of interpreting them until the app
+has been opened a few times. It costs about 0.2 MiB per APK and changes no
+behaviour. It is generated on a device by `pnpm android:profile` and committed,
+and it covers a signed-out cold start - screens behind a session are not in it.
+No startup figure is published yet, because one taken on an emulator would not
+mean anything on your phone.
 
 ### Desktop (Windows)
 
