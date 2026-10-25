@@ -1191,6 +1191,23 @@ object Conversation {
      * why. Same door as the desktop's `openAttachment`, same order.
      */
     suspend fun openAttachment(channelId: String, attachment: MessageAttachment): ByteArray {
+        if (attachment.chunk > 0) {
+            // A file sealed as frames exists to be larger than memory, and this
+            // returns a ByteArray and fetches the object whole. Refuse cleanly
+            // past what a phone's heap can plausibly hold twice, rather than
+            // let it die in the allocator. Streaming to a file is the real fix.
+            check(attachment.size <= MAX_OPENABLE_CHUNKED_BYTES) {
+                "${attachment.name} is too large to open on this phone - open it on a computer"
+            }
+            val opened = E2ee.decryptChunkedFileForChannel(
+                channelId,
+                BetweenUsApi.fetchObject(attachment.url),
+                attachment.iv,
+                attachment.epoch,
+                attachment.chunk,
+            )
+            return if (attachment.gzip) gunzip(opened) else opened
+        }
         val plaintext = E2ee.decryptFileForChannel(
             channelId,
             BetweenUsApi.fetchObject(attachment.url),
@@ -1199,6 +1216,9 @@ object Conversation {
         )
         return if (attachment.gzip) gunzip(plaintext) else plaintext
     }
+
+    /** The largest chunked file this client will try to hold in memory to open. */
+    private const val MAX_OPENABLE_CHUNKED_BYTES = 200L * 1024 * 1024
 
     private fun gunzip(bytes: ByteArray): ByteArray =
         GZIPInputStream(ByteArrayInputStream(bytes)).use { it.readBytes() }

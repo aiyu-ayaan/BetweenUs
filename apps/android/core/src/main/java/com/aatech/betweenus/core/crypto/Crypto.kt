@@ -424,6 +424,104 @@ object Crypto {
     fun decryptBytes(ciphertext: ByteArray, iv: String, channelKey: String): ByteArray =
         aes(Cipher.DECRYPT_MODE, unbase64(channelKey), unbase64(iv), ciphertext)
 
+    // --- chunked files ---
+    //
+    // The port of the chunked format in `apps/desktop/src/services/e2ee-crypto.ts`
+    // (read the long note there). Each frame is AES-256-GCM under the channel key
+    // with nonce = 8-byte prefix || u32 big-endian frame index, and AAD =
+    // [1, 1 if last else 0]. `ChunkedCryptoTest` opens the vector the desktop's
+    // `chunked-vector.ts` holds, so the two cannot drift unnoticed.
+
+    /** Plaintext bytes per frame, which is what the desktop writes. */
+    const val CHUNK_PLAINTEXT_BYTES = 1024 * 1024
+    private const val CHUNK_TAG_BYTES = 16
+    private const val CHUNK_PREFIX_BYTES = 8
+    private const val CHUNK_FORMAT_VERSION: Byte = 1
+
+    /** Ciphertext length for [size] plaintext bytes. */
+    fun chunkedCiphertextSize(size: Long, chunk: Int = CHUNK_PLAINTEXT_BYTES): Long =
+        size + maxOf(1L, (size + chunk - 1) / chunk) * CHUNK_TAG_BYTES
+
+    private fun chunkNonce(prefix: ByteArray, index: Long): ByteArray {
+        require(prefix.size == CHUNK_PREFIX_BYTES) { "Chunk nonce prefix must be 8 bytes" }
+        require(index in 0 until (1L shl 32)) { "Chunked file has too many frames" }
+        return ByteArray(IV_BYTES).also {
+            prefix.copyInto(it)
+            for (at in 0 until 4) it[CHUNK_PREFIX_BYTES + at] = (index shr (24 - 8 * at)).toByte()
+        }
+    }
+
+    private fun chunkAad(final: Boolean) = byteArrayOf(CHUNK_FORMAT_VERSION, if (final) 1 else 0)
+
+    private fun aesChunk(mode: Int, key: ByteArray, nonce: ByteArray, aad: ByteArray, input: ByteArray): ByteArray {
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(mode, SecretKeySpec(key, "AES"), GCMParameterSpec(GCM_TAG_BITS, nonce))
+        cipher.updateAAD(aad)
+        return cipher.doFinal(input)
+    }
+
+    /**
+     * Seals a whole buffer as frames. Returns the nonce prefix (the attachment's
+     * `iv`) and the ciphertext. [prefix] is for the vector; leave it to be drawn.
+     */
+    fun sealChunked(
+        plaintext: ByteArray,
+        channelKey: String,
+        chunk: Int = CHUNK_PLAINTEXT_BYTES,
+        prefix: ByteArray = randomBytes(CHUNK_PREFIX_BYTES),
+    ): Pair<String, ByteArray> {
+        val key = unbase64(channelKey)
+        val frames = maxOf(1, (plaintext.size + chunk - 1) / chunk)
+        val out = ByteArray(chunkedCiphertextSize(plaintext.size.toLong(), chunk).toInt())
+        var at = 0
+        for (index in 0 until frames) {
+            val from = index * chunk
+            val sealed = aesChunk(
+                Cipher.ENCRYPT_MODE,
+                key,
+                chunkNonce(prefix, index.toLong()),
+                chunkAad(index == frames - 1),
+                plaintext.copyOfRange(from, minOf(plaintext.size, from + chunk)),
+            )
+            sealed.copyInto(out, at)
+            at += sealed.size
+        }
+        return base64(prefix) to out
+    }
+
+    /**
+     * Opens a whole chunked ciphertext. Throws on a frame that does not verify,
+     * a stream cut short, a frame moved, or anything after the last one.
+     */
+    fun openChunked(
+        ciphertext: ByteArray,
+        iv: String,
+        channelKey: String,
+        chunk: Int = CHUNK_PLAINTEXT_BYTES,
+    ): ByteArray {
+        val key = unbase64(channelKey)
+        val prefix = unbase64(iv)
+        val frameBytes = chunk + CHUNK_TAG_BYTES
+        require(ciphertext.size >= CHUNK_TAG_BYTES) { "Chunked file is truncated" }
+        val frames = (ciphertext.size + frameBytes - 1) / frameBytes
+        val out = java.io.ByteArrayOutputStream(ciphertext.size)
+        for (index in 0 until frames) {
+            val from = index * frameBytes
+            val frame = ciphertext.copyOfRange(from, minOf(ciphertext.size, from + frameBytes))
+            require(frame.size >= CHUNK_TAG_BYTES) { "Chunked file is truncated" }
+            out.write(
+                aesChunk(
+                    Cipher.DECRYPT_MODE,
+                    key,
+                    chunkNonce(prefix, index.toLong()),
+                    chunkAad(index == frames - 1),
+                    frame,
+                ),
+            )
+        }
+        return out.toByteArray()
+    }
+
     private fun aes(mode: Int, key: ByteArray, iv: ByteArray, input: ByteArray): ByteArray {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(mode, SecretKeySpec(key, "AES"), GCMParameterSpec(GCM_TAG_BITS, iv))

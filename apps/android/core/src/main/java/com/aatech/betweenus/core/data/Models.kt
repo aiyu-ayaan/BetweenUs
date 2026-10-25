@@ -1201,6 +1201,13 @@ data class MessageAttachment(
      * as a failed decode in an album and a text attachment read as binary.
      */
     val gzip: Boolean = false,
+    /**
+     * Set when the file is sealed as frames rather than in one piece: the
+     * plaintext bytes in every frame but the last. Zero for everything sent
+     * before chunking, which is how [Conversation.openAttachment] knows to open
+     * it in one go. See `MessageAttachment.chunk` in shared-types.
+     */
+    val chunk: Int = 0,
 ) {
     val isImage: Boolean get() = contentType.startsWith("image/")
     val isVideo: Boolean get() = contentType.startsWith("video/")
@@ -1235,6 +1242,7 @@ data class MessageAttachment(
                 put("waveform", JSONArray().apply { waveform.forEach { put(it.toDouble()) } })
             }
             if (gzip) put("gzip", true)
+            if (chunk > 0) put("chunk", chunk)
         }
 
     companion object {
@@ -1256,6 +1264,7 @@ data class MessageAttachment(
                 List(array.length()) { at -> array.optDouble(at).toFloat() }
             }.orEmpty(),
             gzip = json.optBoolean("gzip"),
+            chunk = json.optInt("chunk"),
         )
     }
 }

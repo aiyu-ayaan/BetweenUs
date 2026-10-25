@@ -713,6 +713,18 @@ object E2ee {
         return Crypto.decryptBytes(ciphertext, iv, key)
     }
 
+    /** The chunked counterpart of [decryptFileForChannel]; see `MessageAttachment.chunk`. */
+    suspend fun decryptChunkedFileForChannel(
+        channelId: String,
+        ciphertext: ByteArray,
+        iv: String,
+        epoch: Int,
+        chunk: Int,
+    ): ByteArray {
+        val key = keyForEpoch(channelId, epoch) ?: throw MissingChannelKeyError()
+        return Crypto.openChunked(ciphertext, iv, key, chunk)
+    }
+
     /**
      * The key a call's DTLS fingerprint is signed with. It is the channel key,
      * which the server has never held - which is exactly why a signature made
