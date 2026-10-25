@@ -63,6 +63,7 @@ const api = {
    * value with the OS keychain; the renderer never touches the file.
    */
   secureGet: (key: string): Promise<string | null> => ipcRenderer.invoke('secure:get', key),
+  secureAvailable: (): Promise<boolean> => ipcRenderer.invoke('secure:available'),
   secureSet: (key: string, value: string): Promise<void> =>
     ipcRenderer.invoke('secure:set', key, value),
   /** Screens and windows the user can share, with thumbnails, for the picker. */

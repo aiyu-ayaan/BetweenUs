@@ -43,6 +43,7 @@ import { mentionsMe } from '../services/mentions';
 import { appendPinPage, refreshPinPages } from '../features/chat/pin-paging';
 import { followMap, takesPartIn, withFollow } from '../features/chat/thread';
 import { cache } from '../services/cache';
+import { createHistoryWriter } from '../services/history-writer';
 import { forgetAttachments, openAttachment, uploadAttachment } from '../services/attachments';
 import { emojiFor, forgetEmoji, loadEmoji, usedEmoji } from '../services/server-emoji';
 import { useAuthStore } from './auth';
@@ -677,11 +678,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // screen, and it goes stale the moment somebody reads anyway.
     void get().loadReceipts(channelId);
 
-    // Nothing in memory: what this device has on disk, decrypted here rather
-    // than waiting for the round trip. It is the same fifty messages the fetch
-    // below is about to return, and on a slow connection - or none at all -
-    // it is the difference between a conversation and a spinner.
+    // Nothing in memory: first the decrypted snapshot this device sealed last
+    // time, which needs no key and so paints with no network at all; then, if
+    // there is none, the stored ciphertext opened here. Either is the same few
+    // messages the fetch below is about to return, and on a slow connection -
+    // or none at all - it is the difference between a conversation and a
+    // spinner.
     if (cached === undefined) {
+      const sealed = await cache.plainHistory<DecryptedMessage>(channelId).catch(() => null);
+      if (sealed && sealed.length > 0 && get().activeChannelId === channelId && get().history[channelId] === undefined) {
+        set({
+          messages: sealed,
+          history: { ...get().history, [channelId]: sealed },
+          loadingMessages: false,
+        });
+      }
+    }
+    if (cached === undefined && get().history[channelId] === undefined) {
       const stored = await cache.messages(channelId).catch(() => []);
       if (stored.length > 0 && get().activeChannelId === channelId) {
         const items = await Promise.all(stored.map(decrypt));
@@ -2167,4 +2180,25 @@ chatSocket.on((event) => {
       }),
     });
   });
+});
+
+// What the device keeps of decrypted history across a restart, and when it
+// writes it. See `services/history-at-rest.ts` and `services/history-writer.ts`.
+const historyWriter = createHistoryWriter<DecryptedMessage>({
+  read: (channelId) => useChatStore.getState().history[channelId],
+  write: (channelId, messages) => cache.putPlain(channelId, messages),
+  active: () => useAuthStore.getState().user !== null,
+});
+
+useChatStore.subscribe((state, previous) => {
+  if (state.history === previous.history) return;
+  for (const [channelId, messages] of Object.entries(state.history)) {
+    if (messages !== previous.history[channelId]) historyWriter.changed(channelId);
+  }
+});
+
+// Signing out empties the disk (`cache.clear()`); this empties the queue, so a
+// write that was waiting cannot run after it.
+useAuthStore.subscribe((state, previous) => {
+  if (previous.user && !state.user) historyWriter.cancelAll();
 });

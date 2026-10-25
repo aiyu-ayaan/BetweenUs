@@ -95,6 +95,8 @@ interface Window {
     /** OS-keychain-backed storage for E2EE private keys. */
     secureGet: (key: string) => Promise<string | null>;
     secureSet: (key: string, value: string) => Promise<void>;
+    /** Whether `secureSet` is backed by the OS keychain here. */
+    secureAvailable?: () => Promise<boolean>;
     screenSources: () => Promise<ScreenSource[]>;
     systemScreenPicker: () => Promise<boolean>;
     screenDisplays: () => Promise<DisplayInfo[]>;

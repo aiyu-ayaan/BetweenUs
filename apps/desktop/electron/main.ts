@@ -864,6 +864,11 @@ ipcMain.handle('secure:get', (_event, key: unknown): string | null => {
   }
 });
 
+// Whether `secure:set` actually seals anything. Without it the value lands in
+// the secrets file as it is, which is fine for what that file was made for and
+// no place for a key whose only job is to protect data sitting beside it.
+ipcMain.handle('secure:available', (): boolean => safeStorage.isEncryptionAvailable());
+
 ipcMain.handle('secure:set', (_event, key: unknown, value: unknown): void => {
   if (typeof key !== 'string' || typeof value !== 'string') return;
   const secrets = readSecrets();

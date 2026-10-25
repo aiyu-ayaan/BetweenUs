@@ -9,7 +9,12 @@
  * disk would undo what the encryption is for, which is why the decrypted
  * history in `stores/chat.ts` stays in memory and dies with the window.
  *
- * The one exception is `drafts`: the text somebody left unsent in a composer,
+ * The other exception is `plain`: the decrypted newest messages of recent
+ * channels, so a cold start paints without the vault. They are sealed under a
+ * per-device key that is not in this database (`history-key.ts`), and
+ * `clear()` destroys the key as well as the rows. Read `history-at-rest.ts`.
+ *
+ * The one exception after that is `drafts`: the text somebody left unsent in a composer,
  * which is theirs, on their own device, and has no sealed form to keep instead.
  * It never leaves this machine - see `services/drafts.ts`.
  *
@@ -18,12 +23,22 @@
  */
 import type { Channel, DirectChannel, Message, ServerWithRole } from '@betweenus/shared-types';
 import type { Draft } from './drafts';
+import { forgetKey, historyKey, type KeyShelf } from './history-key';
+import { openHistory, overflow, sealHistory, type SealedHistory } from './history-at-rest';
 
 const DB_NAME = 'betweenus-cache';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const LISTS = 'lists';
 const MESSAGES = 'messages';
+const PLAIN = 'plain';
+const KEYS = 'keys';
 const OWNER_KEY = 'owner';
+
+/**
+ * Bumped by every `clear()`, so a snapshot that was being sealed while somebody
+ * signed out is dropped instead of being written after the sign-out.
+ */
+let generation = 0;
 
 /** Messages kept per channel. Fifty is the server's page; this holds ten of them. */
 const MESSAGES_PER_CHANNEL = 500;
@@ -48,6 +63,9 @@ function database(): Promise<IDBDatabase | null> {
         // Read by channel, ordered by time - which is the only read there is.
         store.createIndex('channel', ['channelId', 'createdAt']);
       }
+      if (!db.objectStoreNames.contains(PLAIN)) db.createObjectStore(PLAIN, { keyPath: 'channelId' });
+      // Holds a non-extractable CryptoKey in a browser; empty in the desktop app.
+      if (!db.objectStoreNames.contains(KEYS)) db.createObjectStore(KEYS);
     };
     request.onsuccess = () => resolve(request.result);
     // A browser with storage denied, a private window, a corrupt database: all
@@ -90,6 +108,32 @@ async function writeList(key: string, value: unknown): Promise<void> {
   await done(transaction);
 }
 
+/** Where a browser keeps the history key. See `history-key.ts`. */
+const shelf: KeyShelf = {
+  async get() {
+    const db = await database();
+    if (!db) return null;
+    const held = await ask<CryptoKey>(
+      db.transaction(KEYS, 'readonly').objectStore(KEYS).get('history') as IDBRequest<CryptoKey>,
+    );
+    return held ?? null;
+  },
+  async put(key) {
+    const db = await database();
+    if (!db) throw new Error('No place to keep a key');
+    const transaction = db.transaction(KEYS, 'readwrite');
+    transaction.objectStore(KEYS).put(key, 'history');
+    await done(transaction);
+  },
+  async drop() {
+    const db = await database();
+    if (!db) return;
+    const transaction = db.transaction(KEYS, 'readwrite');
+    transaction.objectStore(KEYS).clear();
+    await done(transaction);
+  },
+};
+
 export const cache = {
   /**
    * Binds the cache to an account. A different one than last time means
@@ -111,12 +155,18 @@ export const cache = {
    * so signing back in is still instant.
    */
   async clear(): Promise<void> {
+    generation += 1;
     const db = await database();
-    if (!db) return;
-    const transaction = db.transaction([LISTS, MESSAGES], 'readwrite');
-    transaction.objectStore(LISTS).clear();
-    transaction.objectStore(MESSAGES).clear();
-    await done(transaction);
+    if (db) {
+      const transaction = db.transaction([LISTS, MESSAGES, PLAIN], 'readwrite');
+      transaction.objectStore(LISTS).clear();
+      transaction.objectStore(MESSAGES).clear();
+      transaction.objectStore(PLAIN).clear();
+      await done(transaction);
+    }
+    // After the rows, never before: a sealed row with no key is noise, but a
+    // key with rows left behind it is a reason to have kept the key.
+    await forgetKey(shelf);
   },
 
   /**
@@ -130,6 +180,10 @@ export const cache = {
   async forgetChannel(channelId: string): Promise<void> {
     const db = await database();
     if (!db) return;
+
+    const plain = db.transaction(PLAIN, 'readwrite');
+    plain.objectStore(PLAIN).delete(channelId);
+    await done(plain);
 
     const transaction = db.transaction(MESSAGES, 'readwrite');
     const index = transaction.objectStore(MESSAGES).index('channel');
@@ -232,6 +286,74 @@ export const cache = {
     const transaction = db.transaction(MESSAGES, 'readwrite');
     const store = transaction.objectStore(MESSAGES);
     for (const id of messageIds) store.delete(id);
+    await done(transaction);
+
+    // A snapshot that holds any of them is dropped whole. It is rewritten from
+    // what is on screen the next time the channel changes, and the cost of that
+    // is one slower cold start - against opening a sealed snapshot to edit it.
+    const gone = new Set(messageIds);
+    const plain = db.transaction(PLAIN, 'readwrite');
+    const rows = plain.objectStore(PLAIN);
+    const all = await ask<SealedHistory[]>(rows.getAll() as IDBRequest<SealedHistory[]>);
+    for (const row of all ?? []) {
+      if (row.ids.some((id) => gone.has(id))) rows.delete(row.channelId);
+    }
+    await done(plain);
+  },
+
+  // --- Decrypted history ------------------------------------------------------
+
+  /**
+   * The newest decrypted messages of a channel as of the last time it changed,
+   * or null when there is none, there is no key, or the record does not open.
+   */
+  async plainHistory<T>(channelId: string): Promise<T[] | null> {
+    const db = await database();
+    if (!db) return null;
+    const key = await historyKey(shelf);
+    if (!key) return null;
+    const record = await ask<SealedHistory>(
+      db.transaction(PLAIN, 'readonly').objectStore(PLAIN).get(channelId) as IDBRequest<SealedHistory>,
+    );
+    if (!record) return null;
+    const opened = await openHistory<T>(key, record);
+    // A record that does not open is of no use to anybody and will not start to.
+    if (!opened) void cache.forgetPlain(channelId);
+    return opened;
+  },
+
+  /** Replaces a channel's snapshot. A no-op where there is no secure place for a key. */
+  async putPlain<T extends { id: string; viewOnce?: boolean; expiresAt?: string | null }>(
+    channelId: string,
+    messages: readonly T[],
+  ): Promise<void> {
+    const started = generation;
+    const db = await database();
+    if (!db) return;
+    const key = await historyKey(shelf);
+    if (!key) return;
+    const record = await sealHistory(key, channelId, messages);
+    // Signed out, or the account changed, while this was being sealed.
+    if (started !== generation) return;
+
+    const transaction = db.transaction(PLAIN, 'readwrite');
+    const store = transaction.objectStore(PLAIN);
+    if (record.ids.length === 0) store.delete(channelId);
+    else store.put(record);
+    await done(transaction);
+
+    const sweep = db.transaction(PLAIN, 'readwrite');
+    const rows = sweep.objectStore(PLAIN);
+    const all = await ask<SealedHistory[]>(rows.getAll() as IDBRequest<SealedHistory[]>);
+    for (const id of overflow(all ?? [])) rows.delete(id);
+    await done(sweep);
+  },
+
+  async forgetPlain(channelId: string): Promise<void> {
+    const db = await database();
+    if (!db) return;
+    const transaction = db.transaction(PLAIN, 'readwrite');
+    transaction.objectStore(PLAIN).delete(channelId);
     await done(transaction);
   },
 
