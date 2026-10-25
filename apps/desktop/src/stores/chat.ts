@@ -133,8 +133,10 @@ interface ChatState {
    * Decrypted history per channel, so reopening one paints immediately instead
    * of clearing the view and waiting for a fetch and fifty decryptions.
    *
-   * Memory only, and deliberately: this is plaintext, and writing it to disk
-   * would undo what the encryption is for. It dies with the window.
+   * Plaintext, so it is never written to disk as it is. The newest messages of
+   * recent channels are also kept sealed under a per-device key
+   * (`services/history-at-rest.ts`) so a restart paints without the vault; this
+   * map itself dies with the window.
    */
   history: Record<string, DecryptedMessage[]>;
   loadingMessages: boolean;

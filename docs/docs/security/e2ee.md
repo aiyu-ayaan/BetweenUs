@@ -331,6 +331,10 @@ sequenceDiagram
 
 A file above 100 MiB is not sealed in one operation. It is cut into 1 MiB frames, each sealed with AES-256-GCM under the channel key with a nonce made of a per-file random prefix and the frame's index, and a flag in the additional data that marks the last frame. The index stops frames being reordered; the flag stops a transfer being cut short at a frame boundary. The sender seals and uploads a few frames' worth at a time, and the recipient opens frames as they stream in, so neither side holds the file whole. The manifest's `chunk` field (inside the sealed message) says which format a file uses; a file without it is opened in one piece as before. The full layout is in `development/devdocs/E2EE.md`.
 
+### Decrypted history on the device
+
+So that a conversation you read yesterday opens with no signal, each client also keeps the newest *opened* messages of recent channels, sealed with AES-256-GCM under a key that exists only on that device: the OS keychain on desktop, a non-extractable WebCrypto key in a browser, the Android Keystore on a phone. There is never a prompt for it. One-time and disappearing messages are never kept; an edit or a delete discards the kept copy at once; signing out erases it and destroys the key. Where a device has no secure place for a key (a Linux desktop with no keychain, a browser with no IndexedDB), nothing is kept and the history stays in memory as before. Details are in `development/devdocs/E2EE.md`.
+
 ### When a blob is collected
 
 Three passes, answering three different questions. They are separate on
