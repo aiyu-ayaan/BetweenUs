@@ -1247,7 +1247,12 @@ object Conversation {
     // --- plumbing ---
 
     private suspend fun read(message: Message): ReadableMessage {
-        if (message.deleted) return ReadableMessage(message, MessageBody(""))
+        if (message.deleted) {
+            // A tombstone has no words to show, and the sealed copy of the words
+            // it replaced must not outlive it.
+            Cache.forgetMessagesPlain(listOf(message.id))
+            return ReadableMessage(message, MessageBody(""))
+        }
         // The server wrote this one and it has no body to open - what it says
         // is in its kind and its author. Handing an empty string to the channel
         // key would only produce a padlock for a row nobody sealed.
@@ -1257,7 +1262,12 @@ object Conversation {
         // path every row written before E2EE already takes - so there is
         // nothing special to do for one here, only something special *not* to
         // do, which was blanking it above.
+        // Sealed on this device last time, so no key and no network are needed.
+        Cache.plainBody(message)?.let { return ReadableMessage(message, MessageBody.decode(it)) }
         val plaintext = E2ee.decryptForChannel(message.channelId, message.content)
+        if (plaintext != E2ee.UNDECRYPTABLE && !message.isThreadReply) {
+            Cache.putPlainBody(message, plaintext)
+        }
         return ReadableMessage(message, MessageBody.decode(plaintext))
     }
 

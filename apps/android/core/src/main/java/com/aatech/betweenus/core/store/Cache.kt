@@ -11,6 +11,8 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import com.aatech.betweenus.core.crypto.HistoryKey
+import com.aatech.betweenus.core.crypto.HistorySeal
 import com.aatech.betweenus.core.data.BlockedUser
 import com.aatech.betweenus.core.data.Channel
 import com.aatech.betweenus.core.data.DirectChannel
@@ -26,6 +28,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import android.util.Base64
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -50,6 +53,21 @@ internal data class MessageRow(
     val channelId: String,
     val createdAt: String,
     val json: String,
+)
+
+/**
+ * One message's decrypted body, sealed under the device key (see
+ * [HistorySeal]). Keyed by message id and bound to the envelope it came from,
+ * so a row for an edited message simply stops opening. `iv` and `ct` are base64.
+ */
+@Entity(tableName = "plain", indices = [Index("channelId")])
+internal data class PlainRow(
+    @PrimaryKey val id: String,
+    val channelId: String,
+    val createdAt: String,
+    val at: Long,
+    val iv: String,
+    val ct: String,
 )
 
 @Dao
@@ -84,9 +102,35 @@ internal interface CacheDao {
 
     @Query("DELETE FROM message WHERE id IN (:ids)")
     suspend fun forgetMessages(ids: List<String>)
+
+    @Query("SELECT * FROM plain WHERE id = :id")
+    suspend fun plain(id: String): PlainRow?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun writePlain(row: PlainRow)
+
+    @Query("DELETE FROM plain")
+    suspend fun clearPlain()
+
+    @Query("DELETE FROM plain WHERE channelId = :channelId")
+    suspend fun clearPlainChannel(channelId: String)
+
+    @Query("DELETE FROM plain WHERE id IN (:ids)")
+    suspend fun forgetPlain(ids: List<String>)
+
+    /** Everything past the newest [keep] of one channel. */
+    @Query(
+        "DELETE FROM plain WHERE channelId = :channelId AND id IN " +
+            "(SELECT id FROM plain WHERE channelId = :channelId ORDER BY createdAt DESC LIMIT -1 OFFSET :keep)",
+    )
+    suspend fun prunePlainChannel(channelId: String, keep: Int)
+
+    /** Everything past the [keep] most recently written, across channels. */
+    @Query("DELETE FROM plain WHERE id IN (SELECT id FROM plain ORDER BY at DESC LIMIT -1 OFFSET :keep)")
+    suspend fun prunePlain(keep: Int)
 }
 
-@Database(entities = [CacheRow::class, MessageRow::class], version = 1, exportSchema = false)
+@Database(entities = [CacheRow::class, MessageRow::class, PlainRow::class], version = 2, exportSchema = false)
 internal abstract class BetweenUsDatabase : RoomDatabase() {
     abstract fun cache(): CacheDao
 }
@@ -102,10 +146,13 @@ internal abstract class BetweenUsDatabase : RoomDatabase() {
  *
  * Two things are deliberately *not* stored:
  *
- * - **Plaintext.** Messages are cached exactly as they arrived, still sealed.
- *   Decryption happens on the way to the screen. A database pulled off a rooted
- *   phone is worth what the server's own rows are worth, which is nothing
- *   without a channel key - and those live in the Keystore, not here.
+ * - **Plaintext, in the clear.** Messages are cached exactly as they arrived,
+ *   still sealed. A database pulled off a rooted phone is worth what the
+ *   server's own rows are worth, which is nothing without a channel key - and
+ *   those live in the Keystore, not here. The one thing kept beside them is a
+ *   message's decrypted body, and only sealed under a Keystore key that is not
+ *   in the database and is destroyed on sign-out - see [HistorySeal]. It is
+ *   what lets a conversation open with no signal and no vault.
  * - **Anything for another account.** [claim] wipes the lot when the user id
  *   changes, and every read waits for it, so a second account cannot flash the
  *   first one's servers on screen while the network catches up.
@@ -149,6 +196,8 @@ object Cache {
                 if (dao.read(OWNER) != userId) {
                     dao.clearLists()
                     dao.clearMessages()
+                    dao.clearPlain()
+                    HistoryKey.forget()
                     dao.write(CacheRow(OWNER, userId))
                 }
             }
@@ -167,8 +216,12 @@ object Cache {
             db?.cache()?.let {
                 it.clearLists()
                 it.clearMessages()
+                it.clearPlain()
             }
         }
+        // After the rows: a sealed row with no key is noise, but a key with
+        // rows left behind it is a reason to have kept the key.
+        HistoryKey.forget()
     }
 
     /**
@@ -183,7 +236,12 @@ object Cache {
      * the rail. What went is what was said in it.
      */
     suspend fun forgetChannel(channelId: String) {
-        runCatching { db?.cache()?.clearChannel(channelId) }
+        runCatching {
+            db?.cache()?.let {
+                it.clearChannel(channelId)
+                it.clearPlainChannel(channelId)
+            }
+        }
     }
 
     /**
@@ -197,7 +255,68 @@ object Cache {
      */
     suspend fun forgetMessages(ids: List<String>) {
         if (ids.isEmpty()) return
-        runCatching { db?.cache()?.forgetMessages(ids) }
+        runCatching {
+            db?.cache()?.let {
+                it.forgetMessages(ids)
+                it.forgetPlain(ids)
+            }
+        }
+    }
+
+    // --- decrypted bodies ---
+
+    /** Most bodies kept for one channel, and in all. One page and a bit, not an archive. */
+    private const val PLAIN_PER_CHANNEL = 100
+    private const val PLAIN_TOTAL = 2_000
+
+    /**
+     * The decrypted body of [message], if this device sealed one for exactly
+     * this envelope. Null means "decrypt it the ordinary way": no row, no key,
+     * an edited message, or a row that does not open.
+     */
+    suspend fun plainBody(message: Message): String? = runCatching {
+        val key = HistoryKey.get() ?: return null
+        val row = dao()?.plain(message.id) ?: return null
+        HistorySeal.open(
+            key,
+            message.id,
+            message.content,
+            HistorySeal.Sealed(Base64.decode(row.iv, Base64.NO_WRAP), Base64.decode(row.ct, Base64.NO_WRAP)),
+        )
+    }.getOrNull()
+
+    /** Drops the sealed bodies of these messages and leaves everything else. */
+    fun forgetMessagesPlain(ids: List<String>) {
+        if (ids.isEmpty()) return
+        scope.launch { runCatching { db?.cache()?.forgetPlain(ids) } }
+    }
+
+    /**
+     * Seals [body] for [message]. Never for a one-time or disappearing message:
+     * the first is meant to be seen once and the second must not outlive the
+     * window its sender chose. Fire-and-forget like every write here.
+     */
+    fun putPlainBody(message: Message, body: String) {
+        if (message.viewOnce || message.expiresAt != null || message.deleted) return
+        scope.launch {
+            runCatching {
+                val key = HistoryKey.get() ?: return@runCatching
+                val dao = dao() ?: return@runCatching
+                val sealed = HistorySeal.seal(key, message.id, message.content, body)
+                dao.writePlain(
+                    PlainRow(
+                        id = message.id,
+                        channelId = message.channelId,
+                        createdAt = message.createdAt,
+                        at = System.currentTimeMillis(),
+                        iv = Base64.encodeToString(sealed.iv, Base64.NO_WRAP),
+                        ct = Base64.encodeToString(sealed.ciphertext, Base64.NO_WRAP),
+                    ),
+                )
+                dao.prunePlainChannel(message.channelId, PLAIN_PER_CHANNEL)
+                dao.prunePlain(PLAIN_TOTAL)
+            }
+        }
     }
 
     // --- lists ---
