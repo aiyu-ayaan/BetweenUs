@@ -1,5 +1,48 @@
 # Changelog
 
+## [1.0.15](https://github.com/aiyu-ayaan/BetweenUs/compare/v1.0.14...v1.0.15) (2026-10-26)
+
+### Features
+
+* Show the caller whether their ring is ringing, declined or unanswered
+* Tell the caller what became of their ring
+* Say when this phone cannot ring, and where to fix it
+* Fade the boot screen off the app, as on the desktop
+* Rise the wordmark in under the boot mark
+* Fade the boot screen off the app instead of cutting
+* Animate the b-bubble mark
+* Animate the b-bubble mark on the splash and in Compose
+* Replace the two-faces mark with a b drawn as a speech bubble
+
+### Bug fixes
+
+* Calls ring reliably on Android, expire stale rings, and tell the caller what became of the ring
+* Draw the ring before anything slow, and let it keep ringing
+* Let a ring expire with the ring
+* Treat a keychain-sealed secret as absent when the keychain is unavailable
+* Copy image without fetching the blob URL
+* Keep the boot mark still when React takes over
+
+### Other changes
+
+* The caller is told what became of the ring
+* Bump pointer for phase 55
+* A ring is short-lived, drawn without the network, and settings says when a phone cannot ring
+* Record the Android boot sequence
+* Bump pointer for the keychain note
+* Record the desktop boot hand-over and exit
+* Bump pointer for the copy image note
+* Record the b-bubble mark
+* Lead with the new mark and follow the Domus layout
+
+### Artifacts
+
+| Platform | This release |
+| --- | --- |
+| Server images | Built here |
+| Desktop | Built here |
+| Android | Built here |
+
 ## [1.0.14](https://github.com/aiyu-ayaan/BetweenUs/compare/v1.0.13...v1.0.14) (2026-10-25)
 
 ### Features
