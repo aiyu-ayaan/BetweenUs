@@ -78,8 +78,8 @@ export function LoginScreen(): JSX.Element {
       <div className="drag-region absolute inset-x-0 top-0 h-10" />
       <div className="w-full max-w-md animate-pop rounded-2xl border border-edge bg-surface-900 p-8 shadow-pop">
         <div className="mb-6 text-center">
-          {/* The faces meet once as the card opens, the same entrance as the
-              splash, and lean in again under the pointer. */}
+          {/* The mark pops in once as the card opens, the same entrance as
+              the splash, and the bubble swells under the pointer. */}
           <div className="mark-lean mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl border border-edge bg-accent/15 p-2.5">
             <BetweenUsLogoIcon className="h-full w-full text-accent animate-mark-in" />
           </div>

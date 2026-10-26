@@ -663,7 +663,7 @@
 
   /**
    * The boot screen's moving parts - see `features/shell/LoadingScreen` and
-   * the mark's faces below.
+   * the mark's parts below.
    *
    * All of them are transform and opacity only, so they run on the compositor
    * while the main thread is busy doing the very thing being waited for. An
@@ -671,53 +671,80 @@
    * none: it would read as the application already struggling.
    */
   /**
-   * The mark's two faces (`.brand-l`, `.brand-r` in BetweenUsLogoIcon).
+   * The mark's parts (`.brand-stem`, `.brand-tail`, `.brand-bowl`,
+   * `.brand-dot` in BetweenUsLogoIcon). Each moves about its own pivot, in
+   * viewBox units - the same pivots design/brand/build.py gives Android.
    *
-   * `animate-mark-in`: they slide in from either side and lean in - the same
-   * entrance as the boot splash in index.html and the Android splash.
-   * `animate-mark-talk`: the entrance, then leaning in by turns for as long as
-   * it stays up. `--mark-t` is how far into that the animation already is, so
-   * the React screen picks up where the plain-markup splash it replaces left
-   * off instead of starting the faces over.
-   * `mark-lean`: they lean in while the pointer is over the element.
-   *
-   * Lengths on an SVG path are viewBox units: 36px is 36/256 of the mark.
+   * `animate-mark-in`: the bubble pops, the stem rises out of it, the tail
+   * flicks out - the same entrance as the boot splash in index.html and the
+   * Android splash.
+   * `animate-mark-talk`: the entrance, then three typing dots in the bowl for
+   * as long as it stays up. `--mark-t` is how far into that the animation
+   * already is, so the React screen picks up where the plain-markup splash it
+   * replaces left off instead of starting the mark over.
+   * `mark-lean`: the bubble swells and the tail flicks while the pointer is
+   * over the element.
    */
-  .animate-mark-in .brand-l {
-    animation: mark-in-l 680ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  .brand-stem,
+  .brand-tail,
+  .brand-bowl,
+  .brand-dot {
+    transform-box: view-box;
   }
-  .animate-mark-in .brand-r {
-    animation: mark-in-r 680ms cubic-bezier(0.2, 0.8, 0.2, 1) 80ms both;
+  .brand-stem {
+    transform-origin: 0 218px;
   }
-  .animate-mark-talk .brand-l {
-    animation:
-      mark-in-l 680ms cubic-bezier(0.2, 0.8, 0.2, 1) calc(0ms - var(--mark-t, 0ms)) both,
-      mark-talk-l 2.4s ease-in-out calc(900ms - var(--mark-t, 0ms)) infinite;
+  .brand-tail {
+    transform-origin: 92px 190px;
   }
-  .animate-mark-talk .brand-r {
-    animation:
-      mark-in-r 680ms cubic-bezier(0.2, 0.8, 0.2, 1) calc(80ms - var(--mark-t, 0ms)) both,
-      mark-talk-r 2.4s ease-in-out calc(900ms - var(--mark-t, 0ms)) infinite;
+  .brand-bowl {
+    transform-origin: 144px 148px;
   }
-  .mark-lean .brand-l,
-  .mark-lean .brand-r {
+  .brand-dot {
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+  .animate-mark-in .brand-bowl,
+  .animate-mark-talk .brand-bowl {
+    animation: mark-bowl-in 450ms cubic-bezier(0.2, 0.8, 0.2, 1) calc(0ms - var(--mark-t, 0ms)) both;
+  }
+  .animate-mark-in .brand-stem,
+  .animate-mark-talk .brand-stem {
+    animation: mark-stem-in 380ms cubic-bezier(0.2, 0.8, 0.2, 1) calc(130ms - var(--mark-t, 0ms)) both;
+  }
+  .animate-mark-in .brand-tail,
+  .animate-mark-talk .brand-tail {
+    animation: mark-tail-in 320ms cubic-bezier(0.2, 0.8, 0.2, 1) calc(340ms - var(--mark-t, 0ms)) both;
+  }
+  .animate-mark-talk .brand-dot {
+    animation: mark-dot 1.2s ease-in-out calc(800ms - var(--mark-t, 0ms)) infinite both;
+  }
+  .animate-mark-talk .brand-dot:nth-of-type(2) {
+    animation-delay: calc(950ms - var(--mark-t, 0ms));
+  }
+  .animate-mark-talk .brand-dot:nth-of-type(3) {
+    animation-delay: calc(1100ms - var(--mark-t, 0ms));
+  }
+  .mark-lean .brand-bowl,
+  .mark-lean .brand-tail {
     transition: transform 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
   }
-  .mark-lean:hover .brand-l {
-    transform: translateX(6px);
+  .mark-lean:hover .brand-bowl {
+    transform: scale(1.06);
   }
-  .mark-lean:hover .brand-r {
-    transform: translateX(-6px);
+  .mark-lean:hover .brand-tail {
+    transform: scale(1.15);
   }
   @media (prefers-reduced-motion: reduce) {
-    .animate-mark-in .brand-l,
-    .animate-mark-in .brand-r,
-    .animate-mark-talk .brand-l,
-    .animate-mark-talk .brand-r {
+    .animate-mark-in *,
+    .animate-mark-talk * {
       animation: none;
     }
-    .mark-lean:hover .brand-l,
-    .mark-lean:hover .brand-r {
+    .animate-mark-talk .brand-dot {
+      opacity: 0;
+    }
+    .mark-lean:hover .brand-bowl,
+    .mark-lean:hover .brand-tail {
       transform: none;
     }
   }
@@ -801,46 +828,45 @@
 
 /* The faces sliding in from either side, overshooting into each other by a
    hair and settling: they lean in. */
-@keyframes mark-in-l {
+@keyframes mark-bowl-in {
   from {
-    transform: translateX(-36px);
+    transform: scale(0.3);
     opacity: 0;
   }
-  70% {
-    transform: translateX(2px);
+  33% {
     opacity: 1;
+  }
+  64% {
+    transform: scale(1.06);
   }
 }
 
-@keyframes mark-in-r {
+@keyframes mark-stem-in {
   from {
-    transform: translateX(36px);
-    opacity: 0;
-  }
-  70% {
-    transform: translateX(-2px);
-    opacity: 1;
+    transform: scaleY(0);
   }
 }
 
-/* A conversation: the left face leans in and back, then the right one. */
-@keyframes mark-talk-l {
-  25% {
-    transform: translateX(4px);
+@keyframes mark-tail-in {
+  from {
+    transform: scale(0);
   }
+  60% {
+    transform: scale(1.15);
+  }
+}
+
+/* One typing dot: lit and hopped at 20%, out again by half way. */
+@keyframes mark-dot {
+  0%,
   50%,
   100% {
-    transform: none;
+    transform: translateY(0) scale(0.6);
+    opacity: 0;
   }
-}
-
-@keyframes mark-talk-r {
-  0%,
-  50% {
-    transform: none;
-  }
-  75% {
-    transform: translateX(-4px);
+  20% {
+    transform: translateY(-6px) scale(1);
+    opacity: 1;
   }
 }
 

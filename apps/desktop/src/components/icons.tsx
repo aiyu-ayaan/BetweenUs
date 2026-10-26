@@ -1,6 +1,15 @@
 /** Inline SVG icons (Lucide geometry). No emoji, no icon-font dependency. */
 import type { SVGProps } from 'react';
-import { MARK_LEFT, MARK_LEFT_SMALL, MARK_RIGHT, MARK_RIGHT_SMALL } from './brand-mark';
+import {
+  MARK_BOWL,
+  MARK_BOWL_SMALL,
+  MARK_DOTS,
+  MARK_DOT_R,
+  MARK_STEM,
+  MARK_STEM_SMALL,
+  MARK_TAIL,
+  MARK_TAIL_SMALL,
+} from './brand-mark';
 
 type IconProps = SVGProps<SVGSVGElement>;
 
@@ -417,14 +426,14 @@ export const CopyIcon = (props: IconProps): JSX.Element => (
 );
 
 /**
- * The BetweenUs mark: two faces leaning in, the gap between them what they
- * share. Path data comes from `brand-mark.ts`, which design/brand/build.py
- * writes.
+ * The BetweenUs mark: a lowercase b whose bowl is a speech bubble. Path data
+ * comes from `brand-mark.ts`, which design/brand/build.py writes.
  *
- * `detail` picks the drawing. The full one has lips and a chin; below about
- * 24px they close up, so icon-sized uses get the small cut with only a nose
- * and a chin. The two halves carry `brand-l` / `brand-r` so a parent class
- * (`animate-mark-in`, `animate-mark-talk` in index.css) can move the faces.
+ * `detail` picks the drawing. Below about 24px the full one's counter closes
+ * up, so icon-sized uses get the heavier small cut. The parts carry
+ * `brand-stem` / `brand-tail` / `brand-bowl` / `brand-dot` so a parent class
+ * (`animate-mark-in`, `animate-mark-talk` in index.css) can move them; the
+ * typing dots are invisible unless one does.
  */
 export const BetweenUsLogoIcon = ({
   detail = 'small',
@@ -439,8 +448,12 @@ export const BetweenUsLogoIcon = ({
     overflow="visible"
     {...props}
   >
-    <path className="brand-l" d={detail === 'full' ? MARK_LEFT : MARK_LEFT_SMALL} />
-    <path className="brand-r" d={detail === 'full' ? MARK_RIGHT : MARK_RIGHT_SMALL} />
+    <path className="brand-stem" d={detail === 'full' ? MARK_STEM : MARK_STEM_SMALL} />
+    <path className="brand-tail" d={detail === 'full' ? MARK_TAIL : MARK_TAIL_SMALL} />
+    <path className="brand-bowl" d={detail === 'full' ? MARK_BOWL : MARK_BOWL_SMALL} />
+    {MARK_DOTS.map(([cx, cy]) => (
+      <circle key={cx} className="brand-dot" cx={cx} cy={cy} r={MARK_DOT_R} opacity={0} />
+    ))}
   </svg>
 );
 

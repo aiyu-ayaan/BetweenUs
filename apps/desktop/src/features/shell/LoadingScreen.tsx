@@ -100,10 +100,10 @@ export function LoadingScreen(): JSX.Element {
       aria-live="polite"
     >
       {/* The same mark, size and motion as the splash in index.html, which
-          this replaces on mount - and the faces leaning in by turns is the
+          this replaces on mount - and the typing dots in its bubble are the
           whole "working" signal, with no spinner beside it. `--mark-t` is how
-          long the page has been up, so the faces carry on from wherever that
-          splash had got to rather than jumping apart and sliding in again. */}
+          long the page has been up, so the mark carries on from wherever that
+          splash had got to rather than popping in again. */}
       <BetweenUsLogoIcon
         detail="full"
         className="h-[4.5rem] w-[4.5rem] text-accent animate-mark-talk"
