@@ -94,36 +94,41 @@ export function LoadingScreen(): JSX.Element {
 
   return (
     <div
-      className="flex h-full h-[100dvh] flex-col items-center justify-center gap-5 bg-ground px-8"
+      className="flex h-full h-[100dvh] flex-col items-center bg-ground px-8"
+      style={{ '--mark-t': `${startedAt}ms` } as CSSProperties}
       role="status"
       aria-busy="true"
       aria-live="polite"
     >
-      {/* The same mark, size and motion as the splash in index.html, which
-          this replaces on mount - and the typing dots in its bubble are the
-          whole "working" signal, with no spinner beside it. `--mark-t` is how
-          long the page has been up, so the mark carries on from wherever that
-          splash had got to rather than popping in again. */}
-      <BetweenUsLogoIcon
-        detail="full"
-        className="h-[4.5rem] w-[4.5rem] text-accent animate-mark-talk"
-        style={{ '--mark-t': `${startedAt}ms` } as CSSProperties}
-      />
+      {/* The mark at the exact centre and everything else hung underneath,
+          two equal halves either side - the layout the splash in index.html
+          draws, so the hand-over from it moves nothing, and a tip arriving
+          below moves nothing above it. */}
+      <div className="flex-1" />
 
-      <p className="text-sm font-semibold tracking-[0.35em] text-slate-300">BETWEENUS</p>
+      {/* The same mark, size and motion as that splash - and the typing dots
+          in its bubble are the whole "working" signal, with no spinner beside
+          it. `--mark-t` is how long the page has been up, so the mark and the
+          wordmark carry on from wherever the splash had got to rather than
+          popping in again. */}
+      <BetweenUsLogoIcon detail="full" className="h-[4.5rem] w-[4.5rem] shrink-0 text-accent animate-mark-talk" />
 
-      {/* Reserved height, so the mark does not jump upwards when the tip
-          arrives - a layout that shifts under somebody who is already waiting
-          reads as a second thing going wrong. */}
-      <div className="flex h-10 max-w-sm items-start justify-center">
-        {tip !== null && (
-          <p
-            key={tip}
-            className="animate-boot-tip text-center text-xs leading-relaxed text-slate-500"
-          >
-            {TIPS[tip]}
-          </p>
-        )}
+      <div className="flex flex-1 flex-col items-center gap-5 pt-5">
+        <p className="animate-wordmark-in text-sm font-semibold tracking-[0.35em] text-slate-300">BETWEENUS</p>
+
+        {/* Reserved height, so nothing shifts when the tip arrives - a layout
+            that moves under somebody who is already waiting reads as a second
+            thing going wrong. */}
+        <div className="flex h-10 max-w-sm items-start justify-center">
+          {tip !== null && (
+            <p
+              key={tip}
+              className="animate-boot-tip text-center text-xs leading-relaxed text-slate-500"
+            >
+              {TIPS[tip]}
+            </p>
+          )}
+        </div>
       </div>
 
       <span className="sr-only">Signing you in</span>

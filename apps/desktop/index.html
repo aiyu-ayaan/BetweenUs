@@ -77,13 +77,39 @@
     -->
     <div id="root" class="h-full">
       <style>
+        /* The same layout as LoadingScreen, which replaces this on mount: the
+           mark at the exact centre and the wordmark hung underneath, two equal
+           halves either side, so the hand-over moves nothing. */
         #boot {
           position: fixed;
           inset: 0;
           display: flex;
+          flex-direction: column;
           align-items: center;
-          justify-content: center;
           background: rgb(6 7 10);
+        }
+        #boot .half {
+          flex: 1;
+        }
+        #boot .below {
+          padding-top: 1.25rem;
+        }
+        /* LoadingScreen's `text-sm font-semibold tracking-[0.35em]
+           text-slate-300`, in Tailwind's own sans stack, so the line does not
+           change face when React takes over. */
+        #boot .word {
+          margin: 0;
+          font: 600 0.875rem/1.25rem ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji',
+            'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+          letter-spacing: 0.35em;
+          color: rgb(203 213 225);
+          animation: boot-word 420ms cubic-bezier(0.2, 0.8, 0.2, 1) 520ms both;
+        }
+        @keyframes boot-word {
+          from {
+            transform: translateY(4px);
+            opacity: 0;
+          }
         }
         #boot .mark {
           width: 4.5rem;
@@ -162,13 +188,16 @@
           }
         }
         @media (prefers-reduced-motion: reduce) {
+          #boot .word,
           #boot .mark * {
             animation: none;
           }
         }
       </style>
       <div id="boot">
+        <div class="half"></div>
         <!-- brand:mark --><svg class="mark" viewBox="0 0 256 256" aria-hidden="true"><path class="stem" d="M54 42A19 19 0 0 1 92 42V218H54Z"/><path class="tail" d="M54 182L40.6 232L115.49 211.93L135.4 198.27L92 182Z"/><path class="bowl" d="M74 148A70 70 0 0 1 214 148A70 70 0 0 1 74 148ZM112 148A32 32 0 0 0 176 148A32 32 0 0 0 112 148Z"/><g class="dots"><circle cx="129" cy="148" r="6" opacity="0"/><circle cx="144" cy="148" r="6" opacity="0"/><circle cx="159" cy="148" r="6" opacity="0"/></g></svg><!-- /brand:mark -->
+        <div class="half below"><p class="word">BETWEENUS</p></div>
       </div>
     </div>
     <script type="module" src="/src/main.tsx"></script>

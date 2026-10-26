@@ -748,6 +748,15 @@
       transform: none;
     }
   }
+  /* The wordmark under the boot mark, rising in once the mark has popped. */
+  .animate-wordmark-in {
+    animation: mark-word-in 420ms cubic-bezier(0.2, 0.8, 0.2, 1) calc(520ms - var(--mark-t, 0ms)) both;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .animate-wordmark-in {
+      animation: none;
+    }
+  }
   .animate-boot-tip {
     animation: boot-tip 420ms cubic-bezier(0.16, 1, 0.3, 1);
   }
@@ -867,6 +876,13 @@
   20% {
     transform: translateY(-6px) scale(1);
     opacity: 1;
+  }
+}
+
+@keyframes mark-word-in {
+  from {
+    transform: translateY(4px);
+    opacity: 0;
   }
 }
 
