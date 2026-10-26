@@ -133,6 +133,32 @@ takes a call notification away is the roster going empty, and somebody who
 rings and then does not join produces no roster at all — which would otherwise
 leave an ongoing incoming-call notification for a call that never existed.
 
+### The caller is told what became of the ring
+
+A ring used to be fire-and-forget, and the caller was deliberately told nothing.
+A call to somebody who had said no looked exactly like one to a phone that was
+off, and they sat in an empty call unable to tell which.
+
+`call-service` now tracks each ring it sends (`ring-tracker.ts`) and publishes
+`call.ring.state` to **the caller only**, relayed by `presence-service` over
+`/ws/presence`:
+
+| `state` | When |
+| --- | --- |
+| `ringing` | the ring went out |
+| `declined` | the person said no, on any of their devices (`POST /api/v1/calls/decline`) |
+| `answered` | the person joined the call (seen by the call gateway on join) |
+| `unanswered` | 47 seconds passed (the 45-second ring plus a 2-second grace) with none of the above |
+
+Each ring ends exactly once; a decline after an answer, or a join nobody rang
+for, is dropped. Both clients draw one line above the call - *Ringing Ana…*,
+*Ana declined the call*, *Ana didn't answer* - with **Ring again** and
+**Dismiss** once the ring is over. `answered` draws nothing: the person is in
+the call, and the call says so. Leaving the call clears the line.
+
+Nothing here reaches anybody else, and it is not a push: the caller is in the
+app, on a socket, by definition.
+
 ### A ring that is late is worse than no ring
 
 Every push used to be held by FCM and Web Push for a day. For a message that is
