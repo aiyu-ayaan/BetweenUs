@@ -20,10 +20,13 @@ export async function copyImage(src: string): Promise<void> {
   await navigator.clipboard.write([new ClipboardItem({ 'image/png': asPng(src) })]);
 }
 
+/**
+ * Redrawn through a canvas rather than fetched back: `connect-src` does not
+ * name `blob:` (and should not), so `fetch(blob:...)` fails with "Failed to
+ * fetch" in the app and in the browser, while `img-src blob:` is what already
+ * lets the picture be drawn at all.
+ */
 async function asPng(src: string): Promise<Blob> {
-  const source = await (await fetch(src)).blob();
-  if (source.type === 'image/png') return source;
-
   const image = new Image();
   image.src = src;
   await image.decode();
