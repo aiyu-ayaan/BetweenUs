@@ -133,6 +133,57 @@ takes a call notification away is the roster going empty, and somebody who
 rings and then does not join produces no roster at all — which would otherwise
 leave an ongoing incoming-call notification for a call that never existed.
 
+### A ring that is late is worse than no ring
+
+Every push used to be held by FCM and Web Push for a day. For a message that is
+right: the badge on the next launch says it better than a late buzz. For a ring
+it is the opposite. A phone that was off while somebody rang it would start
+ringing hours later for a call nobody was on — and a late `call.handled` was
+worse still, because the phone files the channel under "said no" and stays
+silent for the next real call.
+
+Lifetime is now decided per kind (`notification-service/src/push/lifetime.ts`):
+
+| Push | Held for |
+| --- | --- |
+| `call.ring` | 45 seconds — exactly as long as it rings |
+| `call.handled` | 2 minutes |
+| `call.roster` (a call someone can join) | 2 minutes |
+| `call.roster` (empty — the call ended) | 1 day, so a phone that was away still finds out |
+| everything else | 1 day, as before |
+
+A push that finds the account with no registered device is logged as
+`Push has nobody to reach` (counts only), so "she rang and nothing happened" can
+be told apart from a rejected token.
+
+### The ring does not wait on the network
+
+On Android the ring is drawn **from the push alone**. It used to wait on a
+session restore (up to ten seconds), an unbounded preferences request, a
+workspace refresh and the caller's picture before posting anything, and gave up
+silently if the session was not back — on a phone waking from Doze, a call that
+rang after the caller hung up, or not at all.
+
+Now the only reasons not to ring are the ones the account chose: no account on
+the phone, notifications off, or quiet hours. A session that is still restoring,
+or preferences that do not arrive in two seconds, **let it ring** — a call that
+rang at the wrong hour is an annoyance, one that did not ring is a missed call.
+The picture and the workspace follow, redrawing the same notification without
+ringing again (and never resurrecting a ring that was answered, declined or
+cancelled in the meantime).
+
+The notification sound is *insistent*, so it repeats for the forty-five seconds
+instead of chirping once. If the `CallStyle` notification cannot be built, a
+plain loud notification opens the same place Answer does.
+
+### Settings tells you when a phone cannot ring
+
+Delivery can be perfect and the phone still silent: notifications off, the
+"Incoming calls" channel muted or turned down, or — from Android 14 — no
+full-screen permission, which only a calling app gets by default. Settings →
+Notifications → **Incoming calls** names the first of those that is wrong and
+opens the exact system screen for it.
+
 ### Dealing with a ring on one device stops the rest
 
 A ring is aimed at an **account**, and an account is not a device. It lands on
