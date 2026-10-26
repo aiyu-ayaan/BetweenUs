@@ -849,12 +849,21 @@ function writeSecrets(secrets: Record<string, string>): void {
   fs.writeFileSync(secretsFile(), JSON.stringify(secrets), { encoding: 'utf8', mode: 0o600 });
 }
 
+/** base64 of Chromium's "v10" / "v11" prefix on a `safeStorage` blob. */
+const SEALED_BY_KEYCHAIN = /^djE[wx]/;
+
 ipcMain.handle('secure:get', (_event, key: unknown): string | null => {
   if (typeof key !== 'string') return null;
   const stored = readSecrets()[key];
   if (stored === undefined) return null;
 
-  if (!safeStorage.isEncryptionAvailable()) return stored;
+  if (!safeStorage.isEncryptionAvailable()) {
+    // A value sealed on an earlier run, read now that the keychain is out of
+    // reach (launched from a shell with no keyring session, say). Handed back
+    // as it is it is ciphertext in base64 - Chromium's "v10"/"v11" prefix - and
+    // the first caller to JSON.parse it fails with "Unexpected token 'd'".
+    return SEALED_BY_KEYCHAIN.test(stored) ? null : stored;
+  }
   try {
     return safeStorage.decryptString(Buffer.from(stored, 'base64'));
   } catch {
