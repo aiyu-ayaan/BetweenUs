@@ -82,18 +82,13 @@ import type {
 import { DevicesService } from '../modules/devices/devices.service';
 import { messaging } from './firebase';
 import { focusedAmong } from './focus';
+import { lifetimeSeconds } from './lifetime';
 import { joined, namesOf, rosterChanged, worthAnnouncing } from './roster';
 import { threadMentionsOnly, threadParticipants } from './thread';
 import { sendWebPush, webPushReady } from './webpush';
 
 /** FCM's own ceiling for one `sendEach` call. */
 const MAX_PER_BATCH = 500;
-
-/**
- * How long a woken client has to be worth waking. Past this the message is
- * old news and the badge on next launch says it better than a late buzz.
- */
-const TIME_TO_LIVE_SECONDS = 60 * 60 * 24;
 
 /** What FCM says when a token is dead: an uninstall, a clear-data, an expiry. */
 const DEAD_TOKEN_CODES = new Set([
@@ -550,7 +545,16 @@ export class PushService implements OnModuleInit {
     const addresses = recipients.flatMap((recipient) =>
       (byUser.get(recipient.userId) ?? []).map((address) => ({ ...address, data: recipient.data })),
     );
-    if (addresses.length === 0) return;
+    if (addresses.length === 0) {
+      // Said rather than skipped: "she rang and nothing happened" is, from the
+      // server, either this or a rejected token, and the two read very
+      // differently in a log. Counts only - never a token or a user id.
+      this.logger.info('Push has nobody to reach', {
+        type: recipients[0]?.data.type,
+        recipients: recipients.length,
+      });
+      return;
+    }
 
     // Two transports, split on the column that says which. Both halves run,
     // because an account can have a phone and a browser and neither is a
@@ -592,7 +596,9 @@ export class PushService implements OnModuleInit {
         // The point of the push is a phone that is asleep, and a normal
         // priority data message is exactly what Doze holds back.
         priority: (options.urgent === false ? 'normal' : 'high') as 'normal' | 'high',
-        ttl: TIME_TO_LIVE_SECONDS * 1000,
+        // Per kind: a message is worth a day, a ring is worth the forty-five
+        // seconds it rings for. See `lifetime.ts`.
+        ttl: lifetimeSeconds(address.data) * 1000,
       },
     }));
 

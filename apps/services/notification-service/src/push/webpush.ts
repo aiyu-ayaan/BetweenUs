@@ -20,13 +20,7 @@
 import webpush, { WebPushError } from 'web-push';
 import { env, envOr } from '@betweenus/config';
 import type { PushData, WebPushSubscription } from '@betweenus/shared-types';
-
-/**
- * How long a push service should hold the message for a browser that is not
- * there. The same day the FCM path uses, for the same reason: past that the
- * message is old news and the badge on next launch says it better.
- */
-const TIME_TO_LIVE_SECONDS = 60 * 60 * 24;
+import { lifetimeSeconds } from './lifetime';
 
 let configured: boolean | null = null;
 
@@ -116,7 +110,8 @@ export async function sendWebPush(
       const subscription = parseSubscription(address.stored);
       if (!subscription) throw new Error('not a subscription');
       await webpush.sendNotification(subscription, JSON.stringify(address.data), {
-        TTL: TIME_TO_LIVE_SECONDS,
+        // The FCM path's lifetimes, for the same reason: see `lifetime.ts`.
+        TTL: lifetimeSeconds(address.data),
         // `high` wakes a service worker promptly; `normal` lets the browser
         // batch it with whatever else it was going to do. The distinction is
         // the same one the Android path makes with Doze.
