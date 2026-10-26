@@ -2,14 +2,32 @@
 package com.aatech.betweenus.ui.components
 
 /**
- * The BetweenUs mark on a 256 box: two faces, left and right, whose gap is the
- * shape they share. Split in two so the faces can be animated leaning in.
+ * The BetweenUs mark on a 256 box: a lowercase b whose bowl is a speech bubble.
+ * Three parts so it can be animated - the bubble pops, the stem rises, the tail
+ * flicks out - and three typing dots that play in the bowl while it waits.
  */
 internal object BrandMarkPaths {
-    const val LEFT = "M106 26.35C106.17 31.63 106.5 48.39 107 58C107.5 67.61 106.67 76.33 109 84C111.33 91.67 118.83 99.5 121 104C123.17 108.5 123.67 107.83 122 111C120.33 114.17 111.83 118.5 111 123C110.17 127.5 116.83 133.67 117 138C117.17 142.33 112 145.33 112 149C112 152.67 116.5 156.17 117 160C117.5 163.83 117.17 165.67 115 172C112.83 178.33 106.83 188.74 104 198C101.17 207.26 99 222.65 98 227.58A104 104 0 0 1 106 26.35Z"
-    const val RIGHT = "M150 26.35C149.83 31.63 149.5 48.39 149 58C148.5 67.61 149.33 76.33 147 84C144.67 91.67 137.17 99.5 135 104C132.83 108.5 132.33 107.83 134 111C135.67 114.17 144.17 118.5 145 123C145.83 127.5 139.17 133.67 139 138C138.83 142.33 144 145.33 144 149C144 152.67 139.5 156.17 139 160C138.5 163.83 138.83 165.67 141 172C143.17 178.33 149.17 188.74 152 198C154.83 207.26 157 222.65 158 227.58A104 104 0 0 0 150 26.35Z"
+    const val STEM = "M54 42A19 19 0 0 1 92 42V218H54Z"
+    const val BOWL = "M74 148A70 70 0 0 1 214 148A70 70 0 0 1 74 148ZM112 148A32 32 0 0 0 176 148A32 32 0 0 0 112 148Z"
+    const val TAIL = "M54 182L40.6 232L115.49 211.93L135.4 198.27L92 182Z"
 
-    /** Only a nose and a chin, for 24dp and under. */
-    const val LEFT_SMALL = "M104 26.81C104.33 34.01 103.67 56.8 106 70C108.33 83.2 116.33 98.67 118 106C119.67 113.33 118 110 116 114C114 118 106.33 121 106 130C105.67 139 115.33 151.74 114 168C112.67 184.26 100.67 217.65 98 227.58A104 104 0 0 1 104 26.81Z"
-    const val RIGHT_SMALL = "M152 26.81C151.67 34.01 152.33 56.8 150 70C147.67 83.2 139.67 98.67 138 106C136.33 113.33 138 110 140 114C142 118 149.67 121 150 130C150.33 139 140.67 151.74 142 168C143.33 184.26 155.33 217.65 158 227.58A104 104 0 0 0 152 26.81Z"
+    /** Heavier, for 24dp and under, where the counter would close up. */
+    const val STEM_SMALL = "M51 45A22 22 0 0 1 95 45V220H51Z"
+    const val BOWL_SMALL = "M72 148A72 72 0 0 1 216 148A72 72 0 0 1 72 148ZM116 148A28 28 0 0 0 172 148A28 28 0 0 0 116 148Z"
+    const val TAIL_SMALL = "M51 182L37.6 232L111.44 212.22L133.12 196.8L95 182Z"
+
+    /** Where the bubble pops from, and where the dots sit. */
+    const val BOWL_X = 144f
+    const val BOWL_Y = 148f
+
+    /** The stem rises from its foot. */
+    const val STEM_FOOT_Y = 218f
+
+    /** The tail flicks out from where it meets the stem and the bowl. */
+    const val TAIL_X = 92f
+    const val TAIL_Y = 190f
+
+    /** The typing dots' centres along [BOWL_Y], and their radius. */
+    val DOTS_X = floatArrayOf(129f, 144f, 159f)
+    const val DOT_R = 6f
 }

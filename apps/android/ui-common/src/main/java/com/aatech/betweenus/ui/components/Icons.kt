@@ -130,8 +130,8 @@ fun BetweenUsLogo(
     tint: Color = MaterialTheme.colorScheme.primary,
     size: Dp = 24.dp,
 ) {
-    // At 24dp and under the full drawing's lips close up; the small cut keeps
-    // only a nose and a chin, which still read.
+    // At 24dp and under the full drawing's counter closes up; the small cut
+    // is heavier, with a smaller counter, and still reads.
     BetweenUsIcon(if (size <= 24.dp) BetweenUsIcons.LogoSmall else BetweenUsIcons.Logo, modifier, tint, size)
 }
 
@@ -143,7 +143,7 @@ fun BetweenUsLogo(
  * and Material's own shape set is what says "expressive" before a single word
  * has been read.
  *
- * [motion] lets the faces slide in as the screen opens - the same entrance as
+ * [motion] lets the mark pop in as the screen opens - the same entrance as
  * the splash the screen follows.
  */
 @Composable

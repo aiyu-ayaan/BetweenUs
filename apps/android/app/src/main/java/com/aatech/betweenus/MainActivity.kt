@@ -50,7 +50,7 @@ private const val SPLASH_MS = 700L
 class MainActivity : ComponentActivity() {
     /**
      * Android 12+ takes the system splash down at the first drawn frame, which
-     * on a warm device is before the faces have met. On a cold start, hold that
+     * on a warm device is before the tail has flicked out. On a cold start, hold that
      * frame until the splash animation has finished.
      */
     private fun holdSplash(coldStart: Boolean) {

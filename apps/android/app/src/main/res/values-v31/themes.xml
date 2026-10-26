@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <!-- Android 12+: the system splash plays the animated mark - the two faces
-         slide in and lean in - on the same near-black ground as the app, so
+    <!-- Android 12+: the system splash plays the animated mark - the bubble
+         pops, the stem rises, the tail flicks out - on the same near-black ground as the app, so
          the hand-over to the first frame is a change of mark and nothing
          else. See drawable/splash_mark (written by design/brand/build.py). -->
     <style name="Theme.BetweenUs" parent="android:Theme.Material.NoActionBar">

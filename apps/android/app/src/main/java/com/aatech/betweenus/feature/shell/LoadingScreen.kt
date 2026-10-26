@@ -38,7 +38,7 @@ import kotlinx.coroutines.delay
  * What the phone shows while a session is being restored.
  *
  * The same screen the desktop draws, in this platform's own idiom - a mark
- * whose two faces lean in by turns, rather than a spinner. A spinner says something is happening; a brand mark says *which
+ * with typing dots playing in its bubble, rather than a spinner. A spinner says something is happening; a brand mark says *which
  * application* is being waited for, which matters most on the one screen that
  * appears before anything else identifies it.
  *
@@ -134,10 +134,10 @@ fun LoadingScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Spacer(Modifier.weight(1f))
-            // The system splash has just played the faces' entrance, so they
-            // carry on from rest, leaning in by turns - the same motion the
-            // desktop's boot screen settles into, and the whole "working"
-            // signal: there is no spinner beside it.
+            // The system splash has just played the mark's entrance, so it
+            // carries on from rest with typing dots in the bubble - the same
+            // motion the desktop's boot screen settles into, and the whole
+            // "working" signal: there is no spinner beside it.
             BetweenUsMark(
                 color = scheme.primary,
                 modifier = Modifier.size(MARK_DP),
