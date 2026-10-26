@@ -63,7 +63,7 @@ import { ShortcutSheet } from './components/ShortcutSheet';
 import { BackupNotice } from './components/BackupNotice';
 import { opensShortcutSheet } from './services/shortcuts';
 import { QuickSwitcher } from './features/shell/QuickSwitcher';
-import { LoadingScreen, MIN_BOOT_MS } from './features/shell/LoadingScreen';
+import { BOOT_EXIT_MS, LoadingScreen, MIN_BOOT_MS } from './features/shell/LoadingScreen';
 import { useVoiceStore } from './stores/voice';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { closedPanelProps, useFocusTrap } from './services/focus-trap';
@@ -97,6 +97,14 @@ function Session(): JSX.Element {
   // Sign-in is attempted before anything renders, so a restored or scripted
   // session never flashes the login form on the way in.
   const [booting, setBooting] = useState(true);
+  // The boot screen outlives the boot by its exit: it stays over whatever
+  // replaced it while it fades, and only then unmounts.
+  const [curtain, setCurtain] = useState(true);
+  useEffect(() => {
+    if (booting) return;
+    const gone = window.setTimeout(() => setCurtain(false), BOOT_EXIT_MS);
+    return () => window.clearTimeout(gone);
+  }, [booting]);
 
   // Before anything else, and before the first render: a window opened by an
   // invite link has the code in its address bar, and the sign-in that may
@@ -413,11 +421,15 @@ function Session(): JSX.Element {
     resetPresence,
   ]);
 
-  if (booting) return <LoadingScreen />;
-
-  if (status !== 'authenticated') return <LoginScreen />;
-
-  return <Workbench />;
+  // Both in one fragment, the boot screen always second: it keeps its place in
+  // the tree across `booting` flipping, so it is the same element that plays
+  // the exit - remounting it would start the mark's entrance over.
+  return (
+    <>
+      {!booting && (status !== 'authenticated' ? <LoginScreen /> : <Workbench />)}
+      {curtain && <LoadingScreen leaving={!booting} />}
+    </>
+  );
 }
 
 /**

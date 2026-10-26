@@ -51,6 +51,16 @@ export const TIP_DELAY_MS = 2300;
 export const TIP_ROTATE_MS = 4500;
 
 /**
+ * How long the screen takes to leave once the session is ready.
+ *
+ * It does not cut to the workbench: it stays on top of it and fades, the mark
+ * growing a little as it goes, so the app is uncovered rather than swapped in.
+ * Short on purpose - this is the one part of the wait that is pure decoration.
+ * `animate-boot-out` in index.css runs for the same time.
+ */
+export const BOOT_EXIT_MS = 320;
+
+/**
  * Things that are true about this product specifically.
  *
  * Not filler. Every line is something somebody might not know and can act on,
@@ -67,7 +77,11 @@ export const TIPS: readonly string[] = [
   'Your remote machines dial out. No inbound port is ever opened for them.',
 ];
 
-export function LoadingScreen(): JSX.Element {
+/**
+ * `leaving`: the session is ready and the screen behind this one has already
+ * rendered; play the exit. The parent unmounts this after [[BOOT_EXIT_MS]].
+ */
+export function LoadingScreen({ leaving = false }: { leaving?: boolean }): JSX.Element {
   // How long the page has been up when this mounts - the splash in index.html
   // started its animation at the first paint, and this one continues it.
   const [startedAt] = useState(() => Math.round(performance.now()));
@@ -94,10 +108,13 @@ export function LoadingScreen(): JSX.Element {
 
   return (
     <div
-      className="flex h-full h-[100dvh] flex-col items-center bg-ground px-8"
+      className={`fixed inset-0 z-[90] flex h-[100dvh] flex-col items-center bg-ground px-8 ${
+        leaving ? 'pointer-events-none animate-boot-out' : ''
+      }`}
       style={{ '--mark-t': `${startedAt}ms` } as CSSProperties}
-      role="status"
-      aria-busy="true"
+      role={leaving ? undefined : 'status'}
+      aria-busy={!leaving}
+      aria-hidden={leaving || undefined}
       aria-live="polite"
     >
       {/* The mark at the exact centre and everything else hung underneath,

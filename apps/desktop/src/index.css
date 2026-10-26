@@ -752,8 +752,18 @@
   .animate-wordmark-in {
     animation: mark-word-in 420ms cubic-bezier(0.2, 0.8, 0.2, 1) calc(520ms - var(--mark-t, 0ms)) both;
   }
+  /* The boot screen leaving (BOOT_EXIT_MS): it fades off the screen it was
+     covering while the mark grows a little, as if stepping aside. The screen
+     itself is untouched underneath - it was rendered first. */
+  .animate-boot-out {
+    animation: boot-out 320ms cubic-bezier(0.4, 0, 1, 1) both;
+  }
+  .animate-boot-out > svg {
+    animation: boot-out-mark 320ms cubic-bezier(0.4, 0, 1, 1) both;
+  }
   @media (prefers-reduced-motion: reduce) {
-    .animate-wordmark-in {
+    .animate-wordmark-in,
+    .animate-boot-out > svg {
       animation: none;
     }
   }
@@ -883,6 +893,18 @@
   from {
     transform: translateY(4px);
     opacity: 0;
+  }
+}
+
+@keyframes boot-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes boot-out-mark {
+  to {
+    transform: scale(1.12);
   }
 }
 

@@ -9,7 +9,7 @@
  * the mark up the screen.
  */
 import assert from 'node:assert/strict';
-import { LoadingScreen, MIN_BOOT_MS, TIPS, TIP_DELAY_MS, TIP_ROTATE_MS } from './LoadingScreen';
+import { BOOT_EXIT_MS, LoadingScreen, MIN_BOOT_MS, TIPS, TIP_DELAY_MS, TIP_ROTATE_MS } from './LoadingScreen';
 
 assert.equal(typeof LoadingScreen, 'function');
 
@@ -36,6 +36,10 @@ assert.ok(
   TIP_ROTATE_MS >= longest * 200,
   `the rotation (${TIP_ROTATE_MS}ms) is shorter than the longest tip takes to read`,
 );
+
+// The exit uncovers the app rather than cutting to it, and stays decoration:
+// long enough to read as a fade, never long enough to be waited on.
+assert.ok(BOOT_EXIT_MS >= 150 && BOOT_EXIT_MS <= 500, 'the boot exit should be a beat, not a wait');
 
 assert.ok(TIPS.length >= 3, 'one or two tips is a rotation somebody notices repeating');
 assert.equal(new Set(TIPS).size, TIPS.length, 'a duplicated tip reads as the screen being stuck');
