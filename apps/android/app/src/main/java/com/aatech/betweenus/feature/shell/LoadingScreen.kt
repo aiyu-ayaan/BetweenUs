@@ -1,6 +1,8 @@
 package com.aatech.betweenus.feature.shell
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -27,6 +29,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.aatech.betweenus.core.data.Session
@@ -100,6 +104,16 @@ object BootTips {
 /** The mark's size here: the same as `drawable/splash_mark` draws it, so the hand-over does not jump. */
 private val MARK_DP = 88.dp
 
+/** The desktop's entrance curve (`mark-word-in` in index.css). */
+private val EnterEasing = CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f)
+
+/**
+ * When the wordmark starts rising in, from this screen appearing. The system
+ * splash has just played the mark's entrance, so the line follows it a beat
+ * later - the order the desktop's boot screen plays them in.
+ */
+private const val WORDMARK_DELAY_MS = 120L
+
 @Composable
 fun LoadingScreen(
     problem: String? = null,
@@ -107,6 +121,15 @@ fun LoadingScreen(
     onSignIn: () -> Unit = {},
 ) {
     val scheme = MaterialTheme.colorScheme
+    // 0 until the wordmark has risen in under the mark, then 1.
+    // Previews draw it in place: they never run the effect that brings it in.
+    val still = LocalInspectionMode.current
+    val word = remember { Animatable(if (still) 1f else 0f) }
+    LaunchedEffect(Unit) {
+        if (still) return@LaunchedEffect
+        delay(WORDMARK_DELAY_MS)
+        word.animateTo(1f, tween(420, easing = EnterEasing))
+    }
     // Null until the wait has become a wait. `-1` would be the first tip, which
     // is the thing this is avoiding.
     var tip by remember { mutableStateOf<Int?>(null) }
@@ -153,6 +176,13 @@ fun LoadingScreen(
                     text = "BETWEENUS",
                     style = MaterialTheme.typography.labelLarge,
                     color = scheme.onSurfaceVariant,
+                    // Up 4dp and in, as on the desktop. A layer, not an
+                    // offset: the line still takes its place from the first
+                    // frame, so nothing under it moves.
+                    modifier = Modifier.graphicsLayer {
+                        alpha = word.value
+                        translationY = (1f - word.value) * 4.dp.toPx()
+                    },
                 )
 
                 // Everything here hangs from the top, so the line arriving
