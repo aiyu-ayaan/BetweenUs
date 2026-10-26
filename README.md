@@ -1,267 +1,54 @@
+<img src="design/brand/app-icon.svg" alt="BetweenUs logo" width="72" />
+
 # BetweenUs
 
-<p align="center">
-  <a href="video.mp4">
-    <img src="pictures/home.png" alt="BetweenUs Client Preview - Click to Watch Demo Video" width="100%" />
-  </a>
-</p>
+[![CI](https://img.shields.io/github/actions/workflow/status/aiyu-ayaan/BetweenUs/ci.yml?branch=master&label=ci&logo=githubactions&logoColor=white)](https://github.com/aiyu-ayaan/BetweenUs/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/actions/workflow/status/aiyu-ayaan/BetweenUs/release.yml?branch=master&label=release&logo=githubactions&logoColor=white)](https://github.com/aiyu-ayaan/BetweenUs/actions/workflows/release.yml)
+[![Latest release](https://img.shields.io/github/v/release/aiyu-ayaan/BetweenUs?include_prereleases&label=version&logo=github)](https://github.com/aiyu-ayaan/BetweenUs/releases)
+[![License: Source-Available](https://img.shields.io/badge/license-Source--Available-blueviolet)](LICENSE)
+[![Last commit](https://img.shields.io/github/last-commit/aiyu-ayaan/BetweenUs/master)](https://github.com/aiyu-ayaan/BetweenUs/commits/master)
+[![Lines of code](https://sloc.xyz/github/aiyu-ayaan/BetweenUs?v=1)](https://github.com/aiyu-ayaan/BetweenUs)
 
-<p align="center">
-  <a href="video.mp4">▶️ <b>Watch 9:16 Feature Showcase Video (video.mp4)</b></a> &nbsp;•&nbsp; <a href="https://aiyu-ayaan.github.io/BetweenUs/features">📖 <b>Interactive Features &amp; Video Tour</b></a>
-</p>
+![TypeScript](https://img.shields.io/badge/backend-NestJS%20%2B%20TypeScript-E0234E?logo=nestjs&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/database-PostgreSQL%2016-4169E1?logo=postgresql&logoColor=white)
+![Redis](https://img.shields.io/badge/realtime-Redis%207-DC382D?logo=redis&logoColor=white)
+![React](https://img.shields.io/badge/web-React%20%2B%20TypeScript-149ECA?logo=react&logoColor=white)
+![Electron](https://img.shields.io/badge/desktop-Electron-47848F?logo=electron&logoColor=white)
+![Android](https://img.shields.io/badge/android-Kotlin%20%2B%20Compose-3DDC84?logo=android&logoColor=white)
+![WebRTC](https://img.shields.io/badge/calls-WebRTC%20P2P%20mesh-333333?logo=webrtc&logoColor=white)
+![E2EE](https://img.shields.io/badge/E2EE-AES--256--GCM-success?logo=letsencrypt&logoColor=white)
+![Monorepo](https://img.shields.io/badge/monorepo-pnpm%20%2B%20Turborepo-F69220?logo=pnpm&logoColor=white)
+![Platforms](https://img.shields.io/badge/platforms-Web%20%7C%20Linux%20%7C%20Windows%20%7C%20Android-informational)
 
-<p align="center">
-  <a href="https://github.com/aiyu-ayaan/BetweenUs"><img src="https://sloc.xyz/github/aiyu-ayaan/BetweenUs?v=1" alt="Total Lines of Code" /></a>
-  <a href="https://github.com/aiyu-ayaan/BetweenUs"><img src="https://img.shields.io/github/repo-size/aiyu-ayaan/BetweenUs?style=flat-square&logo=github&logoColor=white" alt="Repo Size" /></a>
-  <a href="https://github.com/aiyu-ayaan/BetweenUs/commits/master"><img src="https://img.shields.io/github/last-commit/aiyu-ayaan/BetweenUs?style=flat-square&logo=git&logoColor=white" alt="Last Commit" /></a>
-  <img src="https://img.shields.io/badge/monorepo-pnpm%20%2B%20Turborepo-F69220?style=flat-square&logo=pnpm&logoColor=white" alt="Monorepo" />
-  <img src="https://img.shields.io/badge/TypeScript-5.5+-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" />
-  <img src="https://img.shields.io/badge/Node.js-20+-339933?style=flat-square&logo=nodedotjs&logoColor=white" alt="Node.js" />
-  <img src="https://img.shields.io/badge/NestJS-10-E0234E?style=flat-square&logo=nestjs&logoColor=white" alt="NestJS" />
-  <img src="https://img.shields.io/badge/Electron-31-47848F?style=flat-square&logo=electron&logoColor=white" alt="Electron" />
-  <img src="https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React" />
-  <img src="https://img.shields.io/badge/Android-Jetpack%20Compose-3DDC84?style=flat-square&logo=android&logoColor=white" alt="Android Compose" />
-  <img src="https://img.shields.io/badge/Kotlin-2.2-7F52FF?style=flat-square&logo=kotlin&logoColor=white" alt="Kotlin" />
-  <img src="https://img.shields.io/badge/E2EE-AES--256--GCM-success?style=flat-square&logo=shield&logoColor=white" alt="E2EE Security" />
-  <img src="https://img.shields.io/badge/WebRTC-P2P%20Mesh-333333?style=flat-square&logo=webrtc&logoColor=white" alt="WebRTC P2P" />
-  <img src="https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat-square&logo=postgresql&logoColor=white" alt="PostgreSQL" />
-  <img src="https://img.shields.io/badge/Redis-7-DC382D?style=flat-square&logo=redis&logoColor=white" alt="Redis" />
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Source--Available-blueviolet?style=flat-square" alt="License" /></a>
-</p>
+A private chat platform you run yourself, built for people who would rather own
+their conversations than rent them. Messages and attachments are end-to-end
+encrypted on the client and the server only ever stores ciphertext; voice,
+video and screen sharing go straight between participants over a peer-to-peer
+WebRTC mesh, with no media server at all. NestJS microservices in a pnpm +
+Turborepo monorepo, with an Electron desktop app, the same UI as a web client,
+and a native Android app.
 
-A modern, secure communication platform with end-to-end encrypted messaging, peer-to-peer (P2P) WebRTC voice/video channels, interactive screen sharing, picture-in-picture, synchronised listening, and remote desktop access. Built as a high-performance pnpm + Turborepo monorepo of NestJS microservices with Desktop (Electron), Web (React), and Native Mobile (Android Jetpack Compose) clients.
+- **End-to-end encrypted** messages, attachments (chunked past 100 MiB), polls, threads, edit history and Moments; history sealed at rest on each device
+- **Servers and channels**: custom roles and colours, per-member overrides, private channels, categories, invite links that expire, custom emoji, webhooks
+- **Peer-to-peer calls**: voice, camera and screen share with no media server, push to talk, picture-in-picture, and a connection panel
+- **Listen together** (a shared YouTube queue, in step, ducking under speech) and **play together** (six board games, Carrom with real physics)
+- **Moments**: photo, video and text posts that vanish after 24 hours, sealed for the friends you had when you posted
+- **One-time media**, disappearing messages, blocking, and clearing a conversation on every device
+- **Remote desktop**: a machine dials out to the gateway, so no inbound port is ever opened, with per-person grants and an audit trail
+- **Presence and profiles**: online / idle / DND / invisible, last seen with a privacy setting, a cover picture and an about line
+- **Notifications** that WhatsApp-style stay quiet for a chat open on another of your devices; FCM on Android, sealed so only the phone can read them
+- Desktop (Windows, Linux), web and a native Android app, all self-updating from GitHub Releases on an alpha / beta / stable channel
+- One-command deployment from published Docker images, Cloudflare Tunnel ingress, S3-compatible file storage
 
-Messages and attachments are encrypted on the client, and the server stores and routes only ciphertext. The server also holds each account's vault key, sealed with the deployment's settings secret, so signing in on any device brings the whole history with nothing to type — the Discord-style trade, stated plainly in `development/devdocs/E2EE.md`. Call media is end-to-end encrypted and never touches a server. Voice, video, and screen sharing stream directly between participants via a peer-to-peer WebRTC mesh with DTLS-SRTP encryption — requiring zero media server infrastructure.
+The vault key is held by the server, sealed with the deployment's settings secret, so signing in on any
+device brings the whole history with nothing to type - the Discord-style trade, stated plainly in
+[`development/devdocs/E2EE.md`](development/devdocs/E2EE.md).
 
-`CLAUDE.md` is the target architecture. `development/` tracks what is built, why each decision was taken, and what is deliberately left open. `docs/` is the complete documentation suite covering architecture, services, system design, security, and step-by-step deployment with Docker Compose and Cloudflare Tunnels.
+Architecture and diagrams: [`development/claude.md`](development/claude.md) and [`docs/`](docs/), summarised [below](#how-it-fits-together).
+Brand mark and its motion: [`development/devdocs/BRAND.md`](development/devdocs/BRAND.md).
+Progress and what is left open on purpose: [`development/TODO.md`](development/TODO.md).
 
----
-
-## Feature Showcase Gallery
-
-A visual tour of BetweenUs across desktop, web, and native mobile platforms:
-
-- **Desktop Workbench ([`pictures/home.png`](pictures/home.png))**: Floating panel architecture, E2EE chat, inline code, emoji reactions.
-- **Native Android Client ([`pictures/home-android.png`](pictures/home-android.png))**: Jetpack Compose Material 3 interface, WhatsApp-style media picker, Moments story rings.
-- **Voice & Collaborative Activities ([`pictures/voice-listen-play.png`](pictures/voice-listen-play.png))**: Direct P2P WebRTC mesh, synchronized YouTube player with audio ducking, in-call Carrom board physics.
-- **24-Hour Ephemeral Moments ([`pictures/moments-viewer.png`](pictures/moments-viewer.png))**: Full-screen story player, recipient key directory freezing, on-device decryption.
-- **Secure Outbound Remote Desktop ([`pictures/remote-desktop.png`](pictures/remote-desktop.png))**: Zero inbound port dial-out, live low-latency stream, telemetry monitor.
-
-### Desktop Workbench
-Floating panel architecture, E2EE chat, inline code, emoji reactions.
-
-<p align="center">
-  <a href="pictures/home.png">
-    <img src="pictures/home.png" alt="Desktop Workbench - pictures/home.png" width="100%" />
-  </a>
-</p>
-
-### Voice & Collaborative Activities
-Direct P2P WebRTC mesh, synchronized YouTube player with audio ducking, in-call Carrom board physics.
-
-<p align="center">
-  <a href="pictures/voice-listen-play.png">
-    <img src="pictures/voice-listen-play.png" alt="Voice & Collaborative Activities - pictures/voice-listen-play.png" width="100%" />
-  </a>
-</p>
-
-### Native Android Client & 24-Hour Ephemeral Moments
-Jetpack Compose Material 3 interface, WhatsApp-style media picker, Moments story rings, and on-device decryption.
-
-<p align="center">
-  <a href="pictures/home-android.png">
-    <img src="pictures/home-android.png" alt="Native Android Client - pictures/home-android.png" width="46%" />
-  </a>
-  &nbsp;&nbsp;&nbsp;&nbsp;
-  <a href="pictures/moments-viewer.png">
-    <img src="pictures/moments-viewer.png" alt="24-Hour Ephemeral Moments - pictures/moments-viewer.png" width="46%" />
-  </a>
-</p>
-
-### Secure Outbound Remote Desktop
-Zero inbound port dial-out, live low-latency stream, telemetry monitor.
-
-<p align="center">
-  <a href="pictures/remote-desktop.png">
-    <img src="pictures/remote-desktop.png" alt="Secure Outbound Remote Desktop - pictures/remote-desktop.png" width="100%" />
-  </a>
-</p>
-
----
-
-## Status
-
-| Area | State |
-| --- | --- |
-| Accounts | Register, login, refresh-token rotation with reuse detection, Google and GitHub sign-in, admin panel |
-| Servers | Servers, custom roles with colours, per-member permission overrides, invite links that expire and can be revoked, custom emoji, incoming webhooks, server settings |
-| Channels | Public and private text channels, private channels as an allowlist, categories you can fold away and drag into order, direct messages between friends |
-| Messages & Chat | End-to-end encrypted, realtime over WebSocket, history paging in both directions, replies, `:` emoji search, per-server custom emoji including animated, reactions with who-reacted names, refereed polls (the server counts option indexes and never reads the question), drag-and-drop and a preview before sending, full-screen zoomable image viewer, integrated video player, and local media album saving |
-| Voice and video | Peer-to-peer voice channels, camera, one screen share at a time with takeover, join and leave tones, manual quality override, end-to-end encrypted media, no media server |
-| Listen together | A shared YouTube queue inside a voice call: everyone hears the same track in step, from their own connection, at full quality. Audio only - no picture, and no stream between anybody. The desktop app plays the real youtube.com, so a label's music video plays where an embed refuses it. Browse the site inside the app, signed in as yourself, and queue what you are looking at. Anybody can add, skip or pause; music ducks under whoever is talking |
-| Play together | Six board games inside a voice call - Tic-tac-toe, Connect Four, Reversi, Dots and Boxes, Ludo, and Carrom with a real physics simulation. One board everybody sees, two chairs anybody can take, and a rematch button. `call-service` referees the moves, so a move is a number on the wire rather than somebody's screen being streamed |
-| Android Client | Native Jetpack Compose + Material 3 app with E2EE messaging, WhatsApp-style media picker and composer, media viewers, and public gallery saving (`Pictures/BetweenUs`, `Movies/BetweenUs`) |
-| Presence | Online / idle / do not disturb / invisible, last seen with a three-tier privacy setting, typing indicators, voice rosters |
-| Profiles | An avatar and a wide cover picture on every account, an about line, a card - hovered on desktop and web, double-tapped on Android - carrying the picture, whether they are here, when they were last here and what their line says, and a full profile screen behind it for the whole line at a size worth reading |
-| Moments | Photo, video and text posts that disappear after 24 hours, seen by the people you are friends with - a full-screen player with a bar per post, tap to move, hold to pause, a segmented ring around an avatar counting what is unwatched, and a list of who has seen yours. **End-to-end encrypted, with the audience frozen when the post is written**: the key is wrapped once per device of every friend you have at that moment, so somebody who becomes a friend tomorrow does not see today's post |
-| Webhooks | A URL you give another system so it can post into a channel - a build server, an alerting stack, a `curl` in a deploy script. Discord's request shape, so an integration already pointed at Discord works by changing only the URL. **These messages are the one thing here that is not end-to-end encrypted, and every client says so on every one of them** |
-| Notifications | Desktop notifications, system tray, start with the system, per-channel and per-person mute, quiet hours, persisted unread with a line that survives a restart |
-| Remote desktop | A machine offers itself from Settings, dials out to the gateway, and is viewed and driven from another client; per-machine permissions with expiry, and an audit trail |
-
-## Features, and where each one works
-
-**Desktop** is the Electron app, **Web** is the same UI in a browser tab
-(`apps/web` mounts `apps/desktop/src`, so they are one codebase), and
-**Android** is the native Compose client.
-
-Where the three differ it is almost always for one reason: screen capture by
-source, synthetic mouse and keyboard input and the OS keychain live behind the
-Electron preload bridge, and a browser tab has none of them. Browsing YouTube
-inside the app is the one exception with a different cause - youtube.com refuses
-to be framed, so no browser tab can ever show it.
-
-| | Desktop | Web | Android |
-| --- | :---: | :---: | :---: |
-| **Accounts** | | | |
-| Register, sign in, refresh-token rotation | ✅ | ✅ | ✅ |
-| Google and GitHub sign-in | ✅ | ✅ | ✅ |
-| Display name, avatar, change password | ✅ | ✅ | ✅ |
-| Cover picture behind your name | ✅ | ✅ | ✅ |
-| Full profile screen, from the card or the sheet | ✅ | ✅ | ✅ |
-| Settings grouped: Account, Preferences, This Device, Deployment | ✅ | ✅ | ✅ |
-| Username checked while you type, and unique | ✅ | ✅ | ✅ |
-| Forgotten password: emailed link, or an admin-opened reset | ✅ | ✅ | ✅ |
-| Encryption identity: unlock, backup secret | ✅ | ✅ | ✅ |
-| Told when this machine holds the only copy of your key | ✅ | ✅ | — |
-| Device list and revoking a device | ✅ | ✅ | — |
-| Point the client at another deployment | ✅ | ✅ | ✅ |
-| Adaptive layout: two panes on tablets and unfolded foldables | ✅ | ✅ | ✅ |
-| Admin panel | \* | \* | \* |
-| **Servers and channels** | | | |
-| Create a server, join one, leave or delete | ✅ | ✅ | ✅ |
-| Invite links: create, expiry, use limit, revoke | ✅ | ✅ | ✅ |
-| Invite preview card before joining | ✅ | ✅ | ✅ |
-| Webhooks: create, rotate the URL, delete | ✅ | ✅ | ✅ |
-| Webhook messages badged as not encrypted | ✅ | ✅ | ✅ |
-| Server icon | ✅ | ✅ | ✅ |
-| Custom roles: create, colour, permissions, delete | ✅ | ✅ | ✅ |
-| Per-member permission overrides | ✅ | ✅ | ✅ |
-| Add a friend to a server, kick, change role | ✅ | ✅ | ✅ |
-| Text and voice channels, private channel allowlists | ✅ | ✅ | ✅ |
-| Channel categories: collapse, drag or keyboard to reorder | ✅ | ✅ | ✅ long-press Move up / down; create, rename, delete and create-into from the drawer |
-| Custom emoji: add and remove | ✅ | ✅ | ✅ |
-| **Messaging** | | | |
-| End-to-end encrypted messages, realtime, history paging | ✅ | ✅ | ✅ |
-| Direct messages and friends | ✅ | ✅ | ✅ |
-| Block somebody | ✅ | ✅ | ✅ |
-| Clear one conversation, or all, on every device | ✅ | ✅ | ✅ |
-| Disappearing messages — a server's window, and your own | ✅ | ✅ | ✅ |
-| One-time photos, video and voice, destroyed once seen | ✅ capture blocked | — opens in the app | ✅ `FLAG_SECURE` |
-| Voice messages, with a waveform, played in place | ✅ | ✅ | ✅ |
-| Replies, edit, delete, reactions | ✅ | ✅ | ✅ |
-| Edit history — tap "(edited)" to see earlier versions, sealed like the message and opened on the device | ✅ popover | ✅ popover | ✅ bottom sheet |
-| Polls, refereed not decrypted (vote, change, retract, close) | ✅ create + vote | ✅ create + vote | ✅ create + vote |
-| Threads — a side conversation under one message, with an "N replies" chip, follow / unfollow, unread badge, followed list and files in a reply | ✅ side panel | ✅ side panel | ✅ own screen |
-| Pinned messages, paged as you scroll | ✅ | ✅ | ✅ |
-| Scheduled send and remind-me (kept on the device, never on the server) | ✅ | ✅ | ✅ |
-| Custom emoji in messages | ✅ | ✅ | ✅ |
-| `:` emoji suggestion menu while typing | ✅ | ✅ | ✅ a bar |
-| Emoji picker, including the server's own | ✅ | ✅ | ✅ |
-| Search within a channel, walking back through older history on the device in capped runs | ✅ | ✅ | ✅ |
-| Quick switcher | ✅ Ctrl+K | ✅ Ctrl+K | ✅ drawer |
-| Search a conversation from the keyboard (Ctrl+F) | ✅ | ✅ | — |
-| Keyboard shortcut sheet (`?`) | ✅ | ✅ | — |
-| Message density: cozy or compact | ✅ | ✅ | — |
-| Attachments of any type, up to 100 MB (2 GB from desktop and web) | ✅ | ✅ | ✅ |
-| Sending survives leaving the screen | — | — | ✅ foreground service |
-| HEIC photos converted, photos re-encoded on the way out | ✅ | ✅ | ✅ |
-| Preview before sending, multi-select, captions | ✅ | ✅ | ✅ |
-| Drag and drop into the composer | ✅ | ✅ | — |
-| Zoomable image viewer, video player | ✅ | ✅ | ✅ |
-| Save media to the device gallery | download | download | ✅ `Pictures/BetweenUs` |
-| **Voice, video and screen share** | | | |
-| Peer-to-peer voice channels | ✅ | ✅ | ✅ |
-| Camera | ✅ | ✅ | ✅ |
-| Screen share | ✅ | ✅ | ✅ |
-| Join a share to watch it, encoded only for who joined | ✅ | ✅ | ✅ |
-| Stage pin kept through leaving and rejoining the call | ✅ | ✅ | ✅ |
-| Tiles shaped to the picture (portrait and landscape) | ✅ | ✅ | ✅ |
-| Ask to drive somebody's shared screen | ✅ | ✅ | ✅ on the share stage |
-| Be driven while sharing your screen | ✅ | — | — |
-| Share system audio without the call echoing back | ✅ Windows, Linux (PipeWire) | — | — |
-| Manual quality override | ✅ | ✅ | ⚠️ automatic |
-| Connection panel: bitrate, loss, round trip, frame size | ✅ | ✅ | ✅ |
-| Reconnects a dropped link, and ends a call it cannot recover | ✅ | ✅ | ✅ |
-| Push to talk | ✅ a held key | ✅ a held key | ✅ a held button |
-| Picture-in-picture while minimised | ✅ kept out of your own share on Windows and macOS | — no window to minimise; the call stays in its tab | ✅ the system window, on leaving the app in a call with video |
-| Join and leave tones | ✅ | ✅ | ✅ |
-| **Listen together** | | | |
-| Shared queue in a call, in step, video on screen | ✅ | ✅ | ✅ |
-| Add, skip, seek or pause for everybody | ✅ | ✅ | ⚠️ skip, pause, remove |
-| Music ducks under whoever is talking | ✅ | ✅ | ✅ |
-| Browse youtube.com in the app, signed in | ✅ | — | — |
-| Paste a link | ✅ | ✅ | — |
-| Video on the stage, with a shared transport | ✅ | ✅ | ✅ |
-| **Play together** | | | |
-| Six board games on the call stage | ✅ | ✅ | ⚠️ three played, three watched |
-| One **Apps** button: listen together and play together behind it | ✅ | ✅ | ⚠️ a games button |
-| Fullscreen board | ✅ | ✅ | — |
-| Carrom: aim, power, and a simulated shot both ends replay | ✅ | ✅ | — |
-| Ludo: the die is the server's, the tumble is the animation | ✅ | ✅ | — |
-| Take a chair, stand up, play again | ✅ | ✅ | ✅ |
-| Watch without playing, and see whose move it is | ✅ | ✅ | ✅ |
-| Ongoing-call notification | tray | — | ✅ foreground service |
-| **Presence and profiles** | | | |
-| Online, idle, do not disturb, invisible | ✅ | ✅ | ✅ |
-| Last seen, in the conversation header | ✅ | ✅ | ✅ |
-| Who may see your last seen: everyone / friends / nobody | ✅ | ✅ | ✅ |
-| An about line on your account, and everyone else's | ✅ | ✅ | ✅ |
-| The profile card: picture, presence, last seen, about | ✅ hover | ✅ hover | ✅ double tap |
-| A status dot on every face in a conversation | ✅ | ✅ | ✅ |
-| Typing indicators, voice rosters | ✅ | ✅ | ✅ |
-| **Moments** | | | |
-| Post a photo, a video or text on a colour | ✅ | ✅ | ✅ |
-| Sealed for the friends you had when you posted | ✅ | ✅ | ✅ |
-| Full-screen player: a bar per post, tap to move, hold to pause | ✅ | ✅ | ✅ |
-| A segmented ring on every avatar, one arc per post | ✅ | ✅ | ✅ |
-| Tap a ringed avatar: profile photo, or moments | ✅ | ✅ | ✅ |
-| Who has seen yours, and delete one early | ✅ | ✅ | ✅ |
-| Everything gone after 24 hours | ✅ | ✅ | ✅ |
-| **Notifications** | | | |
-| Unread counts and the unread line | ✅ | ✅ | ✅ |
-| Notifications for messages, mentions and calls | ✅ | ✅ | ✅ FCM, app dead or alive |
-| Per-channel and per-person mute, quiet hours | ✅ | ✅ | ✅ |
-| Not woken for a chat open on another of your devices | ✅ | ✅ | ✅ |
-| Notification clears when you read it on another device | ✅ | ✅ | ✅ |
-| System tray, start with the system | ✅ | — | — |
-| Self-updates from GitHub Releases (alpha / beta / stable) | ✅ | — | ✅ |
-| **Remote desktop** | | | |
-| Offer this machine to be controlled | ✅ | — | — |
-| View and control another machine | ✅ | — | ✅ |
-| Be controlled: mouse and keyboard injected on this machine | ✅ Windows, Linux (X11); macOS untested; not Wayland | — | — |
-| Grants per person and permission, with expiry | ✅ | — | ✅ |
-| Rename, remove, read the audit trail | ✅ | — | ✅ |
-
-\* The admin panel is its own bundle at `/admin`, so it is a browser page
-whichever client you arrived from.
-
-**Push suppression** works the same way WhatsApp's does: if any of your
-windows has a channel open and focused, none of your devices is woken for a
-message in it, and a notification already showing on a phone goes away when you
-read that conversation on a laptop. A different channel still buzzes normally,
-even in the same server. See `docs/docs/architecture/push-suppression.md`.
-
----
-
-Known limits are written down rather than implied: see `development/E2EE.md`
-for what the encryption does and does not protect,
-`development/SECURITY.md` for who the API believes and what it still does not
-defend against, and `development/TODO.md` for everything each phase left open on
-purpose.
-
----
-
-## Architecture
+## How it fits together
 
 Five concerns are kept strictly apart: public ingress, internal routing, application microservices, realtime P2P media, and remote desktop access.
 
@@ -507,56 +294,79 @@ pub/sub, rate-limit windows.
 Object storage (local disk or any S3-compatible bucket) holds files. Postgres
 keeps the metadata; blobs never go in a column.
 
----
+## Screenshots
 
-## Security
+<p align="center">
+  <a href="video.mp4">▶️ <b>Watch the 9:16 feature video</b></a> &nbsp;•&nbsp; <a href="https://aiyu-ayaan.github.io/BetweenUs/features">📖 <b>Interactive feature tour</b></a>
+</p>
 
-- **Client-side encryption.** One ECDH P-256 identity keyring per account,
-  HKDF key wrapping, AES-256-GCM for messages, attachments and call media. The
-  account's vault key is held by the server (sealed with `SETTINGS_SECRET`) so
-  every device opens the full history on sign-in; a stolen database alone
-  opens nothing, but a compromised running server could. A call that cannot
-  encrypt aborts rather than downgrading.
-- **Attachments are encrypted before upload**, and their manifest - name, real
-  type, size - travels inside the encrypted message body, not in columns. The
-  server cannot type what it stores, so it serves everything as
-  `application/octet-stream` with a download disposition.
-- **Authorization is server-side and central.** `resolveChannelAccess` answers
-  every channel question for chat-, call- and presence-service. A private
-  channel is an allowlist that ownership does not override, and a channel the
-  caller cannot see answers 404 rather than 403, so ids cannot be probed for.
-- **Refresh-token rotation with reuse detection** - replaying a consumed token
-  revokes the whole family.
-- **Last seen is answered per asker, in one function.** Who may read a
-  timestamp depends on the subject's setting, the friendship it may turn on, and
-  whether the asker has hidden their own - so `lastSeenOf` is the only way to
-  reach the value and applies all three before returning anything. The offline
-  broadcast carries no timestamp at all, because a broadcast has one payload for
-  every recipient and this answer does not.
-- **Blocking is enforced in one function.** A block row is directional, the
-  check reads both directions, and it lives in `resolveChannelAccess` - so
-  history, pins, reactions, calls and typing all close through the same place. A
-  blocked conversation answers 404, the same as a channel id a stranger
-  invented, so neither the block nor its direction can be tested for.
-- **Recovering a password leaks nothing about who has an account.** An account
-  that does not exist, one that does, and a disabled one all get the same answer
-  from `/forgot-password`. Reset tokens are stored hashed, are single use, and
-  spending one signs every device out.
-- **Clearing your own history is a filter, never a delete.** It hides everything
-  from *your* screens on every device you are signed in on; the person you were
-  talking to keeps their copy, because a conversation has two ends and this
-  button only reaches one of them.
-- **Rate limiting twice**: per address at the gateway, and again in the service
-  through Redis, so every instance shares one budget.
-- **Hardened renderer**: context isolation on, node integration off, sandbox
-  on, a permission handler that allows only microphone, camera and display
-  capture, and navigation locked to the app origin.
-- **Structured logs never carry** passwords, tokens, keys or message content.
-  Every request logs a request id, and the id survives a hop between services.
+### Desktop Workbench
+Floating panel architecture, E2EE chat, inline code, emoji reactions.
 
-`development/E2EE.md` states the threat model and the known gaps plainly.
+<p align="center">
+  <a href="pictures/home.png">
+    <img src="pictures/home.png" alt="Desktop Workbench - pictures/home.png" width="100%" />
+  </a>
+</p>
 
----
+### Voice & Collaborative Activities
+Direct P2P WebRTC mesh, synchronized YouTube player with audio ducking, in-call Carrom board physics.
+
+<p align="center">
+  <a href="pictures/voice-listen-play.png">
+    <img src="pictures/voice-listen-play.png" alt="Voice & Collaborative Activities - pictures/voice-listen-play.png" width="100%" />
+  </a>
+</p>
+
+### Native Android Client & 24-Hour Ephemeral Moments
+Jetpack Compose Material 3 interface, WhatsApp-style media picker, Moments story rings, and on-device decryption.
+
+<p align="center">
+  <a href="pictures/home-android.png">
+    <img src="pictures/home-android.png" alt="Native Android Client - pictures/home-android.png" width="46%" />
+  </a>
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <a href="pictures/moments-viewer.png">
+    <img src="pictures/moments-viewer.png" alt="24-Hour Ephemeral Moments - pictures/moments-viewer.png" width="46%" />
+  </a>
+</p>
+
+### Secure Outbound Remote Desktop
+Zero inbound port dial-out, live low-latency stream, telemetry monitor.
+
+<p align="center">
+  <a href="pictures/remote-desktop.png">
+    <img src="pictures/remote-desktop.png" alt="Secure Outbound Remote Desktop - pictures/remote-desktop.png" width="100%" />
+  </a>
+</p>
+
+## Download
+
+Every release is on [GitHub Releases](https://github.com/aiyu-ayaan/BetweenUs/releases), on an alpha,
+beta or stable channel. The apps update themselves from there.
+
+### Server
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/aiyu-ayaan/BetweenUs/master/scripts/install.sh | sh
+```
+
+Writes `./betweenus` with the compose file and generated secrets and starts nothing; see
+[Run on a server](#run-on-a-server).
+
+### Linux desktop app
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/aiyu-ayaan/BetweenUs/master/scripts/install-linux.sh | sh
+```
+
+### Windows desktop app
+
+`BetweenUs-<version>-Setup.exe` from the latest release.
+
+### Android
+
+The APK for your device's ABI from the latest release; after that the app checks for updates itself.
 
 ## Requirements
 
@@ -565,7 +375,7 @@ keeps the metadata; blobs never go in a column.
 - Docker - Postgres and Redis in development; the whole stack in a
   deployment (see `docs/docs/deployment/docker-compose.md`)
 
-## Quick start
+## Run in development
 
 ```bash
 cp .env.example .env            # set JWT secrets & ensure DATABASE_URL matches POSTGRES_PASSWORD
@@ -595,7 +405,7 @@ presence `3005`, notification `3006`, call `3007`, renderer `5173`, admin panel
 `5174`, web client `5175`. Nothing listens for media: it goes directly between
 clients, on ports negotiated per call.
 
-## Deploying without cloning
+## Run on a server
 
 A deployment runs published images, so a server needs the compose file, the two
 files it mounts and a `.env` - not a checkout of source no container reads. One
@@ -624,6 +434,55 @@ compose commands apply it.
 Cloning still works and is what you want to build the images yourself or to
 develop against them. The documentation under `docs/` covers both paths, and everything after
 the first step is identical.
+
+## Public ingress
+
+BetweenUs is one public hostname. If a `cloudflared` already runs on the server,
+add one ingress entry:
+
+```yaml
+- hostname: betweenus.example.com
+  service: http://localhost:8080     # GATEWAY_PORT
+```
+
+and reload it - no extra container. To let BetweenUs bring its own tunnel instead:
+
+```bash
+CLOUDFLARE_TUNNEL_TOKEN=... docker compose   -f infrastructure/docker/docker-compose.yml --profile public up -d
+```
+
+`infrastructure/cloudflare/tunnel.yml` documents both, and why the tunnel is
+now enough on its own. It carries HTTP and WebSocket, which is all signalling
+is; media is UDP, which no tunnel carries, and does not need to - it goes
+straight between the clients. Nothing else has to reach the host, so no port is
+opened for media anywhere in this repo.
+
+The documentation under [`docs/docs/deployment/`](docs/docs/deployment/) walks the whole thing end to end - what to generate, how to
+create the first administrator, and what each endpoint behind the tunnel is for.
+
+## File storage
+
+`@betweenus/storage` picks its driver from the environment:
+
+- **S3 variables empty (default):** files land in `LOCAL_STORAGE_PATH`
+  (`./storage-data`) and chat-service serves them. Nothing to configure.
+- **`S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` all set:** the
+  S3 driver takes over. Partial configuration stays on local disk rather than
+  half-working.
+- `STORAGE_DRIVER=local|s3` forces one. Forcing `s3` without credentials fails
+  at boot instead of silently falling back.
+
+In Docker the local driver writes to `/data/uploads` inside chat-service, and
+`UPLOAD_DATA_PATH` decides where that is on the host: a bare name is a Docker
+volume (`upload-data`, the default), a path is a bind mount.
+
+```bash
+UPLOAD_DATA_PATH=/mnt/disk2/betweenus-uploads   # or D:/betweenus-uploads on Windows
+```
+
+Keys are UUID-based, so a client filename never decides where a file lands.
+Anything over 8 MB uploads in parts, with the session carried by the client as
+a sealed ticket rather than held as state in a service.
 
 ## Production app builds & packaging
 
@@ -804,164 +663,175 @@ windows). Where injection is unavailable a session can watch but not touch, and 
 viewer is told why. The agent also validates every event itself: coordinates, key
 codes, wheel deltas and rate.
 
-## Public ingress
+## Status
 
-BetweenUs is one public hostname. If a `cloudflared` already runs on the server,
-add one ingress entry:
-
-```yaml
-- hostname: betweenus.example.com
-  service: http://localhost:8080     # GATEWAY_PORT
-```
-
-and reload it - no extra container. To let BetweenUs bring its own tunnel instead:
-
-```bash
-CLOUDFLARE_TUNNEL_TOKEN=... docker compose   -f infrastructure/docker/docker-compose.yml --profile public up -d
-```
-
-`infrastructure/cloudflare/tunnel.yml` documents both, and why the tunnel is
-now enough on its own. It carries HTTP and WebSocket, which is all signalling
-is; media is UDP, which no tunnel carries, and does not need to - it goes
-straight between the clients. Nothing else has to reach the host, so no port is
-opened for media anywhere in this repo.
-
-The documentation under [`docs/docs/deployment/`](docs/docs/deployment/) walks the whole thing end to end - what to generate, how to
-create the first administrator, and what each endpoint behind the tunnel is for.
-
-## File storage
-
-`@betweenus/storage` picks its driver from the environment:
-
-- **S3 variables empty (default):** files land in `LOCAL_STORAGE_PATH`
-  (`./storage-data`) and chat-service serves them. Nothing to configure.
-- **`S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` all set:** the
-  S3 driver takes over. Partial configuration stays on local disk rather than
-  half-working.
-- `STORAGE_DRIVER=local|s3` forces one. Forcing `s3` without credentials fails
-  at boot instead of silently falling back.
-
-In Docker the local driver writes to `/data/uploads` inside chat-service, and
-`UPLOAD_DATA_PATH` decides where that is on the host: a bare name is a Docker
-volume (`upload-data`, the default), a path is a bind mount.
-
-```bash
-UPLOAD_DATA_PATH=/mnt/disk2/betweenus-uploads   # or D:/betweenus-uploads on Windows
-```
-
-Keys are UUID-based, so a client filename never decides where a file lands.
-Anything over 8 MB uploads in parts, with the session carried by the client as
-a sealed ticket rather than held as state in a service.
-
----
-
-## Repository layout
-
-```text
-apps/
-  admin/               Admin web panel (Vite + React + Tailwind)
-  android/             Native Android client (Jetpack Compose + Material 3)
-  desktop/             Desktop client (Electron + Vite + React + Tailwind)
-  web/                 Web client (Vite + React + Tailwind)
-  services/
-    auth-service/      JWT sessions, tokens, user authentication
-    call-service/      Mesh call signalling, room state, WebRTC offer/answer relay
-    chat-service/      E2EE messages, direct messages, attachments, friend relationships
-    notification-service/ Push notifications, unread tracking, mute settings
-    presence-service/  Online / idle / dnd / offline status, typing indicators
-    remote-gateway/       Remote machines, permissions, session relay, audit
-    remote-agent/         Scaffold - for a headless machine with no app on it
-    user-service/         Scaffold
-packages/                 shared-types, database, auth, permissions, events,
-                          nest-common, storage, websocket, logger, config
-infrastructure/           docker compose, nginx, cloudflare
-scripts/install.sh        one-command deployment, no clone required
-development/              planning, MVP, E2EE design, API security, testing guide, TODO, Android roadmap
-docs/                     full Docusaurus documentation suite (architecture, services, security, deployment)
-```
-
-## Common commands
-
-| Command | Effect |
+| Area | State |
 | --- | --- |
-| `pnpm dev:backend` | Every service, no renderer |
-| `pnpm dev` | Everything, including the desktop renderer |
-| `pnpm dev:duo` | Two signed-in desktop windows for chat, voice and presence |
-| `pnpm desktop:package:dev` | Package the Dev channel, installable beside the stable client |
-| `pnpm build` | Build every package, service and the desktop bundle |
-| `pnpm typecheck` | Type-check the whole monorepo |
-| `pnpm check` | Package self-checks - crypto, storage, logger, auth, permissions, websocket |
-| `pnpm size` | Measure the built desktop and Android artifacts against their size budgets |
-| `pnpm db:migrate` / `db:seed` / `db:studio` | Schema, demo data, Prisma Studio |
-| `pnpm data:path <path>` | Configure single-point data root directory in `.env` and set up tree |
-| `pnpm db:backup` | Trigger pre-migration or manual database dump to `BACKUP_DATA_PATH` |
-| `pnpm admin:create` | Create the first administrator |
-| `pnpm --filter @betweenus/chat-service smoke` | End-to-end check against running services |
-| `pnpm --filter @betweenus/presence-service smoke` | Presence (per-device sockets), typing and voice rosters |
-| `pnpm --filter @betweenus/notification-service smoke` | Preferences, unread counting, read markers |
-| `pnpm --filter @betweenus/remote-gateway smoke` | Enrolment, grants, and what the remote relay refuses |
-| `pnpm android:test` | Run Android core & UI unit test suite |
-| `pnpm android:build` | Build debug APK for Android |
-| `pnpm android:run` | Install the debug APK on a connected device and launch it |
-| `pnpm android <task...>` | Any other Gradle task, passed through to `apps/android/gradlew` |
+| Accounts | Register, login, refresh-token rotation with reuse detection, Google and GitHub sign-in, admin panel |
+| Servers | Servers, custom roles with colours, per-member permission overrides, invite links that expire and can be revoked, custom emoji, incoming webhooks, server settings |
+| Channels | Public and private text channels, private channels as an allowlist, categories you can fold away and drag into order, direct messages between friends |
+| Messages & Chat | End-to-end encrypted, realtime over WebSocket, history paging in both directions, replies, `:` emoji search, per-server custom emoji including animated, reactions with who-reacted names, refereed polls (the server counts option indexes and never reads the question), drag-and-drop and a preview before sending, full-screen zoomable image viewer, integrated video player, and local media album saving |
+| Voice and video | Peer-to-peer voice channels, camera, one screen share at a time with takeover, join and leave tones, manual quality override, end-to-end encrypted media, no media server |
+| Listen together | A shared YouTube queue inside a voice call: everyone hears the same track in step, from their own connection, at full quality. Audio only - no picture, and no stream between anybody. The desktop app plays the real youtube.com, so a label's music video plays where an embed refuses it. Browse the site inside the app, signed in as yourself, and queue what you are looking at. Anybody can add, skip or pause; music ducks under whoever is talking |
+| Play together | Six board games inside a voice call - Tic-tac-toe, Connect Four, Reversi, Dots and Boxes, Ludo, and Carrom with a real physics simulation. One board everybody sees, two chairs anybody can take, and a rematch button. `call-service` referees the moves, so a move is a number on the wire rather than somebody's screen being streamed |
+| Android Client | Native Jetpack Compose + Material 3 app with E2EE messaging, WhatsApp-style media picker and composer, media viewers, and public gallery saving (`Pictures/BetweenUs`, `Movies/BetweenUs`) |
+| Presence | Online / idle / do not disturb / invisible, last seen with a three-tier privacy setting, typing indicators, voice rosters |
+| Profiles | An avatar and a wide cover picture on every account, an about line, a card - hovered on desktop and web, double-tapped on Android - carrying the picture, whether they are here, when they were last here and what their line says, and a full profile screen behind it for the whole line at a size worth reading |
+| Moments | Photo, video and text posts that disappear after 24 hours, seen by the people you are friends with - a full-screen player with a bar per post, tap to move, hold to pause, a segmented ring around an avatar counting what is unwatched, and a list of who has seen yours. **End-to-end encrypted, with the audience frozen when the post is written**: the key is wrapped once per device of every friend you have at that moment, so somebody who becomes a friend tomorrow does not see today's post |
+| Webhooks | A URL you give another system so it can post into a channel - a build server, an alerting stack, a `curl` in a deploy script. Discord's request shape, so an integration already pointed at Discord works by changing only the URL. **These messages are the one thing here that is not end-to-end encrypted, and every client says so on every one of them** |
+| Notifications | Desktop notifications, system tray, start with the system, per-channel and per-person mute, quiet hours, persisted unread with a line that survives a restart |
+| Remote desktop | A machine offers itself from Settings, dials out to the gateway, and is viewed and driven from another client; per-machine permissions with expiry, and an audit trail |
 
-## Testing and CI
+## Features, and where each one works
 
-Three layers, all runnable locally:
+**Desktop** is the Electron app, **Web** is the same UI in a browser tab
+(`apps/web` mounts `apps/desktop/src`, so they are one codebase), and
+**Android** is the native Compose client.
 
-1. **Self-checks** (`pnpm check`) need no infrastructure: the crypto
-   primitives, the storage drivers including a multipart round trip, the
-   permission arithmetic, the logger's redaction, and the API's trust
-   boundaries - which address a request is counted against, which redirect a
-   finished sign-in may be sent to, which algorithm a token is verified with.
-2. **Smoke scripts** drive the real HTTP and WebSocket surface against running
-   services and exit non-zero on a failed assertion.
-3. **Manual walkthroughs** for what only a human can judge - two people in a
-   voice call, a shared screen, a notification arriving from the tray.
-   `development/TESTING.md` lists them.
+Where the three differ it is almost always for one reason: screen capture by
+source, synthetic mouse and keyboard input and the OS keychain live behind the
+Electron preload bridge, and a browser tab has none of them. Browsing YouTube
+inside the app is the one exception with a different cause - youtube.com refuses
+to be framed, so no browser tab can ever show it.
 
-GitHub Actions runs install → lint → typecheck → build → self-checks, then an
-integration job with Postgres and Redis containers that applies the migrations,
-starts the services and runs every smoke script. A third job packages the Linux
-AppImage and boots it under Xvfb (`.github/scripts/smoke-appimage.sh`), the same
-check the release runs before it publishes one.
+| | Desktop | Web | Android |
+| --- | :---: | :---: | :---: |
+| **Accounts** | | | |
+| Register, sign in, refresh-token rotation | ✅ | ✅ | ✅ |
+| Google and GitHub sign-in | ✅ | ✅ | ✅ |
+| Display name, avatar, change password | ✅ | ✅ | ✅ |
+| Cover picture behind your name | ✅ | ✅ | ✅ |
+| Full profile screen, from the card or the sheet | ✅ | ✅ | ✅ |
+| Settings grouped: Account, Preferences, This Device, Deployment | ✅ | ✅ | ✅ |
+| Username checked while you type, and unique | ✅ | ✅ | ✅ |
+| Forgotten password: emailed link, or an admin-opened reset | ✅ | ✅ | ✅ |
+| Encryption identity: unlock, backup secret | ✅ | ✅ | ✅ |
+| Told when this machine holds the only copy of your key | ✅ | ✅ | — |
+| Device list and revoking a device | ✅ | ✅ | — |
+| Point the client at another deployment | ✅ | ✅ | ✅ |
+| Adaptive layout: two panes on tablets and unfolded foldables | ✅ | ✅ | ✅ |
+| Admin panel | \* | \* | \* |
+| **Servers and channels** | | | |
+| Create a server, join one, leave or delete | ✅ | ✅ | ✅ |
+| Invite links: create, expiry, use limit, revoke | ✅ | ✅ | ✅ |
+| Invite preview card before joining | ✅ | ✅ | ✅ |
+| Webhooks: create, rotate the URL, delete | ✅ | ✅ | ✅ |
+| Webhook messages badged as not encrypted | ✅ | ✅ | ✅ |
+| Server icon | ✅ | ✅ | ✅ |
+| Custom roles: create, colour, permissions, delete | ✅ | ✅ | ✅ |
+| Per-member permission overrides | ✅ | ✅ | ✅ |
+| Add a friend to a server, kick, change role | ✅ | ✅ | ✅ |
+| Text and voice channels, private channel allowlists | ✅ | ✅ | ✅ |
+| Channel categories: collapse, drag or keyboard to reorder | ✅ | ✅ | ✅ long-press Move up / down; create, rename, delete and create-into from the drawer |
+| Custom emoji: add and remove | ✅ | ✅ | ✅ |
+| **Messaging** | | | |
+| End-to-end encrypted messages, realtime, history paging | ✅ | ✅ | ✅ |
+| Direct messages and friends | ✅ | ✅ | ✅ |
+| Block somebody | ✅ | ✅ | ✅ |
+| Clear one conversation, or all, on every device | ✅ | ✅ | ✅ |
+| Disappearing messages — a server's window, and your own | ✅ | ✅ | ✅ |
+| One-time photos, video and voice, destroyed once seen | ✅ capture blocked | — opens in the app | ✅ `FLAG_SECURE` |
+| Voice messages, with a waveform, played in place | ✅ | ✅ | ✅ |
+| Replies, edit, delete, reactions | ✅ | ✅ | ✅ |
+| Edit history — tap "(edited)" to see earlier versions, sealed like the message and opened on the device | ✅ popover | ✅ popover | ✅ bottom sheet |
+| Polls, refereed not decrypted (vote, change, retract, close) | ✅ create + vote | ✅ create + vote | ✅ create + vote |
+| Threads — a side conversation under one message, with an "N replies" chip, follow / unfollow, unread badge, followed list and files in a reply | ✅ side panel | ✅ side panel | ✅ own screen |
+| Pinned messages, paged as you scroll | ✅ | ✅ | ✅ |
+| Scheduled send and remind-me (kept on the device, never on the server) | ✅ | ✅ | ✅ |
+| Custom emoji in messages | ✅ | ✅ | ✅ |
+| `:` emoji suggestion menu while typing | ✅ | ✅ | ✅ a bar |
+| Emoji picker, including the server's own | ✅ | ✅ | ✅ |
+| Search within a channel, walking back through older history on the device in capped runs | ✅ | ✅ | ✅ |
+| Quick switcher | ✅ Ctrl+K | ✅ Ctrl+K | ✅ drawer |
+| Search a conversation from the keyboard (Ctrl+F) | ✅ | ✅ | — |
+| Keyboard shortcut sheet (`?`) | ✅ | ✅ | — |
+| Message density: cozy or compact | ✅ | ✅ | — |
+| Attachments of any type, up to 100 MB (2 GB from desktop and web) | ✅ | ✅ | ✅ |
+| Sending survives leaving the screen | — | — | ✅ foreground service |
+| HEIC photos converted, photos re-encoded on the way out | ✅ | ✅ | ✅ |
+| Preview before sending, multi-select, captions | ✅ | ✅ | ✅ |
+| Drag and drop into the composer | ✅ | ✅ | — |
+| Zoomable image viewer, video player | ✅ | ✅ | ✅ |
+| Save media to the device gallery | download | download | ✅ `Pictures/BetweenUs` |
+| **Voice, video and screen share** | | | |
+| Peer-to-peer voice channels | ✅ | ✅ | ✅ |
+| Camera | ✅ | ✅ | ✅ |
+| Screen share | ✅ | ✅ | ✅ |
+| Join a share to watch it, encoded only for who joined | ✅ | ✅ | ✅ |
+| Stage pin kept through leaving and rejoining the call | ✅ | ✅ | ✅ |
+| Tiles shaped to the picture (portrait and landscape) | ✅ | ✅ | ✅ |
+| Ask to drive somebody's shared screen | ✅ | ✅ | ✅ on the share stage |
+| Be driven while sharing your screen | ✅ | — | — |
+| Share system audio without the call echoing back | ✅ Windows, Linux (PipeWire) | — | — |
+| Manual quality override | ✅ | ✅ | ⚠️ automatic |
+| Connection panel: bitrate, loss, round trip, frame size | ✅ | ✅ | ✅ |
+| Reconnects a dropped link, and ends a call it cannot recover | ✅ | ✅ | ✅ |
+| Push to talk | ✅ a held key | ✅ a held key | ✅ a held button |
+| Picture-in-picture while minimised | ✅ kept out of your own share on Windows and macOS | — no window to minimise; the call stays in its tab | ✅ the system window, on leaving the app in a call with video |
+| Join and leave tones | ✅ | ✅ | ✅ |
+| **Listen together** | | | |
+| Shared queue in a call, in step, video on screen | ✅ | ✅ | ✅ |
+| Add, skip, seek or pause for everybody | ✅ | ✅ | ⚠️ skip, pause, remove |
+| Music ducks under whoever is talking | ✅ | ✅ | ✅ |
+| Browse youtube.com in the app, signed in | ✅ | — | — |
+| Paste a link | ✅ | ✅ | — |
+| Video on the stage, with a shared transport | ✅ | ✅ | ✅ |
+| **Play together** | | | |
+| Six board games on the call stage | ✅ | ✅ | ⚠️ three played, three watched |
+| One **Apps** button: listen together and play together behind it | ✅ | ✅ | ⚠️ a games button |
+| Fullscreen board | ✅ | ✅ | — |
+| Carrom: aim, power, and a simulated shot both ends replay | ✅ | ✅ | — |
+| Ludo: the die is the server's, the tumble is the animation | ✅ | ✅ | — |
+| Take a chair, stand up, play again | ✅ | ✅ | ✅ |
+| Watch without playing, and see whose move it is | ✅ | ✅ | ✅ |
+| Ongoing-call notification | tray | — | ✅ foreground service |
+| **Presence and profiles** | | | |
+| Online, idle, do not disturb, invisible | ✅ | ✅ | ✅ |
+| Last seen, in the conversation header | ✅ | ✅ | ✅ |
+| Who may see your last seen: everyone / friends / nobody | ✅ | ✅ | ✅ |
+| An about line on your account, and everyone else's | ✅ | ✅ | ✅ |
+| The profile card: picture, presence, last seen, about | ✅ hover | ✅ hover | ✅ double tap |
+| A status dot on every face in a conversation | ✅ | ✅ | ✅ |
+| Typing indicators, voice rosters | ✅ | ✅ | ✅ |
+| **Moments** | | | |
+| Post a photo, a video or text on a colour | ✅ | ✅ | ✅ |
+| Sealed for the friends you had when you posted | ✅ | ✅ | ✅ |
+| Full-screen player: a bar per post, tap to move, hold to pause | ✅ | ✅ | ✅ |
+| A segmented ring on every avatar, one arc per post | ✅ | ✅ | ✅ |
+| Tap a ringed avatar: profile photo, or moments | ✅ | ✅ | ✅ |
+| Who has seen yours, and delete one early | ✅ | ✅ | ✅ |
+| Everything gone after 24 hours | ✅ | ✅ | ✅ |
+| **Notifications** | | | |
+| Unread counts and the unread line | ✅ | ✅ | ✅ |
+| Notifications for messages, mentions and calls | ✅ | ✅ | ✅ FCM, app dead or alive |
+| Per-channel and per-person mute, quiet hours | ✅ | ✅ | ✅ |
+| Not woken for a chat open on another of your devices | ✅ | ✅ | ✅ |
+| Notification clears when you read it on another device | ✅ | ✅ | ✅ |
+| System tray, start with the system | ✅ | — | — |
+| Self-updates from GitHub Releases (alpha / beta / stable) | ✅ | — | ✅ |
+| **Remote desktop** | | | |
+| Offer this machine to be controlled | ✅ | — | — |
+| View and control another machine | ✅ | — | ✅ |
+| Be controlled: mouse and keyboard injected on this machine | ✅ Windows, Linux (X11); macOS untested; not Wayland | — | — |
+| Grants per person and permission, with expiry | ✅ | — | ✅ |
+| Rename, remove, read the audit trail | ✅ | — | ✅ |
 
-## API surface
+\* The admin panel is its own bundle at `/admin`, so it is a browser page
+whichever client you arrived from.
 
-```
-POST /api/v1/auth/register|login|refresh|logout    GET /api/v1/auth/me
-GET  /api/v1/auth/username-available    POST /api/v1/auth/forgot-password|reset-password
-GET|POST /api/v1/servers          POST /api/v1/servers/join
-GET|PATCH|DELETE /api/v1/servers/:id       POST /api/v1/servers/:id/leave
-GET /api/v1/servers/:id/members   PATCH|DELETE /api/v1/servers/:id/members/:userId
-GET|POST /api/v1/channels         PATCH|DELETE /api/v1/channels/:id
-GET|PUT /api/v1/channels/:id/members       GET|POST /api/v1/messages
-GET /api/v1/users/search          GET|POST /api/v1/friends
-POST /api/v1/friends/:id/accept   DELETE /api/v1/friends/:id
-GET|POST /api/v1/dm               GET|POST /api/v1/blocks
-DELETE /api/v1/blocks/:userId     POST /api/v1/messages/clear
-POST /api/v1/uploads              GET /api/v1/uploads/:key
-GET|POST /api/v1/e2ee/devices     GET /api/v1/e2ee/keys/:channelId
-POST /api/v1/e2ee/keys            POST /api/v1/calls/token
-GET|PATCH /api/v1/notifications/preferences
-GET /api/v1/notifications/unread  POST /api/v1/notifications/read
-GET|POST /api/v1/remote/machines  PATCH|DELETE /api/v1/remote/machines/:id
-GET|PUT /api/v1/remote/machines/:id/grants
-GET /api/v1/remote/machines/:id/audit
-POST /api/v1/remote/sessions      DELETE /api/v1/remote/sessions/:id
-GET /api/v1/admin/...             (administrators only)
-WS   /ws/chat                     WS  /ws/presence      WS /ws/remote
-WS   /ws/call                     (signalling, the Listen Together queue, the game board)
-GET  /health                      (every service)
-```
-
-Errors share one shape everywhere:
-
-```json
-{ "error": { "code": "CHANNEL_NOT_FOUND", "message": "Channel not found", "requestId": "..." } }
-```
+**Push suppression** works the same way WhatsApp's does: if any of your
+windows has a channel open and focused, none of your devices is woken for a
+message in it, and a notification already showing on a phone goes away when you
+read that conversation on a laptop. A different channel still buzzes normally,
+even in the same server. See `docs/docs/architecture/push-suppression.md`.
 
 ---
+
+Known limits are written down rather than implied: see `development/E2EE.md`
+for what the encryption does and does not protect,
+`development/SECURITY.md` for who the API believes and what it still does not
+defend against, and `development/TODO.md` for everything each phase left open on
+purpose.
 
 ## Recently added
 
@@ -1313,23 +1183,165 @@ All three clients have all of it.
   "no light theme" notes still in `development/devdocs/TODO.md` predate it and
   need correcting.
 
+## Security
+
+- **Client-side encryption.** One ECDH P-256 identity keyring per account,
+  HKDF key wrapping, AES-256-GCM for messages, attachments and call media. The
+  account's vault key is held by the server (sealed with `SETTINGS_SECRET`) so
+  every device opens the full history on sign-in; a stolen database alone
+  opens nothing, but a compromised running server could. A call that cannot
+  encrypt aborts rather than downgrading.
+- **Attachments are encrypted before upload**, and their manifest - name, real
+  type, size - travels inside the encrypted message body, not in columns. The
+  server cannot type what it stores, so it serves everything as
+  `application/octet-stream` with a download disposition.
+- **Authorization is server-side and central.** `resolveChannelAccess` answers
+  every channel question for chat-, call- and presence-service. A private
+  channel is an allowlist that ownership does not override, and a channel the
+  caller cannot see answers 404 rather than 403, so ids cannot be probed for.
+- **Refresh-token rotation with reuse detection** - replaying a consumed token
+  revokes the whole family.
+- **Last seen is answered per asker, in one function.** Who may read a
+  timestamp depends on the subject's setting, the friendship it may turn on, and
+  whether the asker has hidden their own - so `lastSeenOf` is the only way to
+  reach the value and applies all three before returning anything. The offline
+  broadcast carries no timestamp at all, because a broadcast has one payload for
+  every recipient and this answer does not.
+- **Blocking is enforced in one function.** A block row is directional, the
+  check reads both directions, and it lives in `resolveChannelAccess` - so
+  history, pins, reactions, calls and typing all close through the same place. A
+  blocked conversation answers 404, the same as a channel id a stranger
+  invented, so neither the block nor its direction can be tested for.
+- **Recovering a password leaks nothing about who has an account.** An account
+  that does not exist, one that does, and a disabled one all get the same answer
+  from `/forgot-password`. Reset tokens are stored hashed, are single use, and
+  spending one signs every device out.
+- **Clearing your own history is a filter, never a delete.** It hides everything
+  from *your* screens on every device you are signed in on; the person you were
+  talking to keeps their copy, because a conversation has two ends and this
+  button only reaches one of them.
+- **Rate limiting twice**: per address at the gateway, and again in the service
+  through Redis, so every instance shares one budget.
+- **Hardened renderer**: context isolation on, node integration off, sandbox
+  on, a permission handler that allows only microphone, camera and display
+  capture, and navigation locked to the app origin.
+- **Structured logs never carry** passwords, tokens, keys or message content.
+  Every request logs a request id, and the id survives a hop between services.
+
+`development/E2EE.md` states the threat model and the known gaps plainly.
+
+## Repository layout
+
+```text
+apps/
+  admin/               Admin web panel (Vite + React + Tailwind)
+  android/             Native Android client (Jetpack Compose + Material 3)
+  desktop/             Desktop client (Electron + Vite + React + Tailwind)
+  web/                 Web client (Vite + React + Tailwind)
+  services/
+    auth-service/      JWT sessions, tokens, user authentication
+    call-service/      Mesh call signalling, room state, WebRTC offer/answer relay
+    chat-service/      E2EE messages, direct messages, attachments, friend relationships
+    notification-service/ Push notifications, unread tracking, mute settings
+    presence-service/  Online / idle / dnd / offline status, typing indicators
+    remote-gateway/       Remote machines, permissions, session relay, audit
+    remote-agent/         Scaffold - for a headless machine with no app on it
+    user-service/         Scaffold
+packages/                 shared-types, database, auth, permissions, events,
+                          nest-common, storage, websocket, logger, config
+infrastructure/           docker compose, nginx, cloudflare
+scripts/install.sh        one-command deployment, no clone required
+development/              planning, MVP, E2EE design, API security, testing guide, TODO, Android roadmap
+docs/                     full Docusaurus documentation suite (architecture, services, security, deployment)
+```
+
+## Common commands
+
+| Command | Effect |
+| --- | --- |
+| `pnpm dev:backend` | Every service, no renderer |
+| `pnpm dev` | Everything, including the desktop renderer |
+| `pnpm dev:duo` | Two signed-in desktop windows for chat, voice and presence |
+| `pnpm desktop:package:dev` | Package the Dev channel, installable beside the stable client |
+| `pnpm build` | Build every package, service and the desktop bundle |
+| `pnpm typecheck` | Type-check the whole monorepo |
+| `pnpm check` | Package self-checks - crypto, storage, logger, auth, permissions, websocket |
+| `pnpm size` | Measure the built desktop and Android artifacts against their size budgets |
+| `pnpm db:migrate` / `db:seed` / `db:studio` | Schema, demo data, Prisma Studio |
+| `pnpm data:path <path>` | Configure single-point data root directory in `.env` and set up tree |
+| `pnpm db:backup` | Trigger pre-migration or manual database dump to `BACKUP_DATA_PATH` |
+| `pnpm admin:create` | Create the first administrator |
+| `pnpm --filter @betweenus/chat-service smoke` | End-to-end check against running services |
+| `pnpm --filter @betweenus/presence-service smoke` | Presence (per-device sockets), typing and voice rosters |
+| `pnpm --filter @betweenus/notification-service smoke` | Preferences, unread counting, read markers |
+| `pnpm --filter @betweenus/remote-gateway smoke` | Enrolment, grants, and what the remote relay refuses |
+| `pnpm android:test` | Run Android core & UI unit test suite |
+| `pnpm android:build` | Build debug APK for Android |
+| `pnpm android:run` | Install the debug APK on a connected device and launch it |
+| `pnpm android <task...>` | Any other Gradle task, passed through to `apps/android/gradlew` |
+
+## API surface
+
+```
+POST /api/v1/auth/register|login|refresh|logout    GET /api/v1/auth/me
+GET  /api/v1/auth/username-available    POST /api/v1/auth/forgot-password|reset-password
+GET|POST /api/v1/servers          POST /api/v1/servers/join
+GET|PATCH|DELETE /api/v1/servers/:id       POST /api/v1/servers/:id/leave
+GET /api/v1/servers/:id/members   PATCH|DELETE /api/v1/servers/:id/members/:userId
+GET|POST /api/v1/channels         PATCH|DELETE /api/v1/channels/:id
+GET|PUT /api/v1/channels/:id/members       GET|POST /api/v1/messages
+GET /api/v1/users/search          GET|POST /api/v1/friends
+POST /api/v1/friends/:id/accept   DELETE /api/v1/friends/:id
+GET|POST /api/v1/dm               GET|POST /api/v1/blocks
+DELETE /api/v1/blocks/:userId     POST /api/v1/messages/clear
+POST /api/v1/uploads              GET /api/v1/uploads/:key
+GET|POST /api/v1/e2ee/devices     GET /api/v1/e2ee/keys/:channelId
+POST /api/v1/e2ee/keys            POST /api/v1/calls/token
+GET|PATCH /api/v1/notifications/preferences
+GET /api/v1/notifications/unread  POST /api/v1/notifications/read
+GET|POST /api/v1/remote/machines  PATCH|DELETE /api/v1/remote/machines/:id
+GET|PUT /api/v1/remote/machines/:id/grants
+GET /api/v1/remote/machines/:id/audit
+POST /api/v1/remote/sessions      DELETE /api/v1/remote/sessions/:id
+GET /api/v1/admin/...             (administrators only)
+WS   /ws/chat                     WS  /ws/presence      WS /ws/remote
+WS   /ws/call                     (signalling, the Listen Together queue, the game board)
+GET  /health                      (every service)
+```
+
+Errors share one shape everywhere:
+
+```json
+{ "error": { "code": "CHANNEL_NOT_FOUND", "message": "Channel not found", "requestId": "..." } }
+```
+
+## Tests
+
+Three layers, all runnable locally:
+
+1. **Self-checks** (`pnpm check`) need no infrastructure: the crypto
+   primitives, the storage drivers including a multipart round trip, the
+   permission arithmetic, the logger's redaction, and the API's trust
+   boundaries - which address a request is counted against, which redirect a
+   finished sign-in may be sent to, which algorithm a token is verified with.
+2. **Smoke scripts** drive the real HTTP and WebSocket surface against running
+   services and exit non-zero on a failed assertion.
+3. **Manual walkthroughs** for what only a human can judge - two people in a
+   voice call, a shared screen, a notification arriving from the tray.
+   `development/TESTING.md` lists them.
+
+GitHub Actions runs install → lint → typecheck → build → self-checks, then an
+integration job with Postgres and Redis containers that applies the migrations,
+starts the services and runs every smoke script. A third job packages the Linux
+AppImage and boots it under Xvfb (`.github/scripts/smoke-appimage.sh`), the same
+check the release runs before it publishes one.
+
 ## Conventions
 
 - TypeScript strict everywhere; no `any` in committed code.
 - Controllers stay thin, services hold the logic, persistence stays in services.
 - Every service exposes `GET /health` and answers the shared error contract.
 - Conventional commits (`feat:`, `fix:`, `chore:`, `docs:`).
-
-## Licence
-
-**Source-available, view only. Not open source, and not MIT.**
-
-You may read this code and refer to it. You may not copy, modify, redistribute,
-or use it - in whole or in part, in source or compiled form, commercially or
-not - without written permission from the copyright holder. Full terms in
-[`LICENSE`](LICENSE).
-
-Third-party dependencies keep their own licences.
 
 ## Documentation
 
@@ -1347,3 +1359,14 @@ Third-party dependencies keep their own licences.
 | `docs/docs/architecture/listen-together.md` | Listen Together: the shared clock, why it is not a screen share, and what it deliberately does not do |
 | `docs/docs/architecture/play-together.md` | Play Together: why the gateway referees, why the rules live in the contract, and why every game in the library is perfect information |
 | `docs/docs/architecture/push-suppression.md` | Why a phone is not woken for a chat open on another of your devices, and why a notification goes away when you read it elsewhere |
+
+## Licence
+
+**Source-available, view only. Not open source, and not MIT.**
+
+You may read this code and refer to it. You may not copy, modify, redistribute,
+or use it - in whole or in part, in source or compiled form, commercially or
+not - without written permission from the copyright holder. Full terms in
+[`LICENSE`](LICENSE).
+
+Third-party dependencies keep their own licences.
