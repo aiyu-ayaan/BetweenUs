@@ -894,6 +894,8 @@ class VoiceEngine(private val context: Context) {
      * did the same thing, so it could not be got rid of at all.
      */
     private fun teardown() {
+        // A ring belongs to the call it was sent for.
+        Presence.clearOutgoingRing()
         pollJob?.cancel()
         pollJob = null
         joinTimeout?.cancel()

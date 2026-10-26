@@ -99,6 +99,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.aatech.betweenus.core.data.PublicUser
+import com.aatech.betweenus.core.store.Presence
 import com.aatech.betweenus.core.store.Workspace
 import com.aatech.betweenus.feature.settings.BetweenUsPermissions
 import com.aatech.betweenus.feature.settings.rememberPermission
@@ -223,6 +224,7 @@ fun VoiceChannelScreen(
     val linkStats by engine.stats.collectAsState()
     val signalling by engine.signalling.collectAsState()
     val problem by engine.problem.collectAsState()
+    val outgoingRing by Presence.outgoingRing.collectAsState()
     val interruption by engine.interruption.collectAsState()
     val watching by engine.watching.collectAsState()
     val stagePin by engine.stagePin.collectAsState()
@@ -1073,6 +1075,20 @@ fun VoiceChannelScreen(
                     .align(Alignment.TopCenter)
                     .padding(top = 64.dp, start = 12.dp, end = 12.dp),
             )
+        }
+
+        // What became of the ring this person sent: ringing, declined, or rang
+        // out. Below the problem banner's slot rather than over it - a call
+        // that failed to start is the more urgent thing to read.
+        if (!inPip && problem == null) {
+            RingStatus.showsFor(outgoingRing, channelId)?.let { ring ->
+                OutgoingRingBanner(
+                    ring,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 64.dp, start = 12.dp, end = 12.dp),
+                )
+            }
         }
 
         // On hold: something else has the audio - a phone call, almost always.

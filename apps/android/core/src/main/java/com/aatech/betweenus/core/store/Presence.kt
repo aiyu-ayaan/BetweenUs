@@ -12,6 +12,28 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+/** Where a ring *this* account sent stands. `answered` is not here: it clears the line. */
+enum class RingState {
+    RINGING, DECLINED, UNANSWERED;
+
+    companion object {
+        fun of(wire: String): RingState? = when (wire) {
+            "ringing" -> RINGING
+            "declined" -> DECLINED
+            "unanswered" -> UNANSWERED
+            else -> null
+        }
+    }
+}
+
+/** The ring this account sent, told back to it. See `call.ring.state`. */
+data class OutgoingRing(
+    val channelId: String,
+    val targetId: String,
+    val targetName: String,
+    val state: RingState,
+)
+
 /**
  * Who is online, who is typing, and who is in which voice channel.
  *
@@ -46,6 +68,31 @@ object Presence {
     private val _lastSeen = MutableStateFlow<Map<String, String>>(emptyMap())
     val lastSeen: StateFlow<Map<String, String>> = _lastSeen.asStateFlow()
 
+    /**
+     * What became of the ring this account last sent. A caller used to be told
+     * nothing, so a call to somebody who had said no looked exactly like one to
+     * a phone that was off. Only ever set for the caller: the server sends the
+     * event to nobody else.
+     */
+    private val _outgoingRing = MutableStateFlow<OutgoingRing?>(null)
+    val outgoingRing: StateFlow<OutgoingRing?> = _outgoingRing.asStateFlow()
+
+    /** The call ended, or the caller dismissed it. */
+    fun clearOutgoingRing() {
+        _outgoingRing.value = null
+    }
+
+    /** One `call.ring.state` event. Pure of the socket so it can be pinned. */
+    fun applyRingState(channelId: String, targetId: String, targetName: String, wire: String) {
+        if (wire == "answered") {
+            // They are in the call, which says so better than a line could.
+            _outgoingRing.update { current -> if (current?.targetId == targetId) null else current }
+            return
+        }
+        val state = RingState.of(wire) ?: return
+        _outgoingRing.value = OutgoingRing(channelId, targetId, targetName, state)
+    }
+
     private val _self = MutableStateFlow(PresenceStatus.ONLINE)
     val self: StateFlow<PresenceStatus> = _self.asStateFlow()
 
@@ -58,6 +105,13 @@ object Presence {
         PresenceSocket.on { event ->
             when (event.optString("type")) {
                 "status.self" -> _self.value = PresenceStatus.of(event.optString("status"))
+
+                "call.ring.state" -> applyRingState(
+                    channelId = event.optString("channelId"),
+                    targetId = event.optString("targetId"),
+                    targetName = event.optString("targetName"),
+                    wire = event.optString("state"),
+                )
 
                 "presence.sync" -> {
                     val users = event.optJSONArray("users")
@@ -122,6 +176,7 @@ object Presence {
         _typing.value = emptyMap()
         _voice.value = emptyMap()
         _lastSeen.value = emptyMap()
+        _outgoingRing.value = null
     }
 
     fun statusOf(userId: String): PresenceStatus = _statuses.value[userId] ?: PresenceStatus.OFFLINE
