@@ -1,5 +1,6 @@
 package com.aatech.betweenus.feature.notifications
 
+import com.aatech.betweenus.core.data.AuthPhase
 import com.aatech.betweenus.core.data.BlockedUser
 import com.aatech.betweenus.core.data.NotificationPreferences
 import com.aatech.betweenus.core.data.PublicUser
@@ -167,4 +168,51 @@ class PushGateTest {
     fun `no cache row means nobody is blocked`() {
         assertFalse(PushGate.isBlocked("x", PushGate.blockedOrCached(emptyList()) { null }))
     }
+
+    private fun everything() = preferences(null, null)
+
+    @Test
+    fun `a phone still restoring its session is rung rather than silenced`() {
+        // The case the ring used to lose: a process woken by the push has a
+        // token on disk and no session yet, and giving up on it was a missed call.
+        assertEquals(PushGate.RingSession.UNKNOWN, PushGate.ringSessionOf(AuthPhase.Restoring()))
+        assertEquals(
+            PushGate.RingSession.UNKNOWN,
+            PushGate.ringSessionOf(AuthPhase.Restoring(problem = "offline")),
+        )
+        assertTrue(PushGate.ringAllowed(PushGate.RingSession.UNKNOWN, everything()))
+        assertTrue(PushGate.ringAllowed(PushGate.RingSession.UNKNOWN, null))
+    }
+
+    @Test
+    fun `a phone with no account on it does not ring`() {
+        assertEquals(PushGate.RingSession.SIGNED_OUT, PushGate.ringSessionOf(AuthPhase.SignedOut()))
+        assertFalse(PushGate.ringAllowed(PushGate.RingSession.SIGNED_OUT, everything()))
+        assertEquals(PushGate.RingSession.SIGNED_IN, PushGate.ringSessionOf(AuthPhase.SignedIn(self)))
+        assertTrue(PushGate.ringAllowed(PushGate.RingSession.SIGNED_IN, everything()))
+    }
+
+    @Test
+    fun `preferences that never arrived let it ring`() {
+        // A call that rang at the wrong hour is an annoyance; one that did not
+        // ring is a missed call.
+        assertTrue(PushGate.ringAllowed(PushGate.RingSession.SIGNED_IN, null, LocalTime.of(3, 0)))
+    }
+
+    @Test
+    fun `an account that turned notifications off is not rung`() {
+        val off = everything().copy(enabled = false)
+        assertFalse(PushGate.ringAllowed(PushGate.RingSession.SIGNED_IN, off))
+    }
+
+    @Test
+    fun `quiet hours hold a ring, and a muted channel does not`() {
+        val night = preferences(22 * 60, 8 * 60)
+        assertFalse(PushGate.ringAllowed(PushGate.RingSession.SIGNED_IN, night, LocalTime.of(23, 0)))
+        assertTrue(PushGate.ringAllowed(PushGate.RingSession.SIGNED_IN, night, LocalTime.of(12, 0)))
+        // Muting a room is not saying nobody may call from it.
+        val muted = everything().copy(mutedChannelIds = listOf("c1"))
+        assertTrue(PushGate.ringAllowed(PushGate.RingSession.SIGNED_IN, muted))
+    }
 }
+

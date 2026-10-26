@@ -173,5 +173,48 @@ object PushGate {
         isForeground: Boolean = AppForeground.visible,
         visibleChannelId: String? = Conversation.visibleChannelId,
     ): Boolean = isForeground && visibleChannelId == channelId
-}
 
+    /**
+     * What a ring is allowed to conclude about the account on this phone.
+     *
+     * Three answers rather than two, because a push wakes a process that may
+     * not have finished signing in, and "not yet" is not "no". A message has
+     * to wait for the session - it cannot be read without the key - but a ring
+     * can be drawn from the push alone, so a phone that is still restoring
+     * rings and lets the answer screen sort out the rest.
+     */
+    enum class RingSession { SIGNED_IN, SIGNED_OUT, UNKNOWN }
+
+    fun ringSessionOf(phase: AuthPhase): RingSession = when (phase) {
+        is AuthPhase.SignedIn -> RingSession.SIGNED_IN
+        is AuthPhase.SignedOut -> RingSession.SIGNED_OUT
+        is AuthPhase.Restoring -> RingSession.UNKNOWN
+    }
+
+    /**
+     * Whether a ring may be drawn at all.
+     *
+     * The same two refusals a message has - notifications off, quiet hours - and
+     * a third that only a ring needs: no account on this phone. A push for a
+     * signed-out phone is a token the server has not heard was dropped, and a
+     * ringer for somebody who is not here is a ringer for nobody.
+     *
+     * Preferences that could not be fetched in time are `null` and let it ring.
+     * A ring is the one push that is worth being wrong in that direction about:
+     * a call that rang at the wrong hour is an annoyance, one that did not ring
+     * is a missed call.
+     */
+    fun ringAllowed(
+        session: RingSession,
+        preferences: NotificationPreferences?,
+        now: LocalTime = LocalTime.now(),
+    ): Boolean = when {
+        session == RingSession.SIGNED_OUT -> false
+        preferences?.enabled == false -> false
+        quiet(preferences, now) -> false
+        else -> true
+    }
+
+    /** The last preferences this process saw, however old. Never touches the network. */
+    fun lastKnownPreferences(): NotificationPreferences? = preferences
+}

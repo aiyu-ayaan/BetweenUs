@@ -1,5 +1,6 @@
 package com.aatech.betweenus.feature.notifications
 
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -87,7 +88,7 @@ object SocialNotifications {
                 ).apply {
                     description = "Somebody is calling you"
                     enableVibration(true)
-                    vibrationPattern = longArrayOf(0, 700, 700, 700, 700)
+                    vibrationPattern = RING_VIBRATION
                     setSound(
                         RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE),
                         AudioAttributes.Builder()
@@ -114,17 +115,29 @@ object SocialNotifications {
      * changes every time anybody joins or leaves and each change is another
      * push: without it, saying no once means being asked again by the next
      * person to arrive.
+     *
+     * Drawn before the caller's picture has been fetched and then drawn again
+     * with it ([refresh]): the picture is a network round trip on a phone that
+     * has just woken up, and a ring that waits for one is a ring that arrives
+     * after the caller has hung up. The second draw never rings again, and it
+     * never brings back a ring that was answered, declined or cancelled in the
+     * meantime.
      */
     fun ringing(
         context: Context,
         channelId: String,
         caller: String,
         callerPicture: Bitmap?,
+        refresh: Boolean = false,
     ) {
         if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
         if (channelId in declined) return
+        if (refresh && channelId !in _ringing.value) return
         ensureChannels(context)
 
+        // The ring push and the roster announcement both reach a direct call,
+        // in either order. The second is an update, not a second ring.
+        val alreadyRinging = channelId in _ringing.value
         val id = idOf(RING_BASE, channelId)
         val person = Person.Builder()
             .setName(caller)
@@ -159,11 +172,12 @@ object SocialNotifications {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
 
-        val notification = NotificationCompat.Builder(context, CHANNEL_RINGING)
+        val builder = NotificationCompat.Builder(context, CHANNEL_RINGING)
             .setSmallIcon(R.drawable.ic_betweenus_notification)
             .setStyle(NotificationCompat.CallStyle.forIncomingCall(person, decline, answer))
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setOnlyAlertOnce(refresh || alreadyRinging)
             .setOngoing(true)
             // `true` is what lets it interrupt: without it the platform is
             // free to decide a heads-up notification was enough, which is
@@ -177,11 +191,46 @@ object SocialNotifications {
             // without this there is an ongoing incoming-call notification for a
             // call that never existed, and no swipe will remove it.
             .setTimeoutAfter(RING_SECONDS * 1000L)
-            .build()
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            // Before channels the sound and the buzz belong to the notification.
+            builder
+                .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE))
+                .setVibrate(RING_VIBRATION)
+        }
+        val notification = builder.build()
+        // A notification sounds once, and a call that chirps once and goes quiet
+        // in a pocket is not ringing. Insistent repeats the channel's sound
+        // until the notification goes - answered, declined, or the 45 seconds
+        // above.
+        notification.flags = notification.flags or Notification.FLAG_INSISTENT
 
         posted.add(id)
         _ringing.update { it + channelId }
         NotificationManagerCompat.from(context).notify(id, notification)
+    }
+
+    /**
+     * What stands in for the ringer when it cannot be drawn.
+     *
+     * `CallStyle` is the strictest notification the platform has - a malformed
+     * one is an exception from `notify`, not a quiet one - and an exception in
+     * a push handler is a call that did not ring and left nothing to say why.
+     * This is a plain loud notification that opens the same place Answer does.
+     */
+    fun ringFallback(context: Context, channelId: String, caller: String) {
+        if (channelId in declined) return
+        ensureChannels(context)
+        post(
+            context = context,
+            id = idOf(RING_BASE, channelId),
+            channel = CHANNEL_CALLS,
+            title = "$caller is calling you",
+            text = "Tap to answer",
+            picture = null,
+            link = "betweenus://call/$channelId",
+            ongoing = false,
+            timeoutMs = RING_SECONDS * 1000L,
+        )
     }
 
     /**
@@ -358,6 +407,7 @@ object SocialNotifications {
         picture: Bitmap?,
         link: String,
         ongoing: Boolean = false,
+        timeoutMs: Long = 0L,
     ) {
         if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
         val builder = NotificationCompat.Builder(context, channel)
@@ -379,6 +429,9 @@ object SocialNotifications {
             .setAutoCancel(!ongoing)
             .setContentIntent(open(context, id, link))
         picture?.let { builder.setLargeIcon(it) }
+        // A notification about now that outlives now: a ring that fell back to
+        // this has no roster behind it to cancel it.
+        if (timeoutMs > 0) builder.setTimeoutAfter(timeoutMs)
         posted.add(id)
         NotificationManagerCompat.from(context).notify(id, builder.build())
     }
@@ -413,4 +466,6 @@ object SocialNotifications {
     const val RING_SECONDS = 45
 
     private const val RING_BASE = 6_000_000
+
+    private val RING_VIBRATION = longArrayOf(0, 700, 700, 700, 700)
 }

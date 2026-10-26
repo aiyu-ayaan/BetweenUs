@@ -1,6 +1,7 @@
 package com.aatech.betweenus.feature.notifications
 
 import android.graphics.Bitmap
+import android.util.Log
 import com.aatech.betweenus.core.crypto.E2ee
 import com.aatech.betweenus.core.data.AuthPhase
 import com.aatech.betweenus.core.data.Http
@@ -16,6 +17,7 @@ import com.google.firebase.messaging.RemoteMessage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
@@ -266,17 +268,73 @@ class PushService : FirebaseMessagingService() {
 
     private suspend fun handleCallRing(data: Map<String, String>) {
         val channelId = data["channelId"] ?: return
-        if (CallService.inCall) return
-        if (!wanted()) return
-        // So the channel exists by the time Answer hands it to MainActivity.
-        runCatching { withTimeoutOrNull(REFRESH_MS) { Workspace.refresh() } }
+        if (CallService.inCall) {
+            Log.i(TAG, "ring ignored: this phone is already in a call")
+            return
+        }
+        val caller = data["callerName"].orEmpty().ifBlank { "Someone" }
 
-        SocialNotifications.ringing(
-            context = applicationContext,
-            channelId = channelId,
-            caller = data["callerName"].orEmpty().ifBlank { "Someone" },
-            callerPicture = avatar(data["callerAvatarUrl"]),
-        )
+        if (!ringWanted()) {
+            Log.i(TAG, "ring dropped by the account's own settings")
+            return
+        }
+
+        // Drawn first, from the push alone. Everything below is a network round
+        // trip on a phone that has just woken up, and every one of them used to
+        // stand between the push and the ringer - so a slow radio meant a call
+        // that rang after the caller had hung up, or not at all.
+        runCatching {
+            SocialNotifications.ringing(
+                context = applicationContext,
+                channelId = channelId,
+                caller = caller,
+                callerPicture = null,
+            )
+        }.onFailure { error ->
+            Log.w(TAG, "the ringer could not be drawn, falling back to a notification", error)
+            SocialNotifications.ringFallback(applicationContext, channelId, caller)
+        }
+
+        // The picture, and the workspace so the channel exists by the time
+        // Answer hands it to MainActivity. Both optional; neither delays the ring.
+        avatar(data["callerAvatarUrl"])?.let { picture ->
+            runCatching {
+                SocialNotifications.ringing(
+                    context = applicationContext,
+                    channelId = channelId,
+                    caller = caller,
+                    callerPicture = picture,
+                    refresh = true,
+                )
+            }
+        }
+        runCatching { withTimeoutOrNull(REFRESH_MS) { Workspace.refresh() } }
+    }
+
+    /**
+     * Whether this phone's account wants to be rung, decided without waiting
+     * on anything that can be slow.
+     *
+     * [wanted] is the message rule: it needs the session, and gives a phone
+     * that cannot restore one in ten seconds up. A ring cannot afford that, and
+     * does not need the session to be drawn - so "still restoring" and
+     * "preferences did not arrive" both ring. Only a phone with no account on it,
+     * or an account that said no, does not. See [PushGate.ringAllowed].
+     */
+    private suspend fun ringWanted(): Boolean {
+        var session = PushGate.ringSessionOf(Session.state.value)
+        if (session == PushGate.RingSession.UNKNOWN) {
+            withTimeoutOrNull(RING_RESTORE_MS) { Session.restore() }
+            session = PushGate.ringSessionOf(Session.state.value)
+        }
+        if (session == PushGate.RingSession.SIGNED_OUT) return false
+
+        // Awaited rather than called: the request itself cannot be interrupted,
+        // but the wait for it can, and what it finds is cached for next time.
+        val fetching = scope.async { PushGate.preferences() }
+        val preferences = withTimeoutOrNull(RING_PREFERENCES_MS) { fetching.await() }
+            ?: PushGate.lastKnownPreferences()
+        return PushGate.ringAllowed(session, preferences)
     }
 
     /**
@@ -421,6 +479,12 @@ class PushService : FirebaseMessagingService() {
         private const val BUDGET_MS = 15_000L
         private const val REFRESH_MS = 4_000L
         private const val ATTACHMENT_MS = 8_000L
+
+        /** A ring waits this long for a session and for preferences, then rings anyway. */
+        private const val RING_RESTORE_MS = 3_000L
+        private const val RING_PREFERENCES_MS = 2_000L
+
+        private const val TAG = "betweenus.push"
 
         private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     }
