@@ -26,6 +26,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -37,6 +38,8 @@ import com.aatech.betweenus.core.data.Session
 import com.aatech.betweenus.ui.components.BetweenUsMark
 import com.aatech.betweenus.ui.components.MarkMotion
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * What the phone shows while a session is being restored.
@@ -108,25 +111,68 @@ private val MARK_DP = 88.dp
 private val EnterEasing = CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f)
 
 /**
- * When the wordmark starts rising in, from this screen appearing. The system
+ * Whether the system splash is still over this screen.
+ *
+ * On a cold start LoadingScreen is composed - and its clock runs - while the
+ * splash still covers it, so an entrance started on mount has finished before
+ * anybody can see it (recorded: the wordmark arrived whole in one frame).
+ * `MainActivity` puts this up for a splash and takes it down as the splash is
+ * removed; the wordmark waits for that.
+ */
+object BootSplash {
+    var showing by mutableStateOf(false)
+
+    /** The longest the wordmark waits for it, in case no exit is ever reported. */
+    const val WAIT_MS = 1500L
+}
+
+/**
+ * When the wordmark starts rising in, from the splash going. The system
  * splash has just played the mark's entrance, so the line follows it a beat
  * later - the order the desktop's boot screen plays them in.
  */
 private const val WORDMARK_DELAY_MS = 120L
 
+/**
+ * How long the screen takes to leave once the session is ready - the
+ * desktop's `BOOT_EXIT_MS`. It stays over the screen that replaced it and fades
+ * while the mark grows a little, so the app is uncovered rather than swapped in.
+ */
+const val BOOT_EXIT_MS = 320
+
+/** The desktop's exit curve (`animate-boot-out` in index.css). */
+private val ExitEasing = CubicBezierEasing(0.4f, 0f, 1f, 1f)
+
+/**
+ * [leaving]: the session is ready and the screen behind this one is already
+ * drawn; fade off it over [BOOT_EXIT_MS], then call [onGone] so the caller can
+ * take this away.
+ */
 @Composable
 fun LoadingScreen(
     problem: String? = null,
     onRetry: () -> Unit = {},
     onSignIn: () -> Unit = {},
+    leaving: Boolean = false,
+    onGone: () -> Unit = {},
 ) {
     val scheme = MaterialTheme.colorScheme
+    // 0 while it is up, 1 once it has faded off the app.
+    val exit = remember { Animatable(0f) }
+    LaunchedEffect(leaving) {
+        if (!leaving) return@LaunchedEffect
+        exit.animateTo(1f, tween(BOOT_EXIT_MS, easing = ExitEasing))
+        onGone()
+    }
     // 0 until the wordmark has risen in under the mark, then 1.
     // Previews draw it in place: they never run the effect that brings it in.
     val still = LocalInspectionMode.current
     val word = remember { Animatable(if (still) 1f else 0f) }
     LaunchedEffect(Unit) {
         if (still) return@LaunchedEffect
+        withTimeoutOrNull(BootSplash.WAIT_MS) {
+            snapshotFlow { BootSplash.showing }.first { !it }
+        }
         delay(WORDMARK_DELAY_MS)
         word.animateTo(1f, tween(420, easing = EnterEasing))
     }
@@ -146,7 +192,10 @@ fun LoadingScreen(
     }
 
     Box(
-        modifier = Modifier.fillMaxSize().background(scheme.background),
+        modifier = Modifier
+            .fillMaxSize()
+            .graphicsLayer { alpha = 1f - exit.value }
+            .background(scheme.background),
         contentAlignment = Alignment.Center,
     ) {
         // The mark at the exact centre of the screen, where the system splash
@@ -163,7 +212,13 @@ fun LoadingScreen(
             // "working" signal: there is no spinner beside it.
             BetweenUsMark(
                 color = scheme.primary,
-                modifier = Modifier.size(MARK_DP),
+                modifier = Modifier
+                    .size(MARK_DP)
+                    .graphicsLayer {
+                        val grow = 1f + 0.12f * exit.value
+                        scaleX = grow
+                        scaleY = grow
+                    },
                 motion = MarkMotion.Talk,
             )
 

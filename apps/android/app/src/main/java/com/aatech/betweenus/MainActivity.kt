@@ -11,11 +11,18 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 // `by` on a State delegate resolves through this extension; it is used without
 // being named, so an import sweep will drop it unless it is said out loud.
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.core.content.IntentCompat
 import androidx.lifecycle.lifecycleScope
 import com.aatech.betweenus.core.data.AuthPhase
@@ -28,6 +35,7 @@ import com.aatech.betweenus.core.store.PendingPlace
 import com.aatech.betweenus.core.store.PendingShare
 import com.aatech.betweenus.core.store.Workspace
 import com.aatech.betweenus.feature.auth.LoginScreen
+import com.aatech.betweenus.feature.shell.BootSplash
 import com.aatech.betweenus.feature.shell.LoadingScreen
 import com.aatech.betweenus.feature.shell.Shell
 import com.aatech.betweenus.feature.voice.CallPip
@@ -70,6 +78,17 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         holdSplash(savedInstanceState == null)
+        // The splash's default exit fades it out while the first frame fades
+        // in, which dips the mark to a fifth of its brightness for a few frames
+        // (recorded on the emulator). LoadingScreen already draws the same mark
+        // at the same place and size, so the splash is simply taken away.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            BootSplash.showing = true
+            splashScreen.setOnExitAnimationListener { view ->
+                view.remove()
+                BootSplash.showing = false
+            }
+        }
 
         // A stored refresh token is spent once per process, here, rather than
         // by whichever screen happens to make the first request.
@@ -264,7 +283,26 @@ private fun BetweenUsRoot() {
     StatusComposerHost()
     MyMomentsHost()
 
-    when (val current = phase) {
+    // The boot screen outlives the restore by its exit: once the session has
+    // an answer it stays over the screen that replaced it while it fades, and
+    // only then goes. Set from an effect rather than read off the phase so the
+    // flag is still up on the frame the phase moves on.
+    val restoring = phase as? AuthPhase.Restoring
+    var curtain by remember { mutableStateOf(false) }
+    var problem by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(restoring) {
+        if (restoring != null) {
+            curtain = true
+            problem = restoring.problem
+        }
+    }
+
+    Box(Modifier.fillMaxSize()) {
+        when (val current = phase) {
+            is AuthPhase.Restoring -> Unit
+            is AuthPhase.SignedOut -> LoginScreen(signedOutReason = current.reason)
+            is AuthPhase.SignedIn -> Shell(current.user)
+        }
         // Nothing but the mark: this lasts one refresh round-trip and a splash
         // that says "Loading…" for 200ms is worse than one that says nothing.
         //
@@ -272,14 +310,19 @@ private fun BetweenUsRoot() {
         // reached is not a session that ended, so the token is kept and the
         // restore keeps trying - and this is where it says so, with the two
         // things somebody might want: try now, or sign in instead.
-        is AuthPhase.Restoring -> LoadingScreen(
-            problem = current.problem,
-            onRetry = { Session.retryRestore() },
-            onSignIn = { Session.abandonRestore() },
-        )
-
-        is AuthPhase.SignedOut -> LoginScreen(signedOutReason = current.reason)
-        is AuthPhase.SignedIn -> Shell(current.user)
+        //
+        // Always in this one place, after whatever is under it, so it is the
+        // same screen that plays the exit - recomposed somewhere else it would
+        // start the wordmark and the dots over.
+        if (curtain || restoring != null) {
+            LoadingScreen(
+                problem = restoring?.problem ?: problem,
+                onRetry = { Session.retryRestore() },
+                onSignIn = { Session.abandonRestore() },
+                leaving = restoring == null,
+                onGone = { curtain = false },
+            )
+        }
     }
 }
 
