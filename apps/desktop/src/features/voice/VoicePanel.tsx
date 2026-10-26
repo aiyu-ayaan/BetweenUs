@@ -3,6 +3,7 @@ import { useVoiceStore, type VoiceTile } from '../../stores/voice';
 import { usePeerAudio } from '../../stores/peerAudio';
 import { CallDuration } from './CallDuration';
 import { NotHeardNotice } from './NotHeardNotice';
+import { OutgoingRingStatus } from './OutgoingRingStatus';
 import { LockIcon, MicOffIcon, SpeakerIcon, SpeakerOffIcon, XIcon } from '../../components/icons';
 
 /**
@@ -36,6 +37,7 @@ export function VoicePanel(): JSX.Element | null {
   const encrypted = useVoiceStore((state) => state.encrypted);
   const tiles = useVoiceStore((state) => state.tiles);
   const channelName = useVoiceStore((state) => state.channelName);
+  const callChannelId = useVoiceStore((state) => state.channelId);
   const error = useVoiceStore((state) => state.error);
   const openCallChannel = useVoiceStore((state) => state.openCallChannel);
   const notHeard = useVoiceStore((state) => state.notHeard);
@@ -65,6 +67,12 @@ export function VoicePanel(): JSX.Element | null {
           <CallDuration />
         </span>
       </p>
+
+      {callChannelId && (
+        <div className="mb-2 empty:hidden">
+          <OutgoingRingStatus channelId={callChannelId} compact />
+        </div>
+      )}
 
       {error && (
         <div

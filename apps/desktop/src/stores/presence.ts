@@ -9,6 +9,7 @@ import { notifyVoiceJoin } from '../services/notifications';
 import { startIdleWatch, stopIdleWatch } from '../services/idle';
 import { useAuthStore } from './auth';
 import { useChatStore } from './chat';
+import { useOutgoingRingStore } from './outgoing-ring';
 import { useRingStore } from './ring';
 import { useVoiceStore } from './voice';
 import { endStagePin, sessionPinStorage } from '../features/voice/stage-pin';
@@ -258,6 +259,12 @@ presenceSocket.on((event) => {
     // without this a window went on ringing after somebody said no elsewhere.
     case 'call.handled': {
       useRingStore.getState().handledElsewhere(event.channelId);
+      return;
+    }
+
+    // What became of a ring this account sent. Only ever sent to the caller.
+    case 'call.ring.state': {
+      useOutgoingRingStore.getState().apply(event);
       return;
     }
 

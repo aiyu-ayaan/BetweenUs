@@ -39,6 +39,7 @@ import { CameraLook, CameraLookButton } from './CameraLook';
 import { CallDuration } from './CallDuration';
 import { VoiceControls } from './VoiceControls';
 import { NotHeardNotice } from './NotHeardNotice';
+import { OutgoingRingStatus } from './OutgoingRingStatus';
 import { VideoSink } from './MediaSink';
 import { ShareStage } from './ShareStage';
 import { PAGE_SIZE, orderStage, splitStage } from './stage-order';
@@ -239,6 +240,10 @@ export function VoiceChannelView({
             </button>
           </div>
         )}
+
+        <div className="mx-auto w-full max-w-sm empty:hidden">
+          <OutgoingRingStatus channelId={channel.id} />
+        </div>
 
         {notHeard && (
           <div className="mx-auto w-full max-w-sm">
