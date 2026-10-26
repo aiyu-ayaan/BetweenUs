@@ -28,8 +28,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.aatech.betweenus.core.data.BetweenUsApi
 import com.aatech.betweenus.core.data.NotificationPreferences
+import com.aatech.betweenus.feature.notifications.CallAlertHealth
+import com.aatech.betweenus.feature.notifications.CallAlerts
 import com.aatech.betweenus.ui.components.BetweenUsIcon
 import com.aatech.betweenus.ui.components.BetweenUsIcons
 import com.aatech.betweenus.ui.components.Chip
@@ -62,6 +65,14 @@ fun NotificationSettingsScreen(
     }
 
     val isSysGranted = BetweenUsPermissions.granted(context, BetweenUsPermissions.NOTIFICATIONS)
+
+    // Read again on every return from the system screen it sends you to, so the
+    // row turns green the moment the setting is fixed rather than on the next visit.
+    var callHealth by remember { mutableStateOf(CallAlerts.health(context)) }
+    LifecycleResumeEffect(Unit) {
+        callHealth = CallAlerts.health(context)
+        onPauseOrDispose { }
+    }
 
     fun act(block: suspend () -> Unit) {
         scope.launch {
@@ -143,6 +154,27 @@ fun NotificationSettingsScreen(
                 onClick = onPermissions,
             )
 
+            val callsOk = callHealth == CallAlertHealth.OK
+            val fixCalls = { openCallSettings(context, callHealth) }
+            ListRow(
+                title = "Incoming calls",
+                subtitle = CallAlerts.describe(callHealth),
+                leading = {
+                    BetweenUsIcon(
+                        icon = if (callsOk) BetweenUsIcons.Bell else BetweenUsIcons.BellOff,
+                        tint = if (callsOk) StatusOnline else MaterialTheme.colorScheme.primary,
+                    )
+                },
+                trailing = {
+                    if (callsOk) {
+                        BetweenUsIcon(BetweenUsIcons.Check, tint = StatusOnline, size = 18.dp)
+                    } else {
+                        Chip("Fix", onClick = fixCalls)
+                    }
+                },
+                onClick = if (callsOk) null else fixCalls,
+            )
+
             SectionLabel("Security & Privacy in Notifications")
             Column(Modifier.padding(horizontal = 16.dp)) {
                 Text(
@@ -156,6 +188,21 @@ fun NotificationSettingsScreen(
                 Spacer(Modifier.height(12.dp))
                 Notice(it, MaterialTheme.colorScheme.error, Modifier.padding(horizontal = 16.dp))
             }
+        }
+    }
+}
+
+/**
+ * The system screen for [health]. A phone that has removed the screen (some
+ * OEM builds do) is not a reason to crash a settings page, so the general
+ * notification settings stand in.
+ */
+private fun openCallSettings(context: android.content.Context, health: CallAlertHealth) {
+    try {
+        context.startActivity(CallAlerts.fix(context, health))
+    } catch (_: android.content.ActivityNotFoundException) {
+        runCatching {
+            context.startActivity(CallAlerts.fix(context, CallAlertHealth.NOTIFICATIONS_OFF))
         }
     }
 }
