@@ -615,6 +615,8 @@ export class CallGateway implements OnModuleDestroy {
     }
 
     this.announceRoster(channelId);
+    // If they were rung into this call, the person who rang is told they came.
+    this.history.ringAnswered(state.userId, channelId);
 
     // Whatever is already playing, to the newcomer only. They get the position
     // and the instant it was true, so their player opens partway through the

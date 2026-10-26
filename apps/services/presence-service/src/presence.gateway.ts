@@ -212,6 +212,14 @@ export class PresenceGateway implements OnModuleDestroy {
       this.sendToUser(userId, { type: 'call.handled', channelId, how: 'declined' });
     });
 
+    // What became of a ring, to the person who sent it and nobody else. This is
+    // the half the caller was never given: without it a call to somebody who
+    // had said no looked the same as one to a phone that was off.
+    await this.events.subscribe(EVENTS.CALL_RING_STATE, (envelope) => {
+      const { callerId, channelId, targetId, targetName, state } = envelope.payload;
+      this.sendToUser(callerId, { type: 'call.ring.state', channelId, targetId, targetName, state });
+    });
+
     this.logger.info('Presence WebSocket gateway ready', { path: '/ws/presence' });
   }
 

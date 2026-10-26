@@ -3481,6 +3481,17 @@ export type ServerPresenceEvent =
    * somebody said no on their phone.
    */
   | { type: 'call.handled'; channelId: string; how: CallHandled }
+  /**
+   * Sent to whoever rang, and only them: what became of the ring they sent.
+   * See {@link CallRingState}.
+   */
+  | {
+      type: 'call.ring.state';
+      channelId: string;
+      targetId: string;
+      targetName: string;
+      state: CallRingState;
+    }
   | { type: 'pong' }
   | { type: 'error'; code: string; message: string };
 
@@ -3801,6 +3812,16 @@ export interface RemoteSessionPushData {
  * remember afterwards. See {@link CallHandledPushData}.
  */
 export type CallHandled = 'answered' | 'declined';
+
+/**
+ * Where a ring stands, told to the person who rang.
+ *
+ * The caller used to be told nothing: a ring was "not a handshake" and rang out
+ * for them whatever happened, so a call to somebody who had said no looked
+ * exactly like one to somebody whose phone was off. `ringing` is the ring being
+ * delivered; the other three end it.
+ */
+export type CallRingState = 'ringing' | 'declined' | 'unanswered' | 'answered';
 
 /**
  * This account has dealt with that ring, on one of its devices.

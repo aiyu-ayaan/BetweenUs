@@ -7,6 +7,7 @@
  */
 import Redis from 'ioredis';
 import type {
+  CallRingState,
   Message,
   PresenceState,
   ThreadFollowState,
@@ -73,11 +74,19 @@ export const EVENTS = {
    * nowhere, so the phone in the other pocket had nothing to go on and rang
    * until it timed out.
    *
-   * It is deliberately not sent to whoever rang. A ring is not a handshake and
-   * it rings out for the caller either way; telling them would be a new
-   * feature, not this one.
+   * It is not sent to whoever rang: they hear about it as `call.ring.state`,
+   * which also covers the ring being answered and ringing out.
    */
   CALL_DECLINED: 'call.declined',
+  /**
+   * What became of a ring, aimed at the person who sent it.
+   *
+   * The only thing that tells a caller their ring was delivered, declined,
+   * answered or left to ring out. Published by call-service, which is the one
+   * place that knows all four: it sent the ring, it hears the decline, it sees
+   * the join, and it holds the clock.
+   */
+  CALL_RING_STATE: 'call.ring.state',
   MESSAGE_CREATED: 'message.created',
   MESSAGE_UPDATED: 'message.updated',
   MESSAGE_DELETED: 'message.deleted',
@@ -189,6 +198,13 @@ export interface EventPayloads {
   };
   /** Who said no, and to what. Both subscribers deliver only to that account. */
   [EVENTS.CALL_DECLINED]: { channelId: string; userId: string };
+  [EVENTS.CALL_RING_STATE]: {
+    channelId: string;
+    callerId: string;
+    targetId: string;
+    targetName: string;
+    state: CallRingState;
+  };
   [EVENTS.MESSAGE_CREATED]: { message: Message };
   [EVENTS.MESSAGE_UPDATED]: { message: Message };
   /** Carries the tombstone, because a deleted message still renders as one. */

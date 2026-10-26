@@ -24,6 +24,7 @@ import type {
   CallUsageTotals,
 } from '@betweenus/shared-types';
 import { ringIsAllowed, ringKey } from './ring-cooldown';
+import { RingTracker } from './ring-tracker';
 import { clampReportedBytes, clampReportedLinks } from './usage';
 
 /** How far back a person's own call log goes when they open it. */
@@ -32,6 +33,14 @@ const HISTORY_LIMIT = 50;
 @Injectable()
 export class CallsService {
   constructor(private readonly events: EventBus) {}
+
+  /**
+   * What became of each ring still out, told to whoever sent it. A failed
+   * publish costs the caller a status line, never the ring itself.
+   */
+  private readonly rings = new RingTracker((outcome) => {
+    void this.events.publish(EVENTS.CALL_RING_STATE, outcome).catch(() => undefined);
+  });
 
   /**
    * When each pair last rang.
@@ -96,11 +105,15 @@ export class CallsService {
     }
     this.lastRing.set(key, now);
 
-    const [channel, caller] = await Promise.all([
+    const [channel, caller, callee] = await Promise.all([
       prisma.channel.findUnique({ where: { id: channelId }, select: { name: true } }),
       prisma.user.findUnique({
         where: { id: callerId },
         select: { username: true, displayName: true, avatarUrl: true },
+      }),
+      prisma.user.findUnique({
+        where: { id: targetId },
+        select: { username: true, displayName: true },
       }),
     ]);
     if (!channel || !caller) {
@@ -117,6 +130,9 @@ export class CallsService {
       ...(caller.avatarUrl ? { callerAvatarUrl: caller.avatarUrl } : {}),
       targetId,
     });
+
+    // The caller is told the ring went out, and later what became of it.
+    this.rings.start(channelId, callerId, targetId, callee?.displayName || callee?.username || '');
   }
 
   /**
@@ -128,9 +144,8 @@ export class CallsService {
    * they timed out. Answering at least showed up in `call.roster`; declining
    * left no trace anywhere, which is why it needed an endpoint of its own.
    *
-   * Deliberately silent towards whoever rang. A ring is not a handshake - it
-   * rings out for them either way - and telling the caller would be a new
-   * feature rather than this one.
+   * Tells whoever rang, as `declined`, so they are not left in an empty call
+   * wondering whether the phone was off.
    *
    * Access is checked for the same reason the ring endpoint checks it: an
    * endpoint that takes any channel id from anyone is a way to probe which
@@ -142,6 +157,19 @@ export class CallsService {
   async decline(userId: string, channelId: string): Promise<void> {
     await this.requireChannelAccess(userId, channelId);
     await this.events.publish(EVENTS.CALL_DECLINED, { channelId, userId });
+    // This one *is* told to whoever rang, which an earlier version of this
+    // method deliberately was not: a caller with no word on a refused ring sat
+    // in an empty call unable to tell it from a phone that was off.
+    this.rings.declined(channelId, userId);
+  }
+
+  /**
+   * Somebody joined a call. If somebody had rung them into it, that ring was
+   * answered; if not, nothing happens. Called by the gateway on every join
+   * because it is the only thing that knows one happened.
+   */
+  ringAnswered(userId: string, channelId: string): void {
+    this.rings.joined(channelId, userId);
   }
 
   /**
